@@ -259,6 +259,28 @@ class DeadlineRequestGate(_legacy().RequestGate):
         self._closing = False
         self._cancel = threading.Event()
 
+    def admit(self, body: bytes):
+        # Z.ai ignores max_completion_tokens. Normalize before the inherited
+        # admission computes the exact wire-size and output reservation.
+        if urlsplit(self.upstream).hostname == "api.z.ai":
+            try:
+                value = json.loads(body)
+                if isinstance(value, dict):
+                    limits = [
+                        value[name]
+                        for name in ("max_tokens", "max_completion_tokens")
+                        if value.get(name) is not None
+                    ]
+                    if all(type(limit) is int and limit > 0 for limit in limits):
+                        value.pop("max_completion_tokens", None)
+                        value["max_tokens"] = (
+                            min(self.max_output, *limits) if limits else self.max_output
+                        )
+                        body = json.dumps(value).encode("utf-8")
+            except ValueError:
+                pass
+        return super().admit(body)
+
     def open_row(self, key: str, limit: int) -> None:
         with self._condition:
             if self._connections or self.row is not None:
