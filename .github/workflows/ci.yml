@@ -68,7 +68,8 @@ jobs:
       fail-fast: false
       matrix:
         # Target platforms per spec (macOS and Windows); Ubuntu as the fast default.
-        # The plan job picks the platforms (Linux only for stacked PRs).
+        # The plan job selects Linux for stacked PRs, Linux/Windows otherwise;
+        # only master pushes add macOS.
         os: ${{ fromJSON(needs.plan.outputs.os) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -138,7 +139,8 @@ jobs:
       fail-fast: false
       matrix:
         # The pinned host documents macOS, Linux, and native Windows (WSL2 optional).
-        # The plan job picks the platforms (Linux only for stacked PRs).
+        # The plan job selects Linux for stacked PRs, Linux/Windows otherwise;
+        # only master pushes add macOS.
         os: ${{ fromJSON(needs.plan.outputs.os) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60

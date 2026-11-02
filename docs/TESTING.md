@@ -49,10 +49,19 @@ it per test (`tmp_path`, a free port), so it can run beside other files.
 
 To run the same CI jobs on a branch manually, use
 `gh workflow run ci.yml --ref your-branch-name`. This dispatches the existing
-Ubuntu, macOS and Windows checks and does not change pull-request status
-requirements.
+Ubuntu and Windows checks, including when the selected branch is `master`.
+It does not change pull-request status requirements. macOS runs only on pushes
+to `master`; it is intentionally absent from PR, tag and manual runs to limit
+runner costs. macOS-specific regressions can therefore be detected after merge.
 
-The `check` and `openclaw-plugin` jobs each run on Ubuntu, macOS and Windows.
+Both `check` and `openclaw-plugin` use the same event-based matrix:
+
+| Event | Platforms |
+| --- | --- |
+| Push to `master` | Ubuntu, macOS, Windows |
+| PR targeting `master`, tag push, or manual dispatch | Ubuntu, Windows |
+| Stacked PR targeting another branch | Ubuntu |
+
 Both pytest commands print the 30 slowest setup, call and teardown durations.
 Each core job uploads `core-test-profile-<platform>` with
 `ci-evidence/core-tests.xml`. Each plugin job includes
@@ -67,7 +76,8 @@ cache dependency key. Installation still runs; this is not a dependency lock.
 The existing npm cache and clean `npm ci` installation remain in place.
 The UI tests launch Chromium's default headless shell, so CI installs it with
 `playwright install --with-deps --only-shell chromium`, including system
-requirements. Test selection and all six platform checks remain unchanged.
+requirements. Test selection remains unchanged; the table above determines
+which platform jobs run.
 
 Each job has a 60-minute limit, and each platform reports its own result
 without cancelling the others. A newer push to the same pull request cancels its
@@ -238,7 +248,8 @@ starts its own llama-server.
   labels.
   Install
   the browser once with `playwright install chromium`; a machine without
-  it fails the test. CI installs it on ubuntu, macOS, and Windows. One
+  it fails the test. CI installs it on each platform selected by the
+  [event matrix](#ci-timing-reports); macOS runs only on master pushes. One
   live UI session is in the live acceptance harness (below).
 
 - AC08, deterministic: `pytest tests/test_ac08_model_substitution.py`
@@ -1384,7 +1395,7 @@ What runs where:
 
 | Check | Where | Command |
 | --- | --- | --- |
-| typecheck, vitest, pack check | here, CI (ubuntu, macOS, Windows runners) | `cd integrations/openclaw && npm ci && npm run typecheck && npm test && npm run pack:check` |
+| typecheck, vitest, pack check | here, CI ([event matrix](#ci-timing-reports); macOS on master pushes only) | `cd integrations/openclaw && npm ci && npm run typecheck && npm test && npm run pack:check` |
 | release artifact | here, CI | `npm run pack:release -- ../../release/openclaw` |
 | transport, plugin, round trip, cancel, artifact tiers | here (skip without `npm ci`), CI with `RELAYMIND_OPENCLAW_NODE=1` (no skip) | `pytest tests/test_openclaw_*.py` |
 | install check over a stub host | the default `pytest`, every platform | `pytest tests/test_openclaw_install_check.py` |
@@ -1498,8 +1509,9 @@ pass it.
   `docs/TESTING.md`, the changelog, and the operator guide cite the run,
   with the macOS row recorded and the Windows rows `not_run`.
 
-To refresh the runner exports from a later CI run (the job uploads them as
-`openclaw-plugin-<runner>` artifacts, kept 90 days by default):
+To refresh all three runner exports, use a later CI run triggered by a push
+to `master`. PR, tag and manual runs do not contain the macOS artifact. The
+job uploads `openclaw-plugin-<runner>` artifacts, kept 90 days by default:
 
 ```bash
 gh run download <run-id> -D <empty-dir>

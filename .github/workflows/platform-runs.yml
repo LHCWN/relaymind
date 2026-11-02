@@ -81,8 +81,9 @@ jobs:
       # Each platform reports its own result.
       fail-fast: false
       matrix:
-        # macOS runs after master pushes; Linux/Windows already run on PRs.
-        os: ${{ fromJSON(github.event_name == 'push' && github.ref == 'refs/heads/master' && '["macos-latest"]' || '["windows-latest", "ubuntu-latest"]') }}
+        # Master pushes collect all platforms together, including direct pushes.
+        # PRs and manual runs omit macOS to conserve runner budget.
+        os: ${{ fromJSON(github.event_name == 'push' && github.ref == 'refs/heads/master' && '["macos-latest", "windows-latest", "ubuntu-latest"]' || '["windows-latest", "ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
     # Every step has its own limit, and their sum (120) stays below the job's,
     # so a long step that reaches its own limit still leaves time for the

@@ -50,6 +50,7 @@ from relaymind.evaluation.asset_operations_run import (
     write_import,
 )
 from relaymind.evaluation.asset_platform_export import PLATFORM_STEPS
+from workflow_helpers import github_expression
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github/workflows/platform-runs.yml"
@@ -536,11 +537,13 @@ def _workflow():
     return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
 
 
-def test_the_workflow_runs_on_the_three_hosted_platforms():
+@pytest.mark.parametrize("compact", [False, True])
+def test_the_workflow_platform_matrix_for_each_event(compact):
     """RM38/RM39/AC37: preserve platform coverage with macOS on master pushes only."""
     workflow = _workflow()
     triggers = workflow[True]  # YAML 1.1 reads the bare key "on" as true.
     assert triggers["push"]["branches"] == ["master"]
+    assert "tags" not in triggers["push"]
     assert "workflow_dispatch" in triggers
     paths = triggers["pull_request"]["paths"]
     assert triggers["push"]["paths"] == paths
@@ -554,24 +557,19 @@ def test_the_workflow_runs_on_the_three_hosted_platforms():
         assert _covered(path, paths), path
     (job,) = workflow["jobs"].values()
     assert job["strategy"]["fail-fast"] is False
-    from test_openclaw_install import _github_expression
-
     expression = job["strategy"]["matrix"]["os"]
-    assert expression.startswith("${{ fromJSON(") and expression.endswith(") }}")
+    if compact:
+        expression = expression.replace("${{ ", "${{").replace(") }}", ")}}")
     for event, ref, macos in (
         ("push", "refs/heads/master", True),
-        ("push", "refs/tags/v1", False),
         ("pull_request", "refs/pull/7/merge", False),
         ("workflow_dispatch", "refs/heads/master", False),
     ):
-        platforms = json.loads(
-            _github_expression(
-                expression[len("${{ fromJSON(") : -len(") }}")],
-                {"github": {"event_name": event, "ref": ref}},
-            )
-        )
+        platforms = github_expression(expression, {"github": {"event_name": event, "ref": ref}})
         assert set(platforms) == (
-            {"macos-latest"} if macos else {"ubuntu-latest", "windows-latest"}
+            {"macos-latest", "ubuntu-latest", "windows-latest"}
+            if macos
+            else {"ubuntu-latest", "windows-latest"}
         )
     assert job["timeout-minutes"] <= 130
     assert workflow["permissions"] == {"contents": "read"}
