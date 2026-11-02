@@ -10,6 +10,45 @@ from pathlib import Path
 import pytest
 
 
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"max_completion_tokens": 5},
+        {"max_completion_tokens": 15},
+        {"max_completion_tokens": 8, "max_tokens": 3},
+    ],
+)
+def test_zai_output_limit_uses_documented_field_before_budgeting(transport, fields):
+    """RM03/RM16: the upstream cap must match the admitted output allowance."""
+    gate = transport.DeadlineRequestGate("https://api.z.ai/api/paas/v4", max_output=10)
+    gate.open_row("native", 10000)
+    admitted, reason = gate.admit(json.dumps(dict(messages=[], **fields)).encode())
+    assert reason is None
+    payload, _, call = admitted
+    body = json.loads(payload)
+    assert "max_completion_tokens" not in body
+    assert body["max_tokens"] == min(10, *fields.values())
+    assert call["bound"] == transport._legacy().harness.request_bound(payload, body["max_tokens"])
+
+
+def test_other_provider_keeps_its_completion_limit_field(transport):
+    """RM03: provider-specific compatibility must not alter another endpoint."""
+    gate = transport.DeadlineRequestGate("https://example.com/v1", max_output=10)
+    gate.open_row("native", 10000)
+    admitted, _ = gate.admit(b'{"messages":[],"max_completion_tokens":5}')
+    assert json.loads(admitted[0])["max_completion_tokens"] == 5
+    assert "max_tokens" not in json.loads(admitted[0])
+
+
+@pytest.mark.parametrize("invalid", [0, -1, True, "5"])
+def test_zai_invalid_output_limit_is_not_normalized_away(transport, invalid):
+    """RM03: normalization cannot admit an invalid client limit."""
+    gate = transport.DeadlineRequestGate("https://api.z.ai/api/paas/v4", max_output=10)
+    gate.open_row("native", 10000)
+    admitted, reason = gate.admit(json.dumps({"max_completion_tokens": invalid}).encode())
+    assert admitted is None and reason == "request_invalid"
+
+
 @pytest.fixture
 def transport():
     path = Path(__file__).resolve().parents[1] / "scripts/automated_host_transport.py"

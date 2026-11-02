@@ -1,0 +1,181 @@
+{
+  "schema_version": 1,
+  "kind": "provider_output_limit_correction",
+  "requirements": [
+    "RM03",
+    "RM16",
+    "RM40",
+    "RM44"
+  ],
+  "original_preregistration_commit": "8f796b1b788457237e40125fe28be51b39bfc44d",
+  "prior_execution_source_commit": "fd6c49c54c0aec379dce6994b2a93db3f76b57e2",
+  "recorded_rows_before_correction": 14,
+  "requests_replayed": 0,
+  "execution_cap": 13000000,
+  "judging_cap": 300000,
+  "frozen_inputs": "unchanged",
+  "source_files": [
+    {
+      "path": "scripts/automated_host_transport.py",
+      "before_sha256": "a90e52213872c31cef344cf5c793b77817102a55fcbbca1be514ecb76617d6d9",
+      "after_sha256": "d5af6ecd8a80345972859933b49a6aa57a80ad1d112e49e41ce6cd48ff3c5d5c"
+    },
+    {
+      "path": "tests/test_automated_host_transport.py",
+      "before_sha256": "f55e01c1a8857fbbe7ad28f11476184fc584b98103b9ecb24f10eb6a401e3d23",
+      "after_sha256": "b15d4e23f4c2d7c2e196d5dc6da8dc878d3cfab3216390b7a00cc55e2b7c83f6"
+    }
+  ],
+  "diagnostics": [
+    {
+      "summary": {
+        "path": "diagnostics/output-bound/summary.json",
+        "sha256": "2a218c8e5ef4f2a82fcaa4c024c7da3ec220018ca9771928ea93c7423af8816b",
+        "bytes": 489
+      },
+      "request": {
+        "path": "diagnostics/output-bound/6e92ab140eb744b986db66da94ed14c9/request.bin",
+        "sha256": "fa7fe4412f5a0c85321a87fa3f027f0652062e873de7eb768541bfad6bf251e0",
+        "bytes": 159
+      },
+      "response": {
+        "path": "diagnostics/output-bound/6e92ab140eb744b986db66da94ed14c9/response.bin",
+        "sha256": "e3ca6def6fe119773f49519991c7486e0f9a194fa19900fd70a0f4f156ebc86a",
+        "bytes": 631
+      },
+      "transport": {
+        "path": "diagnostics/output-bound/6e92ab140eb744b986db66da94ed14c9/result.json",
+        "sha256": "cc7d16d577cd1aa87c887ae4909c4702be37974e8bdda12c6e52bcb8ca116e27",
+        "bytes": 229
+      },
+      "usage": {
+        "completion_tokens": 45,
+        "completion_tokens_details": {
+          "reasoning_tokens": 41
+        },
+        "prompt_tokens": 18,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 63
+      }
+    },
+    {
+      "summary": {
+        "path": "diagnostics/output-bound/summary-max-tokens.json",
+        "sha256": "095c4b4563390933acd75b87d68bbbf38f7dad7a920e684420c22aef6ceac265",
+        "bytes": 476
+      },
+      "request": {
+        "path": "diagnostics/output-bound/128f9d4f8ada4784b252be3c614d91d2/request.bin",
+        "sha256": "f9ace6335de5ddf4d606ab4c27e22c2180b56d3391965154b3be1701767573f2",
+        "bytes": 148
+      },
+      "response": {
+        "path": "diagnostics/output-bound/128f9d4f8ada4784b252be3c614d91d2/response.bin",
+        "sha256": "798bce2c1402937153e1211806fd3df55fb52340fd8f0f86d6953773d5faee77",
+        "bytes": 440
+      },
+      "transport": {
+        "path": "diagnostics/output-bound/128f9d4f8ada4784b252be3c614d91d2/result.json",
+        "sha256": "c1b6be2e1f52a6e0995cdc3b927951e54f46e2c6d67b2903c8f2ce5aaa1d67fa",
+        "bytes": 229
+      },
+      "usage": {
+        "completion_tokens": 1,
+        "completion_tokens_details": {
+          "reasoning_tokens": 1
+        },
+        "prompt_tokens": 18,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "total_tokens": 19
+      }
+    }
+  ],
+  "diagnostic_tokens": 82,
+  "earlier_native_output_limit_verified": false,
+  "unknown_native_calls": 10,
+  "conservative_output_maximum": 131072,
+  "additional_accounting_reservation": 1119783,
+  "revised_conservative_tokens": 3449867,
+  "api_reference": "https://docs.z.ai/api-reference/llm/chat-completion",
+  "raw_evidence_access": "restricted; refs relative to retained private run root",
+  "limitations": [
+    "Earlier native requests used an ignored parameter; their intended8192 output cap was not enforced.",
+    "Unknown usage remains unknown; accounting uses provider maximum rather than claiming measured consumption.",
+    "Different source phases and all original failed outcomes remain in the final experiment."
+  ],
+  "accounting_evidence": [
+    {
+      "path": "diagnostics/output-bound/native-conservative-adjustment.json",
+      "sha256": "168825bf3b24cde7ca8f85bad866c33ca73883d93b6743198b99581f7f0c5559",
+      "bytes": 14638
+    },
+    {
+      "path": "diagnostics/output-bound/apply-native-adjustment.py",
+      "sha256": "7332fa147fe3d90866fe1a51643feca89773d5a2362a98b79136432bec887f40",
+      "bytes": 8210
+    },
+    {
+      "path": "diagnostics/output-bound/native-adjustment-applied.json",
+      "sha256": "590c497ca979464388f15c45786131086edd54f4b5c0515c4a8deccb72a8194a",
+      "bytes": 627
+    },
+    {
+      "path": "diagnostics/output-bound/snapshot-before-native-adjustment-ledger.json",
+      "sha256": "cbec4334766993adeeb328f1b589deaba4dc8092615c0aeb8a526b2f2a7762e4",
+      "bytes": 1709
+    },
+    {
+      "path": "diagnostics/output-bound/snapshot-before-native-adjustment-report.json",
+      "sha256": "3877f3ddce0437f9c542d7db0cfd522708544e68f87be856ebbfcc06e6a519bd",
+      "bytes": 327251
+    }
+  ],
+  "corrective_review": {
+    "context_id": "ses_e62496002ffeWgnbsD0Ifeea8u",
+    "model": "opencode-go/glm-5.3-flash",
+    "final_finding": "no_remaining_important_findings",
+    "scope": "code_and_accounting_correction_not_final_experiment_review",
+    "evidence": [
+      {
+        "path": "output-bound-review/diff.patch",
+        "sha256": "adebc431ef6fac5fc03435668a649cf9148ea38782d0341f30b6f05b4cc0185b",
+        "bytes": 3777
+      },
+      {
+        "path": "output-bound-review/prompt.txt",
+        "sha256": "8610497f23e2158d1f7b3a2055c97bc23cf25c2a38d5846cf793552b3066bc0f",
+        "bytes": 1009
+      },
+      {
+        "path": "output-bound-review/stdout.jsonl",
+        "sha256": "d91b47437cb7a07da943eccc21e1d42dc75e53d667e06057512c16e7aa1abc1b",
+        "bytes": 289108
+      },
+      {
+        "path": "output-bound-review/invocation.json",
+        "sha256": "d3d13e218078e08caf8e420d824125d8b426651fad059cb497610d3505f5516d",
+        "bytes": 251
+      },
+      {
+        "path": "output-bound-review/followup-prompt.txt",
+        "sha256": "e343c4ccd182c8ff4ffc0f5aeec0700ffb32ad650d1d7d5773cf53e2ba608807",
+        "bytes": 1037
+      },
+      {
+        "path": "output-bound-review/followup-stdout.jsonl",
+        "sha256": "ea6903a74c34b96ca9ab590b4fe0be8f68550c14b4428c1bd8404a367f3bdda9",
+        "bytes": 12376
+      },
+      {
+        "path": "output-bound-review/followup-invocation.json",
+        "sha256": "eb2c09aefbe8ccedc435392ec8315776ac1b2b03dcc09e159da000ca9a539f47",
+        "bytes": 224
+      }
+    ],
+    "evidence_root": "restricted experiment root; separate from run-relative diagnostic references"
+  }
+}

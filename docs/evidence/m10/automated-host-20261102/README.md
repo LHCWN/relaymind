@@ -16,3 +16,22 @@ The correction changes artifact storage bounds and final-record validation,
 not the frozen experimental conditions or inference limits. It is committed
 before any subsequent dispatch. Both execution source revisions must be
 reported, and the original failed row must never be retried or hidden.
+
+After 14 recorded rows, execution stopped at a row boundary to investigate
+the native provider's output-limit parameter. A retained live diagnostic
+sent `max_completion_tokens: 1` and received 45 completion tokens; a separate
+diagnostic using `max_tokens: 1` received one. Both diagnostics are charged
+against the same 13,000,000-token execution cap (82 reported tokens total).
+Z.ai's [API reference](https://docs.z.ai/api-reference/llm/chat-completion)
+documents `max_tokens`. The automated transport now normalizes the native
+parameter for the exact `api.z.ai` host before computing its reservation.
+Other endpoints keep their existing parameter handling.
+
+The earlier native calls did not have a verified 8,192-token output bound.
+Their unknown usage must therefore be conservatively accounted for at the
+provider's documented maximum of 131,072 output tokens per call. The original
+captures, row outcomes, journal, and ledger entries remain preserved; a
+separate adjustment accounts for the additional uncertainty. This is a
+correction to the intended output bound, not a new model, prompt, reasoning
+setting, or larger execution budget. Later execution must identify the
+corrected source revision, and final evaluation must disclose this limitation.
