@@ -295,7 +295,7 @@ def test_child_state_is_isolated_but_carries_the_packaged_plugin(monkeypatch, tm
         state = Path(env["OPENCLAW_STATE_DIR"])
         seen["env"] = env
         seen["files"] = sorted(
-            str(p.relative_to(state))
+            p.relative_to(state).as_posix()
             for p in state.joinpath("extensions").rglob("*")
             if p.is_file()
         )
