@@ -330,7 +330,7 @@ def font_dir(tmp_path):
     try:
         (fonts / "Linked.ttf").symlink_to(fonts / "Extra.ttc")
     except OSError:
-        pytest.skip("symbolic links are not available")
+        pass  # Only the dedicated symlink test needs the link, and it skips without one.
     return fonts
 
 
@@ -372,6 +372,26 @@ def test_fonts_reach_the_isolated_home_before_the_host_is_installed(rec, tmp_pat
     assert seen["fonts"] == ["Extra.ttc", "NotoSansCJKsc-Regular.otf"]
     assert (data / "fonts" / "Extra.ttc").read_bytes() == b"ttc-bytes"
     assert not (home / ".fonts").exists()
+
+
+def test_a_symlinked_font_is_never_listed_copied_or_installed(rec, tmp_path):
+    """RM39: only regular files count as fonts, so a link cannot bring in other bytes."""
+    fonts = font_dir(tmp_path)
+    if not (fonts / "Linked.ttf").is_symlink():
+        pytest.skip("symbolic links are not available")
+    regular = ["Extra.ttc", "NotoSansCJKsc-Regular.otf"]
+    assert [font["name"] for font in rec.font_files(fonts)] == regular
+    snapshot = tmp_path / "snapshot"
+    rec.snapshot_fonts(fonts, snapshot)
+    assert sorted(path.name for path in snapshot.iterdir()) == regular
+    data = tmp_path / "data"
+    rec.install_fonts(fonts, dict(XDG_DATA_HOME=str(data)))
+    assert sorted(path.name for path in (data / "fonts").iterdir()) == regular
+    only_links = tmp_path / "only-links"
+    only_links.mkdir()
+    (only_links / "Linked.ttf").symlink_to(fonts / "Extra.ttc")
+    with pytest.raises(ValueError, match="walkthrough_font_dir"):
+        rec.font_files(only_links)
 
 
 def test_a_font_copy_failure_is_an_install_step_failure(rec, tmp_path, monkeypatch):
