@@ -23,7 +23,7 @@ Commands (run with the project's Python):
     frozen corpus lock, the AssetHostTasksV1 / HostFreezeV1 documents, the
     companion manifest ``frozen/inputs.json`` and a private resolver for the
     inventory preimages under ``R/resolver``.
-``--trial-dir T record --bundle B --record-id ID --owner-login LOGIN [--preregistration COMMIT]``
+``--trial-dir T record --bundle B --record-id I --owner-login O --os-build B --hostname-sha256 H``
     Write a pending QualificationRecordV1 (scope host_trial,
     machine_dual_owner_approved labelling, machine_drafted_owner_approved prompts)
     binding the bundle's report, freeze, tasks, corpus lock, labels and
@@ -174,6 +174,7 @@ def _records(root: Path) -> dict:
 
 
 def draft(root: Path) -> None:
+    _check_operator_root(root)
     inputs = HERE / "inputs"
     skills_root = root / "cli/node_modules/openclaw/skills"
     evidence = []
@@ -300,6 +301,17 @@ def draft(root: Path) -> None:
     print(f"draft written to {inputs}")
 
 
+def _check_operator_root(root: Path) -> None:
+    """Refuse home paths before copying private configuration or catalog locators."""
+    home = Path.home()
+    if any(
+        path.is_relative_to(base)
+        for path in (root.absolute(), root.resolve())
+        for base in (home.absolute(), home.resolve())
+    ):
+        raise SystemExit("operator root must be outside the home directory")
+
+
 def _omit_base_url(text: str) -> str:
     """The configuration without any ``base_url`` key line, however indented."""
     return "\n".join(line for line in text.splitlines() if not BASE_URL.match(line))
@@ -370,6 +382,7 @@ class _Manifest:
 
 
 def freeze(root: Path, cases_path: Path, labels_path: Path) -> None:
+    _check_operator_root(root)
     from relaymind.evaluation.asset_evidence import collect_benchmark_environment
     from relaymind.evaluation.asset_whole_task import verify_host_tasks
 
@@ -596,11 +609,24 @@ def _machine(annotator_id: str, call: str, template: str) -> dict:
     return dict(
         annotator_id=annotator_id,
         model_id=_model(call),
-        prompt_sha256=_sha((HERE / "machine" / template).read_bytes()),
+        prompt_sha256=_prompt_sha256(call, template),
         temperature=0,
         saw_tuning_results=False,
         saw_arm_outputs=False,
     )
+
+
+def _prompt_sha256(call: str, template: str) -> str:
+    """Bind the template to the system message actually sent in the kept request."""
+    request = _read_json(HERE / "machine/calls" / f"{call}.request.json")
+    systems = [message["content"] for message in request["messages"] if message["role"] == "system"]
+    if (
+        len(systems) != 1
+        or not isinstance(systems[0], str)
+        or systems[0].encode("utf-8") != (HERE / "machine" / template).read_bytes()
+    ):
+        raise SystemExit(f"prompt_template_mismatch: {template} differs from the recorded {call}")
+    return _sha(systems[0].encode("utf-8"))
 
 
 def _preregistration(commit: str | None) -> dict | None:
@@ -609,28 +635,33 @@ def _preregistration(commit: str | None) -> dict | None:
 
     if commit is None:
         return None
-    sha, epoch = subprocess.run(
-        ["git", "show", "-s", "--format=%H %ct", commit],
-        cwd=REPO,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.split()
+    try:
+        sha, epoch = subprocess.run(
+            ["git", "show", "-s", "--format=%H %ct", "--end-of-options", commit],
+            cwd=REPO,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split()
+    except (subprocess.CalledProcessError, OSError, ValueError):
+        raise SystemExit("preregistration commit is unavailable in this checkout") from None
     when = datetime.fromtimestamp(int(epoch), UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     return dict(commit=sha, committed_at=when)
 
 
-def _record_machine(environment: dict, build: str, hostname: str) -> dict:
-    """The record machine of the M1 target (spec 12.6.6), from the environment lock."""
+def _record_machine(environment: dict, os_build: str, hostname_sha256: str) -> dict:
+    """Locked M1 environment plus explicit identity captured on that trial machine."""
+    if not os_build.strip() or re.fullmatch(r"[0-9a-f]{64}", hostname_sha256) is None:
+        raise SystemExit("supply the trial machine's OS build and SHA-256 hostname digest")
     return dict(
         role="target_macos_m1_8gib",
         os=environment["os"],
-        os_build=f"{environment['os_version']} {build}",
+        os_build=os_build,
         os_version=environment["os_version"],
         architecture=environment["architecture"],
         cpu_model=environment["cpu"],
         ram_bytes=environment["ram_bytes"],
-        hostname_sha256=_sha(hostname.encode("utf-8")),
+        hostname_sha256=hostname_sha256,
     )
 
 
@@ -680,9 +711,16 @@ def _check_committed() -> None:
         raise SystemExit("harness_uncommitted: commit the harness and src/ before recording")
 
 
-def record(bundle: Path, record_id: str, preregistration: str | None, owner_login: str) -> None:
-    import socket
-    import subprocess
+def record(
+    bundle: Path,
+    record_id: str,
+    preregistration: str | None,
+    owner_login: str,
+    *,
+    os_build: str,
+    hostname_sha256: str,
+) -> None:
+    import tempfile
 
     from relaymind.evaluation.asset_qualification_record import class_kappa, first_host_dispatch
 
@@ -712,9 +750,6 @@ def record(bundle: Path, record_id: str, preregistration: str | None, owner_logi
         subject("environment", bundle / by_kind["environment_lock"]["path"]),
     ]
     environment = _read_json(bundle / by_kind["environment_lock"]["path"])
-    build = subprocess.run(
-        ["sw_vers", "-buildVersion"], capture_output=True, text=True, check=True
-    ).stdout.strip()
     commit = _head_commit()
     value = dict(
         schema_version=1,
@@ -733,7 +768,7 @@ def record(bundle: Path, record_id: str, preregistration: str | None, owner_logi
         drafter=dict(
             author_id=DRAFTER,
             model_id=_model("drafting"),
-            prompt_sha256=_sha((HERE / "machine/drafter.md").read_bytes()),
+            prompt_sha256=_prompt_sha256("drafting", "drafter.md"),
             temperature=0,
         ),
         agreement=dict(
@@ -744,7 +779,7 @@ def record(bundle: Path, record_id: str, preregistration: str | None, owner_logi
         corpus_review=None,
         preregistration=_preregistration(preregistration),
         runs_started_at=first_host_dispatch(report, bundle),
-        machine=_record_machine(environment, build, socket.gethostname()),
+        machine=_record_machine(environment, os_build, hostname_sha256),
         revisions=dict(
             repository_commit=commit,
             adapter_revision=None,
@@ -757,13 +792,22 @@ def record(bundle: Path, record_id: str, preregistration: str | None, owner_logi
         ),
         recorded_at=_now(),
     )
-    _write(target, json.dumps(value, indent=1, ensure_ascii=False).encode("utf-8") + b"\n")
-    checked = check_written(
-        target,
-        labels,
-        _read_json(bundle / by_kind["catalog"]["path"]),
-        _read_json(bundle / by_kind["cases"]["path"]),
-    )
+    # The same directory preserves subject resolution and permits an atomic rename.
+    with tempfile.NamedTemporaryFile(dir=target.parent, suffix=".json", delete=False) as stream:
+        temporary = Path(stream.name)
+    try:
+        _write(temporary, json.dumps(value, indent=1, ensure_ascii=False).encode("utf-8") + b"\n")
+        checked = check_written(
+            temporary,
+            labels,
+            _read_json(bundle / by_kind["catalog"]["path"]),
+            _read_json(bundle / by_kind["cases"]["path"]),
+        )
+        if target.exists():
+            raise SystemExit("record exists: use a new record ID")
+        temporary.rename(target)
+    finally:
+        temporary.unlink(missing_ok=True)
     print(f"record {target} loads; approved={checked.approved}")
 
 
@@ -788,6 +832,12 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--bundle", type=Path, required=True)
     r.add_argument("--record-id", required=True)
     r.add_argument("--owner-login", required=True)
+    r.add_argument("--os-build", required=True, help="full OS build captured on the trial machine")
+    r.add_argument(
+        "--hostname-sha256",
+        required=True,
+        help="SHA-256 of the trial machine's UTF-8 hostname, without a newline",
+    )
     r.add_argument("--preregistration", help="the commit that froze the inputs")
     return parser
 
@@ -812,7 +862,14 @@ def main(argv=None) -> int:
     elif args.command == "freeze":
         freeze(args.root.absolute(), args.cases.absolute(), args.labels.absolute())
     else:
-        record(args.bundle.absolute(), args.record_id, args.preregistration, args.owner_login)
+        record(
+            args.bundle.absolute(),
+            args.record_id,
+            args.preregistration,
+            args.owner_login,
+            os_build=args.os_build,
+            hostname_sha256=args.hostname_sha256,
+        )
     return 0
 
 

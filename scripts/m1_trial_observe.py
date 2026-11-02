@@ -37,7 +37,6 @@ import functools
 import hashlib
 import json
 import os
-import resource
 import sqlite3
 import subprocess
 import sys
@@ -66,10 +65,14 @@ def _machine_names() -> list[bytes]:
     import socket
 
     names = {socket.gethostname(), socket.gethostname().split(".")[0]}
-    for key in ("ComputerName", "LocalHostName", "HostName"):
-        done = subprocess.run(["scutil", "--get", key], capture_output=True, text=True)
-        if done.returncode == 0 and done.stdout.strip():
-            names.add(done.stdout.strip())
+    if sys.platform == "darwin":
+        for key in ("ComputerName", "LocalHostName", "HostName"):
+            try:
+                done = subprocess.run(["scutil", "--get", key], capture_output=True, text=True)
+            except FileNotFoundError:
+                break
+            if done.returncode == 0 and done.stdout.strip():
+                names.add(done.stdout.strip())
     return sorted((n.encode("utf-8") for n in names if len(n) >= 3), key=len, reverse=True)
 
 
@@ -188,6 +191,13 @@ def observe(args) -> int:
     from relaymind.evaluation.asset_host_runner import attempts_from_trace
 
     root, observations = args.root.absolute(), args.observations.absolute()
+    home = Path.home()
+    if any(
+        path.is_relative_to(base)
+        for path in (root, root.resolve())
+        for base in (home.absolute(), home.resolve())
+    ):
+        raise SystemExit("operator root must be outside the home directory")
     host_tasks, freeze, cases = _frozen(args.inputs.absolute())
     plan = json.loads(args.plan.read_text(encoding="utf-8"))
     entries = plan["planned"] if isinstance(plan, dict) else plan
@@ -228,6 +238,18 @@ def observe(args) -> int:
             json.dumps(dict(ordinal=args.ordinal, arm=arm, status="not_run", reason=args.not_run))
         )
         return 0
+    if sys.platform != "darwin":
+        raise SystemExit("host execution and resource measurements require macOS")
+    try:
+        relationship = (HERE / "usage-relationship.md").read_bytes()
+        receipt = (
+            args.recommendation_receipt.read_bytes()
+            if args.recommendation_receipt is not None
+            else None
+        )
+    except OSError as exc:
+        raise SystemExit(f"required evidence is unavailable: {exc.filename}") from None
+    recommendation_ids = [json.loads(receipt)["recommendation_id"]] if receipt is not None else []
     config_path = root / "host" / f"arm-{arm}.json"
     config = json.loads(config_path.read_text(encoding="utf-8"))
     frozen_config = next(c for c in freeze["configurations"] if c["arm"] == arm)
@@ -257,11 +279,17 @@ def observe(args) -> int:
             env.pop(key, None)
         gateway = root / f"gateway-{arm}"
         store = gateway / "relaymind.sqlite3"
+        stdout_path = gateway / "stdout.log"
         token = next(
-            line.split(": ", 1)[1]
-            for line in (gateway / "stdout.log").read_text(encoding="utf-8").splitlines()
-            if line.startswith("Application token: ")
+            (
+                line.split(": ", 1)[1]
+                for line in stdout_path.read_text(encoding="utf-8").splitlines()
+                if line.startswith("Application token: ")
+            ),
+            None,
         )
+        if not token:
+            raise SystemExit(f"gateway application token missing from {stdout_path}")
         stored = subprocess.run(
             [openclaw, "models", "auth", "paste-api-key", "--provider", "relaymind"],
             input=token + "\n",
@@ -279,6 +307,8 @@ def observe(args) -> int:
     argv = [openclaw, "agent", "exec", prompt, "--model", MODEL_REFS[arm], "--json"]
     argv += ["--config", str(config_path), "--cwd", str(run_dir / "cwd")]
     argv += ["--state-dir", str(run_dir / "state"), "--timeout", str(args.timeout)]
+    import resource
+
     usage_before = resource.getrusage(resource.RUSAGE_CHILDREN)
     started = time.time()
     dispatch = _json(dict(schema_version=1, task_id=task["id"], arm=arm, started_at=_utc(started)))
@@ -337,14 +367,10 @@ def observe(args) -> int:
             relationship_evidence_id=RELATIONSHIP_ID,
             first_ordinal=1,
         )
-    relationship = (HERE / "usage-relationship.md").read_bytes()
     (observations / "usage-relationship.md").write_bytes(relationship)
     evidence.append(dict(id=RELATIONSHIP_ID, file="usage-relationship.md", provenance="observed"))
-    recommendation_ids = []
-    if args.recommendation_receipt is not None:
-        receipt = args.recommendation_receipt.read_bytes()
+    if receipt is not None:
         keep(f"recommendation-receipt:{number}", "recommendation-receipt.json", receipt)
-        recommendation_ids = [json.loads(receipt)["recommendation_id"]]
     if not attempts and status == "completed":
         status, reason = "failed", "no_attempt_observed"
     row = dict(
