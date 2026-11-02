@@ -456,12 +456,12 @@ def _check_report_dispatch(record: Mapping, payload: bytes, root: Path) -> None:
 
 
 def first_host_dispatch(report: Mapping, root: Path | None = None) -> str | None:
-    """RM16/RM44: earliest evidenced dispatch, never an assistant end time.
+    """RM16/RM44: earliest bound host dispatch, never a model-call timestamp.
 
     A host dispatch capture covers the entire row, including native attempts
-    whose individual start times the host does not expose. Without it, every
-    attempt must have a start; a missing row start cannot be repaired by a
-    later known one. The record may name an earlier planned dispatch.
+    whose individual start times the host does not expose. Every executed row
+    requires its own capture; a missing dispatch cannot be repaired by model
+    start times or another row. The record may name an earlier planned dispatch.
     """
     times = []
     for row in report.get("rows", []):
@@ -499,10 +499,7 @@ def first_host_dispatch(report: Mapping, root: Path | None = None) -> str | None
                         _reject("record_input_mismatch")
             times.append(capture["started_at"])
         else:
-            starts = [a["started_at"] for a in row["attempts"]]
-            if not starts or any(t is None for t in starts):
-                return None
-            times.extend(starts)
+            return None
     return min(times, key=_time) if times else None
 
 

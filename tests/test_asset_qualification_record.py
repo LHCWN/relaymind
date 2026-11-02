@@ -1122,13 +1122,27 @@ def test_a_record_for_another_report_rejects_as_unbound_before_input_checks(tmp_
     "started,dispatch,preregistered,expected",
     [
         (None, None, "2026-11-03T00:00:05Z", "preregistration_missing"),
-        ("2026-11-03T00:00:00Z", None, "2026-11-03T00:00:05Z", "preregistration_late"),
+        ("2026-11-03T00:00:00Z", None, "2026-11-03T00:00:05Z", "preregistration_missing"),
+        ("2026-11-03T00:00:10Z", None, "2026-11-03T00:00:05Z", "preregistration_missing"),
+        (
+            None,
+            "2026-11-03T00:00:11Z",
+            "2026-11-02T00:00:00Z",
+            "record_input_mismatch",
+        ),
+        (
+            "2026-11-03T00:00:00Z",
+            "2026-11-03T00:00:05Z",
+            "2026-11-02T00:00:00Z",
+            "record_input_mismatch",
+        ),
         (None, "2026-11-03T00:00:00Z", "2026-11-03T00:00:05Z", "preregistration_late"),
         (None, "2026-11-03T00:00:00Z", "2026-11-02T00:00:00Z", None),
     ],
 )
+@pytest.mark.parametrize("extra_status", [None, "completed", "failed", "timeout", "not_run"])
 def test_preregistration_uses_bound_dispatch_not_an_end_time(
-    tmp_path, started, dispatch, preregistered, expected
+    tmp_path, started, dispatch, preregistered, expected, extra_status
 ):
     """RM16/RM44, AC36: preregistration between dispatch and completion is late."""
     record = host_record(tmp_path)
@@ -1157,7 +1171,12 @@ def test_preregistration_uses_bound_dispatch_not_an_end_time(
                 provenance="observed",
             )
         ]
-    report = json.dumps(dict(rows=[row], evidence=evidence)).encode()
+    rows = [row]
+    if extra_status:
+        rows.append(dict(status=extra_status, attempts=[dict(started_at=started)]))
+        if expected != "record_input_mismatch" and extra_status != "not_run":
+            expected = "preregistration_missing"
+    report = json.dumps(dict(rows=rows, evidence=evidence)).encode()
     record["subjects"] = [s for s in record["subjects"] if s["role"] != "report"]
     record["subjects"].append(_subject(tmp_path, "report", "report.json", report))
     record["subjects"].sort(key=lambda s: s["path"])
