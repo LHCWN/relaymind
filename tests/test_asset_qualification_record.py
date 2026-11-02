@@ -1137,6 +1137,8 @@ def test_a_record_for_another_report_rejects_as_unbound_before_input_checks(tmp_
             "record_input_mismatch",
         ),
         (None, "2026-11-03T00:00:00Z", "2026-11-03T00:00:05Z", "preregistration_late"),
+        # RM16/RM44, AC36: the declared run start cannot follow bound dispatch.
+        (None, "2026-11-03T00:00:00Z", "2026-11-02T00:00:00Z", "record_input_mismatch"),
         (None, "2026-11-03T00:00:00Z", "2026-11-02T00:00:00Z", None),
     ],
 )
@@ -1174,7 +1176,9 @@ def test_preregistration_uses_bound_dispatch_not_an_end_time(
     rows = [row]
     if extra_status:
         rows.append(dict(status=extra_status, attempts=[dict(started_at=started)]))
-        if expected != "record_input_mismatch" and extra_status != "not_run":
+        if extra_status != "not_run" and (
+            expected != "record_input_mismatch" or dispatch == "2026-11-03T00:00:00Z"
+        ):
             expected = "preregistration_missing"
     report = json.dumps(dict(rows=rows, evidence=evidence)).encode()
     record["subjects"] = [s for s in record["subjects"] if s["role"] != "report"]

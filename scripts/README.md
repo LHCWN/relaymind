@@ -26,7 +26,18 @@
   command name. Prepare that directory with new `inputs/captures`, machine
   templates and `usage-relationship.md` as in the historical trial; use a fresh
   operator root outside the home directory (including resolved symlink targets).
-  The helpers refuse home roots before copying configurations or evidence. Run
+  The helpers refuse home roots before copying configurations or evidence.
+  Before draft writes files, it checks every configuration destined for
+  `inputs/configs/`. Gateway TOML loses `external_model.base_url` assignments
+  with bare, dotted or quoted keys, including escaped keys and multiline values.
+  Other bytes stay unchanged; the result is parsed with `tomllib` to verify
+  omission. A URL that cannot be removed independently (such as an inline table
+  containing other settings) is refused. Every external `baseUrl` in copied host arm JSON
+  must be exactly `${RELAYMIND_EXTERNAL_BASE_URL}`; literal values are refused
+  without printing them. Only `plugins.entries.relaymind.config.baseUrl` may
+  retain a literal loopback HTTP address. These checks do not sanitize arbitrary
+  evidence text.
+  Run
   `python scripts/m1_trial_inputs.py --trial-dir <new-trial-directory> draft --root <operator-root>`
   again after every drafting pass, **before** labels bind the cases, then
   `python scripts/m1_trial_inputs.py --trial-dir <new-trial-directory> freeze --root <operator-root> --cases <cases> --labels <labels>`.

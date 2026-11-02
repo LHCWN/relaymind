@@ -15,8 +15,16 @@ Commands (run with the project's Python):
     Copy the eight admissible OpenClaw 2026.10.7 bundled skill originals and
     the pinned host's captures from the private operator root ``R`` into
     ``inputs/`` and write the draft catalog, the DRAFT case, the drafted
-    statements and the arm configurations (the external base URL is omitted;
-    no credential is ever present in these files).
+    statements and the arm configurations. In copied gateway TOML, omit
+    external_model.base_url assignments (bare, dotted or quoted keys, including
+    escaped keys and multiline values) without reserializing other settings.
+    Refuse configurations whose URL cannot be removed independently, including
+    an inline table containing other settings; verify the result with tomllib.
+    Every external baseUrl in copied host arm JSON must be exactly
+    ${RELAYMIND_EXTERNAL_BASE_URL}; literal values are refused without printing
+    them. Only plugins.entries.relaymind.config.baseUrl may retain a literal
+    loopback HTTP address. These checks cover inputs/configs/ only, not arbitrary
+    evidence text.
 ``--trial-dir T freeze --root R --cases C --labels L``
     After the owner has authored the case(s) and the labels exist
     (``label-template`` / ``label-worksheet`` / ``label-freeze``), write the
@@ -37,6 +45,7 @@ Commands (run with the project's Python):
 
 import argparse
 import hashlib
+import ipaddress
 import json
 import os
 import re
@@ -46,11 +55,10 @@ import tomllib
 import unicodedata
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 
 HERE: Path  # Set by --trial-dir; never defaults to committed evidence.
 REPO = Path(os.environ.get("RELAYMIND_REPO") or Path(__file__).resolve().parents[1])
-# A ``base_url`` key line at any indentation (TOML ``key = value``).
-BASE_URL = re.compile(r"^\s*base_url\s*=")
 sys.path.insert(0, str(REPO / "src"))
 
 from relaymind.canonical import canonical_digest, canonical_json  # noqa: E402
@@ -175,6 +183,7 @@ def _records(root: Path) -> dict:
 
 def draft(root: Path) -> None:
     _check_operator_root(root)
+    configurations = _draft_configurations(root)
     inputs = HERE / "inputs"
     skills_root = root / "cli/node_modules/openclaw/skills"
     evidence = []
@@ -289,15 +298,8 @@ def draft(root: Path) -> None:
     )
     _write(inputs / "catalog.json", _bytes(catalog))
     configs = inputs / "configs"
-    for arm in ARMS:
-        payload = (root / "host" / f"arm-{arm}.json").read_bytes()
-        _write(configs / f"host-{arm}.json", _bytes(json.loads(payload)))
-    for arm in ("provider_only", "recommendations"):
-        text = (root / f"gateway-{arm}" / "relaymind.toml").read_text(encoding="utf-8")
-        # The owner's external base URL is confidential: omitted, never hashed.
-        kept = _omit_base_url(text)
-        tomllib.loads(kept)
-        _write(configs / f"gateway-{arm}.toml", (kept + "\n").encode("utf-8"))
+    for name, payload in configurations.items():
+        _write(configs / name, payload)
     print(f"draft written to {inputs}")
 
 
@@ -313,8 +315,87 @@ def _check_operator_root(root: Path) -> None:
 
 
 def _omit_base_url(text: str) -> str:
-    """The configuration without any ``base_url`` key line, however indented."""
-    return "\n".join(line for line in text.splitlines() if not BASE_URL.match(line))
+    """Remove complete URL assignments using decoded TOML keys, preserving other bytes."""
+    error = "cannot safely omit external_model.base_url from gateway configuration"
+    try:
+        expected = tomllib.loads(text)
+        external = expected.get("external_model", {})
+        if not isinstance(external, dict):
+            raise SystemExit(error)
+        if "base_url" not in external:
+            return text
+        del external["base_url"]
+        kept, pending = "", ""
+        for line in text.splitlines(keepends=True):
+            pending += line
+            try:
+                parsed = tomllib.loads(kept + pending)
+            except tomllib.TOMLDecodeError:
+                # Finish a multiline value before deciding whether to keep it.
+                continue
+            model = parsed.get("external_model", {})
+            if "base_url" in model:
+                del model["base_url"]
+                previous = tomllib.loads(kept)
+                previous.setdefault("external_model", {})
+                if parsed != previous:
+                    # Never drop unrelated settings sharing an inline table.
+                    raise SystemExit(error)
+            else:
+                kept += pending
+            pending = ""
+        result = tomllib.loads(kept)
+        result.setdefault("external_model", {})
+        if pending or "base_url" in result["external_model"] or result != expected:
+            raise SystemExit(error)
+        return kept
+    except tomllib.TOMLDecodeError:
+        # Parser diagnostics may include the private input: never expose them.
+        raise SystemExit(error) from None
+
+
+def _draft_configurations(root: Path) -> dict[str, bytes]:
+    """Validate every copied configuration before draft writes any evidence."""
+
+    def loopback_url(value) -> bool:
+        if not isinstance(value, str):
+            return False
+        try:
+            url = urlsplit(value)
+            local = url.hostname == "localhost" or ipaddress.ip_address(url.hostname).is_loopback
+            return local and url.scheme == "http" and url.username is None and url.password is None
+        except ValueError:
+            return False
+
+    def check_urls(value, path=()) -> None:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                child_path = (*path, key)
+                gateway = child_path == ("plugins", "entries", "relaymind", "config", "baseUrl")
+                if (
+                    key == "baseUrl"
+                    and child != "${RELAYMIND_EXTERNAL_BASE_URL}"
+                    and not (gateway and loopback_url(child))
+                ):
+                    raise SystemExit("host baseUrl must be ${RELAYMIND_EXTERNAL_BASE_URL}")
+                check_urls(child, child_path)
+        elif isinstance(value, list):
+            for child in value:
+                check_urls(child, (*path, "[]"))
+
+    configurations = {}
+    for arm in ARMS:
+        try:
+            config = json.loads((root / "host" / f"arm-{arm}.json").read_bytes())
+        except (ValueError, UnicodeError):
+            raise SystemExit("invalid host arm JSON configuration") from None
+        check_urls(config)
+        configurations[f"host-{arm}.json"] = _bytes(config)
+    for arm in ("provider_only", "recommendations"):
+        # Decode bytes directly to preserve original line endings.
+        text = (root / f"gateway-{arm}" / "relaymind.toml").read_bytes().decode("utf-8")
+        configurations[f"gateway-{arm}.toml"] = _omit_base_url(text).encode("utf-8")
+    return configurations
 
 
 # --- freeze ----------------------------------------------------------------------
