@@ -257,10 +257,7 @@ def observe(args) -> int:
         raise SystemExit(f"{config_path} is not the frozen {arm} host configuration")
     number = f"{args.ordinal:04d}"
     run_dir = root / "runs" / number
-    (run_dir / "cwd").mkdir(parents=True)
-    (run_dir / "state").mkdir()
     evidence_dir = observations / "evidence" / number
-    evidence_dir.mkdir(parents=True)
     env = {k: v for k, v in os.environ.items() if not k.upper().startswith("OPENCLAW_")}
     for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy"):
         env.pop(key, None)
@@ -270,6 +267,8 @@ def observe(args) -> int:
         OPENCLAW_CONFIG_PATH=str(config_path),
     )
     openclaw = str(root / "cli/node_modules/.bin/openclaw")
+    if not Path(openclaw).is_file() or not os.access(openclaw, os.X_OK):
+        raise SystemExit("the pinned host executable is unavailable")
     store = None
     if arm == "native":
         if any(not env.get(k) for k in SECRETS):
@@ -310,6 +309,11 @@ def observe(args) -> int:
     import resource
 
     usage_before = resource.getrusage(resource.RUSAGE_CHILDREN)
+    # All pre-host checks have passed. The gateway is operator-owned and
+    # already running; this observer only reads its token and store.
+    (run_dir / "cwd").mkdir(parents=True)
+    (run_dir / "state").mkdir()
+    evidence_dir.mkdir(parents=True)
     started = time.time()
     dispatch = _json(dict(schema_version=1, task_id=task["id"], arm=arm, started_at=_utc(started)))
     # Persist the actual host invocation boundary before dispatch, including
@@ -367,7 +371,7 @@ def observe(args) -> int:
             relationship_evidence_id=RELATIONSHIP_ID,
             first_ordinal=1,
         )
-    (observations / "usage-relationship.md").write_bytes(relationship)
+    (observations / "usage-relationship.md").write_bytes(redact(relationship))
     evidence.append(dict(id=RELATIONSHIP_ID, file="usage-relationship.md", provenance="observed"))
     if receipt is not None:
         keep(f"recommendation-receipt:{number}", "recommendation-receipt.json", receipt)
