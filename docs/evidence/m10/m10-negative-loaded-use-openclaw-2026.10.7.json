@@ -1,0 +1,163 @@
+{
+  "schema_version": 1,
+  "record_id": "m10-negative-loaded-use-openclaw-2026.10.7",
+  "profile": "owner_run",
+  "outcome": "negative",
+  "scope": "host_operation",
+  "labelling": "not_applicable",
+  "annotators": null,
+  "agreement": null,
+  "prompt_authorship": "not_applicable",
+  "drafter": null,
+  "corpus_review": null,
+  "preregistration": null,
+  "runs_started_at": null,
+  "machine": {
+    "role": "linux_host",
+    "os": "Linux",
+    "os_build": "Ubuntu 26.04.1 LTS 7.0.0-38-generic",
+    "os_version": "Linux-7.0.0-38-generic-x86_64-with-glibc2.43",
+    "architecture": "x86_64",
+    "cpu_model": "Intel Xeon Processor (Skylake, IBRS)",
+    "ram_bytes": 11998482432,
+    "hostname_sha256": "bafcdd4933633f2d8c15bec38b13546e4d879cd8b65095a56e713b8336cedd01"
+  },
+  "revisions": {
+    "repository_commit": "825777d6559b96502a56890ae9781d1791d5cfa4",
+    "adapter_revision": "38a65c787be8ddfbed99527c4e3b2c167d4a308bd2b566d2cf18acac975f06b4",
+    "harness_sha256": "c3e3daa05a70a10b5acec55782f32c4ff503e911050c6144ffb8f8bb2204f0bc"
+  },
+  "operation": {
+    "name": "skill_loaded_use",
+    "host": "openclaw",
+    "host_version": "2026.10.7",
+    "finding": "stop_point_absent",
+    "disabled": true
+  },
+  "subjects": [
+    {
+      "role": "inventory",
+      "path": "openclaw-host-use-search-20261101-vps.json",
+      "sha256": "2432d9d42abdcf72af5edb008036b6171a9fec69341f893fd182fc9c1533576a",
+      "bytes": 28612
+    },
+    {
+      "role": "capture",
+      "path": "openclaw-loaded-use-observation-20261101-ci.json",
+      "sha256": "9cf9e66e7784c0c0a08951a8df470535a8cd2ba0eaec66126b201e0d9b40f8e5",
+      "bytes": 433144
+    },
+    {
+      "role": "capture",
+      "path": "openclaw-loaded-use-observation-20261101-vps.json",
+      "sha256": "0c61867f5f22728988975f9daa7b64eb040ec140002329f3db561da9a2a37c5f",
+      "bytes": 1502
+    },
+    {
+      "role": "capture",
+      "path": "openclaw-loaded-use-observation-20261101-vps2.json",
+      "sha256": "231e23e204b2d9d91775c543815f4bd3eb4d500183b9f53d02889b97f1072038",
+      "bytes": 449667
+    },
+    {
+      "role": "capture",
+      "path": "retained-boundary-20261102/capture.json",
+      "sha256": "b4fe535424458168cf5e4b17785bf7fd3035c35ece56c24c304e024f4d9965cb",
+      "bytes": 237714
+    },
+    {
+      "role": "inventory",
+      "path": "retained-boundary-20261102/closure-inventory.json",
+      "sha256": "7f687a369c50c3b624d5d958b683bde8175cb200b615edf8bc641a77f3d6fe9d",
+      "bytes": 9428
+    },
+    {
+      "role": "environment",
+      "path": "retained-boundary-20261102/environment.json",
+      "sha256": "491d0ecf0f6995bb2b0e62c18c83fd0e4703294310cb4b1bdb13a1d7b2c230d4",
+      "bytes": 804
+    },
+    {
+      "role": "evidence",
+      "path": "retained-boundary-20261102/scope-excerpts.json",
+      "sha256": "0ea9ec890f8cb9ed0de1fe83ccdd5eb160554b3e00aa1d474e8ef577eac27f3b",
+      "bytes": 11903
+    },
+    {
+      "role": "evidence",
+      "path": "retained-boundary-20261102/scoped-negative.md",
+      "sha256": "37c81f2c86dfe1b6d0082165bc52712033169513cd52c5df87c7034672dfb655",
+      "bytes": 5252
+    },
+    {
+      "role": "inventory",
+      "path": "retained-boundary-20261102/summary.json",
+      "sha256": "9161c50e8c54943f0ee4ad62a9e6ebbd7c4fbf40c7f2f472022accbb7535d62b",
+      "bytes": 3388
+    }
+  ],
+  "review": {
+    "owner_login": "devnullexile",
+    "pull_request": null,
+    "reviewer_logins": [],
+    "approved_at": null
+  },
+  "recorded_at": "2026-11-02T17:18:36Z",
+  "machine_review": {
+    "profile": "automated_host_operation_v1",
+    "recorder": {
+      "name": "opencode2-cli-recorder",
+      "version": "1"
+    },
+    "reviews": [
+      {
+        "reviewer_id": "opencode2:ses_e62b3dc26ffelvi1l62tGpcQzQ",
+        "tool": "opencode2",
+        "model_id": "opencode-go/glm-5.3-flash",
+        "context_id": "ses_e62b3dc26ffelvi1l62tGpcQzQ",
+        "started_at": "2026-11-02T17:36:45Z",
+        "completed_at": "2026-11-02T17:37:21Z",
+        "prompt": {
+          "path": "retained-boundary-20261102/review-a/final-prompt.txt",
+          "sha256": "3f137ca3753931faf07bc77156a669b6a76afd1d304ac3a53752c79b8bcb9c17",
+          "bytes": 3941
+        },
+        "input": {
+          "path": "retained-boundary-20261102/review-input.json",
+          "sha256": "ccea3190eeea8f733edf38f4b4bdc19173b147099ed702a643a04facce131468",
+          "bytes": 2262
+        },
+        "output": {
+          "path": "retained-boundary-20261102/review-a/final-output.jsonl",
+          "sha256": "b6060d38c60ed094c9dce75e82d4fab0e6684cf5f367cb1abfcb63fc60b51e97",
+          "bytes": 11832
+        },
+        "output_format": "opencode_jsonl"
+      },
+      {
+        "reviewer_id": "opencode2:ses_e62b3d396ffeFNtpx9HRYlb32I",
+        "tool": "opencode2",
+        "model_id": "opencode-go/glm-5.3-flash",
+        "context_id": "ses_e62b3d396ffeFNtpx9HRYlb32I",
+        "started_at": "2026-11-02T17:41:15Z",
+        "completed_at": "2026-11-02T17:41:44Z",
+        "prompt": {
+          "path": "retained-boundary-20261102/review-b/final2-prompt.txt",
+          "sha256": "1ea7aebc8e340a91cf47647b5aef83932675a3415d2afb0e2003bbd142ad9d86",
+          "bytes": 4111
+        },
+        "input": {
+          "path": "retained-boundary-20261102/review-input.json",
+          "sha256": "ccea3190eeea8f733edf38f4b4bdc19173b147099ed702a643a04facce131468",
+          "bytes": 2262
+        },
+        "output": {
+          "path": "retained-boundary-20261102/review-b/final2-output.jsonl",
+          "sha256": "19266fe45266500a4a54c785bdb24af4c7b60806991170ef18a83c7e402b74c3",
+          "bytes": 11316
+        },
+        "output_format": "opencode_jsonl"
+      }
+    ]
+  }
+}

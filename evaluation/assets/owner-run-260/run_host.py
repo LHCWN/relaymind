@@ -631,15 +631,21 @@ class Run:
         info = self.work.stat()
         self._owned_work = (self.work, info.st_dev, info.st_ino)
 
+    def make_request_gate(self):
+        return RequestGate(
+            os.environ["RELAYMIND_EXTERNAL_BASE_URL"], max_output=self.budget.max_output
+        )
+
+    def build_gateway_config(self, **kwargs):
+        return live_acceptance.gateway_config(**kwargs)
+
     def setup(self):
         import run_openclaw_eval as m9
 
         os.umask(0o077)
         self.prepare_work()
         # Both arms reach the provider only through the gate.
-        self.gate = RequestGate(
-            os.environ["RELAYMIND_EXTERNAL_BASE_URL"], max_output=self.budget.max_output
-        )
+        self.gate = self.make_request_gate()
         gate_url = self.gate.start()
         native_frozen = self.frozen["native"]["host"]
         relay_frozen = self.frozen["provider_only"]["host"]
@@ -662,7 +668,7 @@ class Run:
         external = live_acceptance.ExternalEndpoint(gate_url, model, self.args.context_limit)
         config = gateway_dir / "relaymind.toml"
         config.write_text(
-            live_acceptance.gateway_config(
+            self.build_gateway_config(
                 work=gateway_dir,
                 manifest=None,
                 artifact=None,
@@ -680,6 +686,7 @@ class Run:
         )
         output = process.start()
         self.gateway = process
+        self.gateway_url, self.gateway_token = output.url.rstrip("/"), output.token
         self.store = gateway_dir / "runs.sqlite3"
         handle = m9.GatewayHandle(
             output.url.rstrip("/") + "/v1",
@@ -817,15 +824,21 @@ class Run:
         traces = live_acceptance._traces(self.store, window)
         return [e for i in window for e in traces[i]]
 
+    def supports_arm(self, arm: str) -> bool:
+        return arm in EXECUTED_ARMS
+
+    def prepare_prompt(self, task, arm: str, key: str, refs: list) -> str:
+        return self.prompts[task["prompt_case_id"]]
+
     def skip_reason(self, task, arm, config) -> str | None:
         """Read-only pre-start check; the driver journals refusals without starting."""
-        if arm == "recommendations":
+        if not self.supports_arm(arm):
             return "person_choice_unavailable"
         self.arm_config(arm, config)
         return self.budget.refusal(f"{task['id']}-{arm}")
 
     def execute(self, task, arm, config):
-        if arm == "recommendations":
+        if not self.supports_arm(arm):
             raise ExecutorFailed("person_choice_unavailable")
         config = self.arm_config(arm, config)
         key = f"{task['id']}-{arm}"
@@ -850,10 +863,10 @@ class Run:
                 before = set(self.run_ids())
             except (OSError, sqlite3.Error, ValueError):
                 gateway_usage_error = True
-        prompt = self.prompts[task["prompt_case_id"]]
         refs: list = []
         self.gate.open_row(key, self.budget.row_budget)
         try:
+            prompt = self.prepare_prompt(task, arm, key, refs)
             started = now()
             self.evidence(
                 key,

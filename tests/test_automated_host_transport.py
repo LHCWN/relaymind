@@ -1,0 +1,283 @@
+"""RM03/RM16/RM40/RM44; AC31/AC36: bounded, captured automated host calls."""
+
+import importlib.util
+import json
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+import pytest
+
+
+@pytest.fixture
+def transport():
+    path = Path(__file__).resolve().parents[1] / "scripts/automated_host_transport.py"
+    spec = importlib.util.spec_from_file_location("automated_host_transport", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture
+def upstream():
+    calls = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.do_POST()
+
+        def do_POST(self):
+            calls.append(self.path)
+            self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            try:
+                if "/slow" in self.path:
+                    for _ in range(100):
+                        self.wfile.write(b" ")
+                        self.wfile.flush()
+                        time.sleep(0.03)
+                elif self.path.endswith("large"):
+                    self.wfile.write(b"x" * 10000)
+                else:
+                    self.wfile.write(b'{"usage":{"prompt_tokens":2,"completion_tokens":3}}')
+            except OSError:
+                pass
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server.daemon_threads = True
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield f"http://127.0.0.1:{server.server_port}", calls
+    server.shutdown()
+    server.server_close()
+
+
+def test_original_capture_is_private_and_excludes_credentials(transport, upstream, tmp_path):
+    url, calls = upstream
+    result = transport.bounded_json_request(
+        url,
+        b'{"messages":[]}',
+        {"Authorization": "Bearer never-save-me"},
+        3,
+        capture_root=tmp_path,
+    )
+    assert result["status"] == 200 and result["outcome"] == "completed"
+    capture = Path(result["capture_path"])
+    assert (capture / "request.bin").read_bytes() == b'{"messages":[]}'
+    assert (capture / "response.bin").read_bytes() == result["body"]
+    for path in capture.iterdir():
+        assert b"never-save-me" not in path.read_bytes()
+        from relaymind.recommendations.private_files import open_private_file
+
+        with open_private_file(path) as lease:
+            assert lease.data == path.read_bytes()
+    assert len(calls) == 1
+
+
+def test_deadline_kills_worker_despite_continuously_arriving_bytes(
+    transport, upstream, tmp_path, monkeypatch
+):
+    url, calls = upstream
+    processes = []
+    original = transport.subprocess.Popen
+
+    def observe(*args, **kwargs):
+        process = original(*args, **kwargs)
+        processes.append(process)
+        return process
+
+    monkeypatch.setattr(transport.subprocess, "Popen", observe)
+    started = time.monotonic()
+    result = transport.bounded_json_request(url + "/slow", b"{}", {}, 0.4, capture_root=tmp_path)
+    assert time.monotonic() - started < 1.5
+    assert result["outcome"] == "timeout" and result["status"] == 504
+    assert len(processes) == 1 and processes[0].poll() is not None
+    assert len(calls) == 1
+    assert (Path(result["capture_path"]) / "response.bin").exists()
+
+
+def test_response_cap_and_read_only_get(transport, upstream, tmp_path):
+    url, _ = upstream
+    result = transport.bounded_json_request(
+        url + "/large",
+        None,
+        {},
+        3,
+        method="GET",
+        capture_root=tmp_path,
+        max_response_bytes=100,
+    )
+    assert result["outcome"] == "response_too_large" and result["status"] == 502
+    assert len((Path(result["capture_path"]) / "response.bin").read_bytes()) <= 100
+
+
+def test_gate_preserves_unknown_charge_and_never_replays(transport, upstream, tmp_path):
+    url, calls = upstream
+    gate = transport.DeadlineRequestGate(
+        url + "/slow", max_output=10, timeout=0.4, capture_root=tmp_path
+    )
+    gate.open_row("row", 10000)
+    endpoint = gate.start()
+    try:
+        result = transport.bounded_json_request(endpoint + "/chat/completions", b"{}", {}, 3)
+        assert result["status"] == 504
+        row = gate.close_row()
+        assert row["charged"] == row["calls"][0]["bound"]
+        assert row["calls"][0]["usage"] is None
+        assert row["calls"][0]["outcome"] == "timeout"
+        assert gate.last_closed_row == row
+        rejected = transport.bounded_json_request(endpoint + "/chat/completions", b"{}", {}, 3)
+        assert rejected["status"] == 400
+        assert len(calls) == 1
+    finally:
+        gate.stop()
+
+
+def test_gate_accounts_completed_usage_and_retains_original_bytes(transport, upstream, tmp_path):
+    url, _ = upstream
+    gate = transport.DeadlineRequestGate(url, max_output=10, timeout=3, capture_root=tmp_path)
+    gate.open_row("row", 10000)
+    endpoint = gate.start()
+    try:
+        result = transport.bounded_json_request(endpoint + "/chat/completions", b"{}", {}, 5)
+        assert result["status"] == 200
+        row = gate.close_row()
+        assert row["charged"] == 5
+        call = row["calls"][0]
+        assert json.loads(call["request_body"])["max_tokens"] == 10
+        assert call["response_body"] == result["body"]
+        assert call["started_at"] <= call["ended_at"]
+    finally:
+        gate.stop()
+
+
+@pytest.mark.parametrize(
+    "usage", [{"prompt_tokens": 2}, {"prompt_tokens": -1, "completion_tokens": 2}]
+)
+def test_missing_or_invalid_usage_keeps_reservation(transport, usage):
+    gate = transport.DeadlineRequestGate("http://127.0.0.1", max_output=10)
+    gate.open_row("row", 10000)
+    (payload, row, call), _ = gate.admit(b"{}")
+    gate.account(row, call, json.dumps({"usage": usage}).encode())
+    assert gate.charged() == call["bound"]
+    assert call["usage"] is None
+
+
+@pytest.mark.parametrize("action", ["close_row", "stop"])
+def test_close_row_cancels_inflight_work_before_snapshot(transport, upstream, tmp_path, action):
+    url, calls = upstream
+    gate = transport.DeadlineRequestGate(
+        url + "/slow", max_output=10, timeout=3, capture_root=tmp_path
+    )
+    gate.open_row("row", 10000)
+    endpoint = gate.start()
+    thread = threading.Thread(
+        target=lambda: transport.bounded_json_request(
+            endpoint + "/chat/completions",
+            b"{}",
+            {},
+            5,
+        )
+    )
+    thread.start()
+    deadline = time.monotonic() + 3
+    while not calls and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert calls
+    started = time.monotonic()
+    getattr(gate, action)()
+    row = gate.last_closed_row
+    try:
+        assert time.monotonic() - started < 1
+        assert row["calls"][0]["outcome"] == "cancelled"
+        assert row["charged"] == row["calls"][0]["bound"]
+        assert Path(row["calls"][0]["capture_path"]).joinpath("result.json").exists()
+    finally:
+        gate.stop()
+        thread.join(6)
+
+
+def test_concurrent_closers_share_the_finished_snapshot(transport):
+    from concurrent.futures import ThreadPoolExecutor
+
+    gate = transport.DeadlineRequestGate("http://127.0.0.1", max_output=10)
+    gate.open_row("row", 10000)
+    calls = threading.Barrier(3)
+
+    class Connection:
+        def shutdown(self, _):
+            pass
+
+    connection = Connection()
+    gate._connections.add(connection)
+
+    def close():
+        calls.wait()
+        return gate.close_row()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first, second = pool.submit(close), pool.submit(close)
+        calls.wait()
+        # Wait until both closers have entered the condition wait, so they both
+        # see the same active row before its simulated request drains.
+        deadline = time.monotonic() + 2
+        while len(gate._condition._waiters) < 2 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        with gate._condition:
+            gate._connections.clear()
+            gate._condition.notify_all()
+        assert first.result(timeout=2) == second.result(timeout=2) == gate.last_closed_row
+
+
+def test_observed_response_distinguishes_connection_failure_and_partial_timeout(
+    transport, upstream, tmp_path
+):
+    import socket
+
+    url, _ = upstream
+    with socket.socket() as closed:
+        closed.bind(("127.0.0.1", 0))
+        unavailable = f"http://127.0.0.1:{closed.getsockname()[1]}"
+    failure = transport.bounded_json_request(unavailable, b"{}", {}, 2, capture_root=tmp_path)
+    assert failure["status"] == 502
+    assert failure["response_observed"] is False and failure["upstream_status"] is None
+    partial = transport.bounded_json_request(url + "/slow", b"{}", {}, 0.5, capture_root=tmp_path)
+    assert partial["status"] == 504
+    assert partial["response_observed"] is True and partial["upstream_status"] == 200
+
+
+def test_worker_self_terminates_without_parent_timeout_enforcement(transport, upstream, tmp_path):
+    import subprocess
+    import sys
+
+    url, _ = upstream
+    command = dict(
+        url=url + "/slow",
+        body=None,
+        headers={},
+        method="GET",
+        timeout=0.5,
+        response_path=str(tmp_path / "response.bin"),
+        max_response_bytes=100000,
+    )
+    process = subprocess.Popen(
+        [sys.executable, transport.__file__],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    started = time.monotonic()
+    try:
+        process.communicate(json.dumps(command).encode(), timeout=2)
+        assert process.returncode == 124
+        assert time.monotonic() - started < 1.5
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.communicate()

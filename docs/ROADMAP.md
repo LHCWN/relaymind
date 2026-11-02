@@ -1809,3 +1809,28 @@ reports reject with `inventory_membership`. The README's claim that a later
 commit always produces `unsupported_generator` is too narrow. Use its
 procedure with the recorded run commit `2f4ddecc3da0efd632df89ed0d63f3cc1d72c00f`
 to reproduce `verify.txt`; the bound README and evidence remain unchanged.
+
+### Automated host experiment and retained-use qualification
+
+Spec 0.67 section 12.6.7 defines the automated replacement for #277. Its
+protocol and proposal validators, durable preregistration command, bounded
+three-arm runner and blind judging wrapper are implemented. No new 100-task
+report or acceptance result is claimed until execution and reviews finish.
+The original frozen inputs remain unchanged. Production manual
+selection remains available and the experiment grants no direct-action
+credential. The execution/review sequence is recorded in
+`docs/superpowers/plans/2026-11-02-m10-closure.md`.
+
+For #280, `test/host-loaded-use-qualification/` in the OpenClaw integration
+contains a qualification-only retained-boundary probe. The real VPS capture
+in `docs/evidence/m10/retained-boundary-20261102/` observes a borrow surviving
+native RPC completion and reaching the provider. Public library dispatch there
+refuses with `authenticated_request_scope_unavailable`; no model request is
+sent. Reset remains `control_refused`. The new scoped negative record
+`m10-negative-loaded-use-openclaw-2026.10.7.json` binds the captures, supported
+SDK inventory and two actual OpenCode 2 reviews. Its verifier confirms the
+reviewed host limitation for the pinned supported native composition. This
+is not a universal impossibility claim for replacement executors or future
+host versions. Loaded use remains disabled; no positive registry entry is
+added. Unrun revocation controls and refused reset remain requirements for any
+future positive qualification. The original withdrawn claim is unchanged.

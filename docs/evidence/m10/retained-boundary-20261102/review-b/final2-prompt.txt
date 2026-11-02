@@ -1,0 +1,79 @@
+This is a resumed final-report invocation in the SAME reviewer context that just inspected the frozen qualification evidence. It is not a new independent review. Your other reviewer has a separate context; do not read its output.
+
+Do not use tools or repeat source inspection in this final invocation. Based on your own prior verified inspection, produce your honest final assessment of the exact same claim below. Retain any unresolved material findings and reject if necessary; do not approve just because closure is desired. Do not emit commentary, code fences, hashes, invocation identity or new evidence.
+
+Return ONLY one JSON object with exactly these keys:
+{"conclusion":"approve" or "reject","checks":[{"name":NAME,"result":"pass" or "fail","rationale":TEXT,"evidence_paths":[PATH,...]}],"findings":[{"id":ID,"severity":"material" or "minor","status":"open" or "resolved","description":TEXT,"evidence_paths":[PATH,...]}]}
+There must be exactly one check each for capture_integrity, requirement_coverage, safety_boundaries, limitations, privacy. Every bound subject path must be cited at least once across checks/findings; cite only paths in review-input.json. Evidence lists must be unique and nonempty; text must be nonblank and at most 8192 UTF-8 bytes. Findings must have unique IDs. An unresolved material finding, failed check or incomplete evidence requires reject. Do not invent model/context IDs, times, hashes or human reviewers; the recorder binds the original output and actual invocation metadata separately. Do not edit files or execute model tasks.
+
+
+Exact unchanged input manifest:
+{
+  "schema_version": 1,
+  "record_id": "m10-negative-loaded-use-openclaw-2026.10.7",
+  "claim_sha256": "1ef971dd2ad121138130daf60b244d6a3dc22568bf04d456723abf9ac06a8990",
+  "subjects": [
+    {
+      "role": "inventory",
+      "path": "openclaw-host-use-search-20261101-vps.json",
+      "sha256": "2432d9d42abdcf72af5edb008036b6171a9fec69341f893fd182fc9c1533576a",
+      "bytes": 28612
+    },
+    {
+      "role": "capture",
+      "path": "openclaw-loaded-use-observation-20261101-ci.json",
+      "sha256": "9cf9e66e7784c0c0a08951a8df470535a8cd2ba0eaec66126b201e0d9b40f8e5",
+      "bytes": 433144
+    },
+    {
+      "role": "capture",
+      "path": "openclaw-loaded-use-observation-20261101-vps.json",
+      "sha256": "0c61867f5f22728988975f9daa7b64eb040ec140002329f3db561da9a2a37c5f",
+      "bytes": 1502
+    },
+    {
+      "role": "capture",
+      "path": "openclaw-loaded-use-observation-20261101-vps2.json",
+      "sha256": "231e23e204b2d9d91775c543815f4bd3eb4d500183b9f53d02889b97f1072038",
+      "bytes": 449667
+    },
+    {
+      "role": "capture",
+      "path": "retained-boundary-20261102/capture.json",
+      "sha256": "b4fe535424458168cf5e4b17785bf7fd3035c35ece56c24c304e024f4d9965cb",
+      "bytes": 237714
+    },
+    {
+      "role": "inventory",
+      "path": "retained-boundary-20261102/closure-inventory.json",
+      "sha256": "7f687a369c50c3b624d5d958b683bde8175cb200b615edf8bc641a77f3d6fe9d",
+      "bytes": 9428
+    },
+    {
+      "role": "environment",
+      "path": "retained-boundary-20261102/environment.json",
+      "sha256": "491d0ecf0f6995bb2b0e62c18c83fd0e4703294310cb4b1bdb13a1d7b2c230d4",
+      "bytes": 804
+    },
+    {
+      "role": "evidence",
+      "path": "retained-boundary-20261102/scope-excerpts.json",
+      "sha256": "0ea9ec890f8cb9ed0de1fe83ccdd5eb160554b3e00aa1d474e8ef577eac27f3b",
+      "bytes": 11903
+    },
+    {
+      "role": "evidence",
+      "path": "retained-boundary-20261102/scoped-negative.md",
+      "sha256": "37c81f2c86dfe1b6d0082165bc52712033169513cd52c5df87c7034672dfb655",
+      "bytes": 5252
+    },
+    {
+      "role": "inventory",
+      "path": "retained-boundary-20261102/summary.json",
+      "sha256": "9161c50e8c54943f0ee4ad62a9e6ebbd7c4fbf40c7f2f472022accbb7535d62b",
+      "bytes": 3388
+    }
+  ]
+}
+
+Your last answer was wrapped in Markdown fences and cannot be consumed. Preserve your honest assessment, but your text MUST start with the literal character { and end with }. No backticks anywhere outside JSON strings. No tools or commentary.

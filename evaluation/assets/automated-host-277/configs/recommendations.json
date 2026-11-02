@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "generation_seconds": 120,
+  "recommendations": {
+    "enabled": true,
+    "user_id": "source-benchmark",
+    "workspace_id": "disposable",
+    "total_ms": 500,
+    "primary_ms": 150,
+    "fallback": true,
+    "primary": "lexical"
+  },
+  "sources": [
+    {
+      "source_id": "github-mcp-server",
+      "kind": "metadata_import",
+      "manifest_sha256": "d241c9e6efde0fd30818e6bdb83d9e5a6cd5accb29600343ffef0069e593dcc2",
+      "manifest_bytes": 232248
+    },
+    {
+      "source_id": "matrix",
+      "kind": "metadata_import",
+      "manifest_sha256": "f7ac1dbf81cf4d9dd15a0f986ea933a76f0690dd821af59d3cdf3329930c8973",
+      "manifest_bytes": 88197
+    },
+    {
+      "source_id": "skillsbench",
+      "kind": "metadata_import",
+      "manifest_sha256": "968b0a6ff1c3bfb625be28083a2d22e6f56cef8becd4f6142bc12eeb3b191ae0",
+      "manifest_bytes": 177336
+    }
+  ]
+}

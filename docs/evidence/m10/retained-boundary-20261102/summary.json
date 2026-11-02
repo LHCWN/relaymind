@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "kind": "retained_boundary_diagnostic",
+  "requirements": [
+    "RM16",
+    "RM37",
+    "RM39",
+    "AC28",
+    "AC30"
+  ],
+  "host_version": "2026.10.7",
+  "qualification": "unavailable",
+  "production_enabled": false,
+  "model": "deterministic_double",
+  "capture": {
+    "path": "capture.json",
+    "sha256": "b4fe535424458168cf5e4b17785bf7fd3035c35ece56c24c304e024f4d9965cb",
+    "original_sha256": "f8c4537020ee7e5756ac6bc77cfa77b7803152a6d8356b23f7da65902fcb6ae4",
+    "redactions": [
+      "home directory to /home/vps-user",
+      "hostname to SHA-256",
+      "public interface addresses if present"
+    ]
+  },
+  "source_inventory": [
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/package.json",
+      "sha256": "362f8c0fda7b71a116e0ca2f812e896bfe9cfec41e64b6b66243f95703aaf7b8"
+    },
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/dist/request-authorization-DsdcZTZi.mjs",
+      "sha256": "c2fcb84fd7646a54542259ad83e8f4706bb0a06fbecd93fb91b4444fb012d8d5"
+    },
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/dist/config-contracts-Db6WHFol.d.ts",
+      "sha256": "48c2f15bb8041a49dd7da5d34663cab7f73081b2ed03f807c09c01ab61851a3d"
+    },
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/dist/plugin-sdk/agent-harness.d.ts",
+      "sha256": "5bc48df0992011ae05b80b1abcc55cbdce81daee7b2ea7c0a5e6920556c4fa45"
+    },
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/dist/plugin-sdk/agent-harness-runtime.js",
+      "sha256": "98d12f921f5b1724de6625b0143f153170726b650ab28a6c0b2f2444ad5c41ca"
+    },
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/dist/plugin-sdk/agent-harness-registration.js",
+      "sha256": "5ae2e4741def29be35a5e4a12a033bdc7f632ffc878a51ac0bb53fa59cbada8e"
+    },
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/dist/plugin-sdk/agent-harness-attempt-runtime.js",
+      "sha256": "52253cf6ecb0695895c222e8d5e326a8eda563e2aabd42f66183a2507eb79c52"
+    },
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/dist/plugin-sdk/agent-workspace-runtime.d.ts",
+      "sha256": "76e8a0e686601adbb376a132479e58dc15fb64fa98946e2ece81cec032f025cd"
+    },
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/dist/plugin-sdk/skill-commands-runtime.d.ts",
+      "sha256": "4c48cec9d5b7d2c0d66d6a8fd976c7be5ab6c2bfaa0f294cf24c0e5cb84f0fba"
+    },
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/docs/plugins/sdk-agent-harness/registration.md",
+      "sha256": "6f0a26e6a286e14c94f94a9b89e01777131a5428b6d7df66ef9da996d5eccda8"
+    },
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/dist/gateway-method-runtime-BN4bBk6Z.mjs",
+      "sha256": "33ce7ff1b8c0bd321ee2bbe94a62ed5c13dbc623157846a6fb7b9364c25e997a"
+    }
+  ],
+  "findings": {
+    "retained_borrow_reaches_provider": true,
+    "retained_authority_current_after_handler": true,
+    "library_dispatch": "authenticated_request_scope_unavailable",
+    "receiving_requests": 0,
+    "reset_control": "control_refused",
+    "revocation_while_waiting": "not_run"
+  },
+  "unresolved": [
+    "Exact receiving-turn person binding",
+    "Supported fresh library access at final boundary",
+    "Complete pinned-byte checks",
+    "Revocation/reset/removal while waiting",
+    "Full alternate-composition qualification"
+  ]
+}

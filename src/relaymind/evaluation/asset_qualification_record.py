@@ -1,4 +1,4 @@
-"""Owner-run qualification records (spec 0.66 section 12.6.6; #251).
+"""Qualification records (spec 0.68 section 12.6.6; #251, #280).
 
 RM16, RM39, RM40, RM42, RM44; AC30, AC31, AC33, AC35, AC36, AC37. A
 QualificationRecordV1 is a closed JSON file committed under
@@ -8,6 +8,8 @@ environment and media it covers, records the machine identity and the harness
 and adapter revisions, and is approved in a pull request by at least one
 organization member other than the owner. The pull request number, reviewer
 logins and approval time are written into the record after the merge.
+Host-operation records may instead bind two actual automated-review outputs
+through the optional machine_review profile; no human approval is invented.
 
 ``load_record`` checks the closed shape, the cross-field rules and every bound
 digest; any mismatch rejects. A record only lifts the
@@ -20,7 +22,8 @@ record enables or disables nothing by itself.
 
 Software cannot authenticate the reviewer, the machine or the annotators from
 strings and hashes; the record is the reviewed assertion the specification
-names, and the git history and pull request review are its audit trail.
+names. Git history and pull request review, or the recorded machine invocation
+provenance and raw outputs, provide the corresponding audit trail.
 """
 
 import hashlib
@@ -41,6 +44,7 @@ from relaymind.evaluation.asset_benchmark_io import (
 )
 from relaymind.evaluation.asset_corpus_io import DOCUMENT_BYTES, parse_json, read_local
 from relaymind.evaluation.asset_judgments import DRAFTED, METHODS
+from relaymind.evaluation.asset_machine_review import verify_machine_review
 from relaymind.evaluation.asset_qualification import CustodianReview
 from relaymind.evaluation.asset_whole_task import WholeTaskRejected
 from relaymind.schema_util import load_packaged_schema
@@ -250,6 +254,7 @@ class QualificationRecord:
     path: Path
     # Canonical digest of each JSON input subject, by role.
     canonical: Mapping[str, str] = field(default_factory=dict)
+    machine_review_verified: bool = False
 
     @property
     def record_id(self) -> str:
@@ -278,6 +283,8 @@ class QualificationRecord:
     @property
     def approved(self) -> bool:
         review = self.document["review"]
+        if "machine_review" in self.document:
+            return self.machine_review_verified
         return (
             review["pull_request"] is not None
             and bool(review["reviewer_logins"])
@@ -528,7 +535,8 @@ def load_record(path: Path) -> QualificationRecord:
                 canonical[subject["role"]] = canonical_digest(parse_json(payload))
             except ValueError as exc:
                 raise WholeTaskRejected("record_input_mismatch") from exc
-    return QualificationRecord(record, path, canonical)
+    machine_verified = verify_machine_review(record, path.parent, _SCHEMA, _read_bound, _time)
+    return QualificationRecord(record, path, canonical, machine_verified)
 
 
 def class_kappa(labels: Mapping) -> float | None:
