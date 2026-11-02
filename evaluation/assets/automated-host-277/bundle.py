@@ -32,7 +32,7 @@ def private_runtime_bundle(base, identities: set[str]):
             legacy.relative_path(relative)
             target = self.private / relative
             target.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
-            if not create_private_file_exclusive(target, payload):
+            if not create_private_file_exclusive(target, payload, maximum=16 * 1024 * 1024):
                 raise ValueError("private_evidence_exists")
 
         def file(self, evidence_id, kind, access, payload, *, publish, relative=None):

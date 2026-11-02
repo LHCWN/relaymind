@@ -827,6 +827,16 @@ class Run:
     def supports_arm(self, arm: str) -> bool:
         return arm in EXECUTED_ARMS
 
+    def dispatch_evidence(self, task, arm: str, key: str, refs: list) -> str:
+        started = now()
+        self.evidence(
+            key,
+            "host-dispatch.json",
+            dict(schema_version=1, task_id=task["id"], arm=arm, started_at=started),
+            refs,
+        )
+        return started
+
     def prepare_prompt(self, task, arm: str, key: str, refs: list) -> str:
         return self.prompts[task["prompt_case_id"]]
 
@@ -867,13 +877,7 @@ class Run:
         self.gate.open_row(key, self.budget.row_budget)
         try:
             prompt = self.prepare_prompt(task, arm, key, refs)
-            started = now()
-            self.evidence(
-                key,
-                "host-dispatch.json",
-                dict(schema_version=1, task_id=task["id"], arm=arm, started_at=started),
-                refs,
-            )
+            started = self.dispatch_evidence(task, arm, key, refs)
             result = run_bounded(
                 [
                     *host.command,

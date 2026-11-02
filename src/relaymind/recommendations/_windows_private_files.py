@@ -355,9 +355,13 @@ def open_windows_private_file(
         raise PrivateFileError(f"cannot open private file: {path}") from None
 
 
-def create_windows_private_file(path: Path, data: bytes) -> bool:
+def create_windows_private_file(
+    path: Path, data: bytes, *, maximum: int = MAX_PRIVATE_FILE_BYTES
+) -> bool:
     """Supply owner/protected DACL at FILE_CREATE, before any private bytes exist."""
-    if len(data) > MAX_PRIVATE_FILE_BYTES:
+    if type(maximum) is not int or maximum < 0:
+        raise PrivateFileError("invalid private file bound")
+    if len(data) > maximum:
         raise PrivateFileError("private file too large")
     try:
         with _parent(path) as (tree, name, user):

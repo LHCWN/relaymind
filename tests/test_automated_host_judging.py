@@ -45,7 +45,8 @@ def test_judging_refuses_changed_template_digest():
         m.judging_identity(protocol, ["adjudicate"])
 
 
-def test_judging_retains_failed_response_and_unknown_charge(tmp_path, monkeypatch):
+@pytest.mark.parametrize("response_bytes", [8, 1024 * 1024 + 123])
+def test_judging_retains_failed_response_and_unknown_charge(tmp_path, monkeypatch, response_bytes):
     m = module()
     calls = []
 
@@ -68,12 +69,15 @@ def test_judging_retains_failed_response_and_unknown_charge(tmp_path, monkeypatc
     def transport(url, payload, headers, timeout, **kwargs):
         assert timeout == 120
         assert b"private-test-key" not in payload
-        return {"outcome": "completed", "status": 200, "body": b"not-json"}
+        return {"outcome": "completed", "status": 200, "body": b"x" * response_bytes}
 
     chat = m.bounded_judge_chat("glm-5.3-flash", 0, lambda p, n: len(p) + n, transport)
     with pytest.raises(ValueError):
         chat(Ledger(), "judge-a", [], tmp_path, "batch")
     assert [c[0] for c in calls] == ["reserve", "unknown"]
+    captures = list(tmp_path.rglob("response.bin"))
+    assert len(captures) == 1
+    assert captures[0].read_bytes() == b"x" * response_bytes
 
 
 def test_blind_and_apply_keep_original_rubric_directory():

@@ -559,3 +559,46 @@ def test_private_creation_write_progress_failures_and_late_cancellation(
         "cancel-write",
     ):
         assert not flushed
+
+
+def test_windows_large_artifact_keeps_protected_exclusive_create(tmp_path, monkeypatch):
+    """RM16/RM37: explicit artifact cap preserves protected Windows collision rules."""
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+
+    from relaymind.recommendations import _windows_private_files as helper
+    from relaymind.recommendations.limits import MAX_PRIVATE_FILE_BYTES
+
+    calls = []
+
+    @contextmanager
+    def protected(user):
+        assert user == "owner"
+        yield 123
+
+    def create(name, parent, **kwargs):
+        calls.append(kwargs)
+        assert kwargs["security_descriptor"] == 123
+        assert kwargs["disposition"] == 2
+        raise FileExistsError
+
+    @contextmanager
+    def parent(path):
+        yield (
+            SimpleNamespace(
+                api=SimpleNamespace(protected_descriptor=protected, create=create),
+                _directories={(): 456},
+            ),
+            "capture",
+            "owner",
+        )
+
+    monkeypatch.setattr(helper, "_parent", parent)
+    payload = b"x" * (MAX_PRIVATE_FILE_BYTES + 1)
+    with pytest.raises(PrivateFileError, match="private file too large"):
+        helper.create_windows_private_file(tmp_path / "capture", payload)
+    assert calls == []
+    assert not helper.create_windows_private_file(
+        tmp_path / "capture", payload, maximum=len(payload)
+    )
+    assert len(calls) == 1

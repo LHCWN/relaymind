@@ -254,7 +254,9 @@ def bounded_judge_chat(model, temperature, request_bound, transport):
                 capture_root=invocation / "originals",
             )
             raw = result["body"]
-            if not create_private_file_exclusive(invocation / "response.bin", raw):
+            if not create_private_file_exclusive(
+                invocation / "response.bin", raw, maximum=16 * 1024 * 1024
+            ):
                 raise ValueError("judge_capture_exists")
             _durable(
                 invocation / "transport.json",

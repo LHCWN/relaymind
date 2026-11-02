@@ -281,7 +281,7 @@ class AutomatedRun(legacy.Run):
         relative = f"host-runs/{key}/{name}"
         path = self.evidence_root / relative
         path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
-        if not create_private_file_exclusive(path, payload):
+        if not create_private_file_exclusive(path, payload, maximum=16 * 1024 * 1024):
             raise AutomatedHostRejected("evidence_exists")
         identity = f"host-dispatch:{key}" if name == "host-dispatch.json" else f"{key}:{name}"
         ref = dict(
@@ -312,7 +312,13 @@ class AutomatedRun(legacy.Run):
             raise AutomatedHostRejected("request_failed")
         return parse_json(response["body"])
 
+    def dispatch_evidence(self, task, arm: str, key: str, refs: list) -> str:
+        # Whole-row evidence already predates preparation. This timestamp
+        # belongs to host-result elapsed time, which excludes preparation.
+        return legacy.now()
+
     def prepare_prompt(self, task, arm: str, key: str, refs: list) -> str:
+        super().dispatch_evidence(task, arm, key, refs)
         self.evidence(
             key,
             "automated-dispatch.json",
