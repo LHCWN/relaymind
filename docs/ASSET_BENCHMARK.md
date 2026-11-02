@@ -1438,11 +1438,16 @@ The tier is `functional_fixture`, with a deterministic gateway and disposable
 fixture accounts. It is not an owner, human or live-model walkthrough and
 not platform acceptance. Blocked steps are never attempted. Screenshots and
 video can show fixture account names; keep them private until reviewed, and
-never publish the work directory. On the owner's VPS (1 November 2026), the
-pinned host's Control UI and the plugin's controls followed the `zh-CN` browser
-locale. The recommendation detail block and the identity provider's sign-in
-pages stayed in English, and the host's community banner stays visible because
-the harness never dismisses it. An unknown label still fails the Chinese run
-on that label rather than recording English screens.
+never publish the work directory.
+
+An informal operator observation from the owner's VPS (1 November 2026),
+not bound to a qualification record or evidence artifact in this PR, reported
+that the pinned host's Control UI and the plugin's controls followed the
+`zh-CN` browser locale. The recommendation detail block and the identity
+provider's sign-in pages stayed in English, and the host's community banner
+remained visible. This observation is not qualification evidence.
+
+The harness never dismisses the community banner. An unknown label still
+fails the Chinese run on that label rather than recording English screens.
 The recorder is not part of CI. Its fixture tests
 (`tests/test_openclaw_walkthrough.py`) run in the default `pytest`.
