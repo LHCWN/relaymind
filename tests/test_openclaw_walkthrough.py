@@ -1051,3 +1051,50 @@ def test_run_child_ends_the_whole_tree_on_windows(rec, monkeypatch):
     assert calls[0] == ("popen", {"creationflags": 0x200})
     assert ("run", ["taskkill", "/F", "/T", "/PID", "4242"]) in calls
     assert "kill" not in calls
+
+
+@pytest.mark.parametrize("failure", ["copy", "digest"])
+def test_record_cleans_up_a_failed_font_snapshot(rec, tmp_path, monkeypatch, capsys, failure):
+    """RM39; AC30: a partial font snapshot refuses cleanly before any child starts."""
+    fonts = font_dir(tmp_path)
+    args = record_args(rec, tmp_path, fonts)
+    monkeypatch.setattr(rec, "run_child", lambda *args: pytest.fail("child started"))
+    copyfile = rec.shutil.copyfile
+
+    def fail_copy(source, target):
+        if Path(source).name == "NotoSansCJKsc-Regular.otf":
+            assert (args.work_root / "fonts/Extra.ttc").is_file()
+            raise OSError("font copy failed")
+        return copyfile(source, target)
+
+    def fail_digest(target):
+        assert len(list(target.iterdir())) == 2
+        raise ValueError("walkthrough_font_dir")
+
+    if failure == "copy":
+        monkeypatch.setattr(rec.shutil, "copyfile", fail_copy)
+    else:
+        monkeypatch.setattr(rec, "font_files", fail_digest)
+    assert rec.record(args) == 2
+    assert json.loads(capsys.readouterr().out) == dict(
+        complete=False, reason="walkthrough_font_dir", manifest=None
+    )
+    assert not args.work_root.exists()
+    assert not args.out_dir.exists()
+    assert (fonts / "Extra.ttc").read_bytes() == b"ttc-bytes"
+
+
+@pytest.mark.parametrize("environment", [{}, {"HOME": "relative"}])
+def test_real_install_step_preserves_the_font_home_reason(rec, tmp_path, environment):
+    """RM39; AC30: the actual ordinary step wrapper retains the named font refusal."""
+    composition_type = rec.walkthrough_composition(
+        "zh-CN", rec.Shooter(tmp_path / "media"), font_dir(tmp_path)
+    )
+    composition = object.__new__(composition_type)
+    composition._failure = {}
+    composition._ui_action = None
+    with pytest.raises(ValueError, match="^walkthrough_font_home$"):
+        composition.prepare_host([], environment, tmp_path, None)
+    assert composition.failure_diagnostics() == dict(
+        ordinary_failure_step="install", ordinary_error_class="value_error"
+    )
