@@ -9,6 +9,7 @@ import json
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -114,6 +115,8 @@ def test_superseded_drafts_are_bound_through_freeze(builder, tmp_path, monkeypat
     (root / "release").mkdir()
     (root / "release/relaymind-openclaw-provider-0.1.0.tgz").write_bytes(b"fixture package")
     builder.draft(root)
+    for source in (trial / "inputs/configs").iterdir():
+        assert source.read_bytes() == (TRIAL / "inputs/configs" / source.name).read_bytes()
     catalog = json.loads((trial / "inputs/catalog.json").read_text())
     rejected = {e["id"]: e for e in catalog["evidence"] if "superseded" in e["id"]}
     assert set(rejected) == {"drafting-superseded-1-request", "drafting-superseded-1-response"}
@@ -161,6 +164,10 @@ def prepare_observation(observer, tmp_path, monkeypatch, arm):
     config_path = root / "host" / f"arm-{arm}.json"
     config_path.parent.mkdir(parents=True)
     config_path.write_text(json.dumps(config))
+    executable = root / "cli/node_modules/.bin/openclaw"
+    executable.parent.mkdir(parents=True)
+    executable.touch()
+    executable.chmod(0o700)
     task = dict(id="task-1", prompt_case_id="case-1")
     freeze = dict(
         configurations=[
@@ -237,14 +244,41 @@ def prepare_observation(observer, tmp_path, monkeypatch, arm):
 def test_every_kept_payload_redacts_machine_names(observer, tmp_path, monkeypatch, arm):
     """RM16, AC36: test actual file writes, including the early envelope write."""
     args, _ = prepare_observation(observer, tmp_path, monkeypatch, arm)
+    maintained = observer.__file__.endswith("m1_trial_observe.py")
+    if maintained:
+        trial = tmp_path / "trial"
+        trial.mkdir()
+        (trial / "usage-relationship.md").write_bytes(b"observed on fixture-machine\n")
+        monkeypatch.setattr(observer, "HERE", trial)
     observer.observe(args)
     names = ["host-envelope.json", "host-transcript.jsonl", "recommendation-receipt.json"]
     if arm != "native":
         names.append("gateway-trace.json")
+    if maintained:
+        names.append("usage-relationship.md")
     for name in names:
-        payload = (args.observations / "evidence/0001" / name).read_bytes()
+        directory = (
+            args.observations
+            if name == "usage-relationship.md"
+            else args.observations / "evidence/0001"
+        )
+        payload = (directory / name).read_bytes()
         assert b"fixture-machine" not in payload
         assert b"<machine-name>" in payload
+
+
+def test_clean_relationship_keeps_its_bytes_and_evidence_reference(tmp_path, monkeypatch):
+    """RM16/AC36: redaction leaves clean relationship evidence reproducible."""
+    observer = module(REPO / "scripts/m1_trial_observe.py")
+    args, _ = prepare_observation(observer, tmp_path, monkeypatch, "native")
+    expected = (observer.HERE / "usage-relationship.md").read_bytes()
+    observer.observe(args)
+    assert (args.observations / "usage-relationship.md").read_bytes() == expected
+    observation = json.loads((args.observations / "row-0001.json").read_bytes())
+    assert (
+        dict(id="usage-relationship", file="usage-relationship.md", provenance="observed")
+        in observation["evidence"]
+    )
 
 
 def test_dispatch_is_persisted_before_host_execution(tmp_path, monkeypatch):
@@ -332,20 +366,72 @@ def test_untracked_maintained_harness_is_not_a_committed_revision(builder, tmp_p
         builder._check_committed()
 
 
-def test_indented_base_url_is_omitted(builder):
-    """RM16/AC36: the confidential base URL is omitted however it is indented."""
-    text = (
-        "[external_model]\n"
-        '  base_url = "https://private.invalid/v1"\n'
-        '\tbase_url="https://tab.invalid/v1"\n'
-        'base_url_note = "kept: a different key"\n'
-        '  model = "fixture"\n'
-    )
+@pytest.mark.parametrize(
+    "assignment",
+    [
+        '[external_model]\n  base_url = "https://example.invalid"\n',
+        '[external_model]\n\tbase_url="https://example.invalid"\n',
+        'external_model.base_url = "https://example.invalid"\n',
+        "'external_model'.'base_url' = \"https://example.invalid\"\n",
+        '["external_model"]\n"base_url" = "https://example.invalid"\n',
+        '["external\\u005fmodel"]\n"base\\u005furl" = "https://example.invalid"\n',
+        '[external_model]\nbase_url = """\nhttps://example.invalid\n"""\n',
+    ],
+)
+def test_base_url_key_spellings_are_omitted(builder, assignment):
+    """RM16/AC36: decoded dotted/quoted keys and multiline values cannot leak."""
+    text = assignment + '[other]\nbase_url_note = "kept: a different key"\n'
     kept = builder._omit_base_url(text)
-    assert "private.invalid" not in kept
-    assert "tab.invalid" not in kept
+    assert "example.invalid" not in kept
+    assert "base_url" not in tomllib.loads(kept).get("external_model", {})
     assert 'base_url_note = "kept: a different key"' in kept
-    assert '  model = "fixture"' in kept
+
+
+@pytest.mark.parametrize("ending", ["", "\n", "\r\n"])
+def test_clean_gateway_config_is_byte_preserved(builder, ending):
+    """RM16/AC36: omission must not reserialize a clean configuration."""
+    text = '# retained comment\n[external_model]\nmodel = "fixture"' + ending
+    assert builder._omit_base_url(text) == text
+
+
+def test_base_url_remaining_in_inline_table_is_refused(builder):
+    """RM16/AC36: refuse a URL that cannot be omitted without changing other settings."""
+    with pytest.raises(SystemExit, match="external_model.base_url") as caught:
+        builder._omit_base_url(
+            'external_model = {base_url = "https://example.invalid", model = "fixture"}\n'
+        )
+    assert "example.invalid" not in str(caught.value)
+
+
+@pytest.mark.parametrize("arm", ["native", "provider_only", "recommendations"])
+@pytest.mark.parametrize("location", ["provider", "plugin"])
+def test_draft_refuses_literal_host_base_url_before_copying(
+    builder, tmp_path, monkeypatch, arm, location
+):
+    """RM16/AC36: host arm URLs must use the environment placeholder."""
+    trial, root = tmp_path / "trial", tmp_path / "operator"
+    monkeypatch.setattr(builder, "HERE", trial, raising=False)
+    monkeypatch.setattr(builder, "SKILLS", ())
+    monkeypatch.setattr(builder, "_records", lambda root: {})
+    monkeypatch.setattr(builder, "_read_json", lambda path: {"excluded": []})
+    license_path = root / "cli/node_modules/openclaw/LICENSE"
+    license_path.parent.mkdir(parents=True)
+    license_path.write_bytes(b"fixture license")
+    (root / "host").mkdir(parents=True)
+    for name in builder.ARMS:
+        url = "https://example.invalid" if name == arm else "${RELAYMIND_EXTERNAL_BASE_URL}"
+        config = {"models": {"providers": {"external-direct": {"baseUrl": url}}}}
+        if location == "plugin":
+            config = {"plugins": {"entries": {"relaymind": {"config": {"baseUrl": url}}}}}
+        (root / "host" / f"arm-{name}.json").write_text(json.dumps(config))
+    for name in ("provider_only", "recommendations"):
+        gateway = root / f"gateway-{name}"
+        gateway.mkdir()
+        (gateway / "relaymind.toml").write_text('[external_model]\nmodel = "fixture"\n')
+    with pytest.raises(SystemExit, match="baseUrl.*RELAYMIND_EXTERNAL_BASE_URL") as caught:
+        builder.draft(root)
+    assert "example.invalid" not in str(caught.value)
+    assert not trial.exists()
 
 
 def test_git_runs_in_the_repository_from_an_outside_directory(builder, tmp_path, monkeypatch):
@@ -469,6 +555,40 @@ def test_missing_gateway_token_names_only_the_stdout_path(tmp_path, monkeypatch)
     assert "token" in str(caught.value).lower()
     assert "fixture-secret" not in str(caught.value)
     assert not seen
+    assert not (args.root / "runs").exists()
+    assert not args.observations.exists()
+    stdout.write_text("Application token: fixture-token\n")
+    maintained.observe(args)
+    assert len(seen) == 1
+    assert (args.observations / "row-0001.json").exists()
+
+
+@pytest.mark.parametrize("failure", ["store", "executable", "credentials", "token_store"])
+def test_observer_pre_host_checks_leave_no_run_state(tmp_path, monkeypatch, failure):
+    """RM16/AC36: pre-host failures leave an ordinal available for retry."""
+    maintained = module(REPO / "scripts/m1_trial_observe.py")
+    arm = "native" if failure == "credentials" else "provider_only"
+    args, seen = prepare_observation(maintained, tmp_path, monkeypatch, arm)
+    if failure == "store":
+
+        def unavailable(*args):
+            raise OSError("fixture store unavailable")
+
+        monkeypatch.setattr(maintained, "_run_ids", unavailable)
+    elif failure == "executable":
+        (args.root / "cli/node_modules/.bin/openclaw").unlink()
+    elif failure == "credentials":
+        for key in maintained.SECRETS:
+            monkeypatch.delenv(key)
+    else:
+        monkeypatch.setattr(
+            maintained.subprocess, "run", lambda argv, **kw: subprocess.CompletedProcess(argv, 1)
+        )
+    with pytest.raises((SystemExit, OSError)):
+        maintained.observe(args)
+    assert not seen
+    assert not (args.root / "runs").exists()
+    assert not args.observations.exists()
 
 
 @pytest.mark.parametrize("missing", ["relationship", "receipt"])
