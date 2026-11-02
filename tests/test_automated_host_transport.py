@@ -2,12 +2,17 @@
 
 import importlib.util
 import json
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
+
+# Windows worker startup includes protected capture-file initialization. Allow
+# it to reach the test server before testing a deadline during response reads.
+STREAM_DEADLINE = 3.0 if sys.platform == "win32" else 0.4
 
 
 @pytest.mark.parametrize(
@@ -74,7 +79,7 @@ def upstream():
             self.end_headers()
             try:
                 if "/slow" in self.path:
-                    for _ in range(100):
+                    while True:
                         self.wfile.write(b" ")
                         self.wfile.flush()
                         time.sleep(0.03)
@@ -133,12 +138,38 @@ def test_deadline_kills_worker_despite_continuously_arriving_bytes(
 
     monkeypatch.setattr(transport.subprocess, "Popen", observe)
     started = time.monotonic()
-    result = transport.bounded_json_request(url + "/slow", b"{}", {}, 0.4, capture_root=tmp_path)
-    assert time.monotonic() - started < 1.5
+    result = transport.bounded_json_request(
+        url + "/slow", b"{}", {}, STREAM_DEADLINE, capture_root=tmp_path
+    )
+    assert time.monotonic() - started < STREAM_DEADLINE + 2
     assert result["outcome"] == "timeout" and result["status"] == 504
     assert len(processes) == 1 and processes[0].poll() is not None
     assert len(calls) == 1
-    assert (Path(result["capture_path"]) / "response.bin").exists()
+    assert (Path(result["capture_path"]) / "response.bin").read_bytes()
+    assert result["response_observed"] is True
+
+
+def test_deadline_includes_worker_startup(transport, upstream, tmp_path, monkeypatch):
+    """RM03/RM16: a worker that has not sent a request is still bounded."""
+    url, calls = upstream
+    processes = []
+    original = transport.subprocess.Popen
+
+    def delayed_start(args, **kwargs):
+        process = original([args[0], "-c", "import time; time.sleep(30)"], **kwargs)
+        processes.append(process)
+        return process
+
+    monkeypatch.setattr(transport.subprocess, "Popen", delayed_start)
+    started = time.monotonic()
+    result = transport.bounded_json_request(url, b"{}", {}, 0.1, capture_root=tmp_path)
+    assert time.monotonic() - started < 2
+    assert result["status"] == 504 and result["outcome"] == "timeout"
+    assert len(processes) == 1 and processes[0].poll() is not None
+    assert calls == []
+    assert result["response_observed"] is False
+    assert result["upstream_status"] is None
+    assert (Path(result["capture_path"]) / "response.bin").read_bytes() == b""
 
 
 def test_response_cap_and_read_only_get(transport, upstream, tmp_path):
@@ -159,12 +190,14 @@ def test_response_cap_and_read_only_get(transport, upstream, tmp_path):
 def test_gate_preserves_unknown_charge_and_never_replays(transport, upstream, tmp_path):
     url, calls = upstream
     gate = transport.DeadlineRequestGate(
-        url + "/slow", max_output=10, timeout=0.4, capture_root=tmp_path
+        url + "/slow", max_output=10, timeout=STREAM_DEADLINE, capture_root=tmp_path
     )
     gate.open_row("row", 10000)
     endpoint = gate.start()
     try:
-        result = transport.bounded_json_request(endpoint + "/chat/completions", b"{}", {}, 3)
+        result = transport.bounded_json_request(
+            endpoint + "/chat/completions", b"{}", {}, STREAM_DEADLINE + 5
+        )
         assert result["status"] == 504
         row = gate.close_row()
         assert row["charged"] == row["calls"][0]["bound"]
@@ -283,10 +316,12 @@ def test_observed_response_distinguishes_connection_failure_and_partial_timeout(
     with socket.socket() as closed:
         closed.bind(("127.0.0.1", 0))
         unavailable = f"http://127.0.0.1:{closed.getsockname()[1]}"
-    failure = transport.bounded_json_request(unavailable, b"{}", {}, 2, capture_root=tmp_path)
+    failure = transport.bounded_json_request(unavailable, b"{}", {}, 10, capture_root=tmp_path)
     assert failure["status"] == 502
     assert failure["response_observed"] is False and failure["upstream_status"] is None
-    partial = transport.bounded_json_request(url + "/slow", b"{}", {}, 0.5, capture_root=tmp_path)
+    partial = transport.bounded_json_request(
+        url + "/slow", b"{}", {}, STREAM_DEADLINE, capture_root=tmp_path
+    )
     assert partial["status"] == 504
     assert partial["response_observed"] is True and partial["upstream_status"] == 200
 
