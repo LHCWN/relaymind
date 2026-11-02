@@ -1,0 +1,769 @@
+"""RM16/RM40/RM44, AC31/AC36: future trial evidence, spec 0.66 section 12.6.6.
+
+Synthetic executions only; the historical harness and bound evidence stay intact.
+"""
+
+import hashlib
+import importlib.util
+import json
+import shutil
+import subprocess
+import sys
+import tomllib
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from relaymind.canonical import canonical_digest
+
+REPO = Path(__file__).resolve().parents[1]
+TRIAL = REPO / "docs/evidence/m10/early-trial-m1-20261101"
+
+
+@pytest.fixture(autouse=True)
+def synthetic_home(tmp_path, monkeypatch):
+    # Windows' real temporary directory is under the home directory. Model a
+    # separate home so portable fixtures can exercise accepted operator roots.
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "private-home"))
+
+
+def module(path):
+    spec = importlib.util.spec_from_file_location(path.stem, path)
+    result = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(result)
+    return result
+
+
+@pytest.fixture
+def builder():
+    return module(REPO / "scripts/m1_trial_inputs.py")
+
+
+@pytest.fixture(
+    params=[
+        pytest.param(
+            "archived",
+            marks=pytest.mark.skipif(
+                sys.platform == "win32", reason="digest-bound archived observer imports resource"
+            ),
+        ),
+        "maintained",
+    ]
+)
+def observer(request):
+    path = (
+        TRIAL / "observe_row.py"
+        if request.param == "archived"
+        else REPO / "scripts/m1_trial_observe.py"
+    )
+    return module(path)
+
+
+def test_unknown_start_is_never_replaced_by_an_end():
+    from relaymind.evaluation.asset_qualification_record import first_host_dispatch
+
+    report = dict(
+        rows=[
+            dict(
+                status="completed",
+                attempts=[dict(started_at=None, ended_at="2026-11-01T10:00:10Z")],
+            )
+        ]
+    )
+    assert first_host_dispatch(report) is None
+    # A later known dispatch does not repair an unknown first row.
+    report["rows"].append(
+        dict(status="completed", attempts=[dict(started_at="2026-11-01T10:00:20Z", ended_at=None)])
+    )
+    assert first_host_dispatch(report) is None
+
+
+@pytest.mark.parametrize("rerun", [False, True])
+def test_superseded_drafts_are_bound_through_freeze(builder, tmp_path, monkeypatch, rerun):
+    passes = module(TRIAL / "machine_passes.py")
+    trial, root = tmp_path / "trial", tmp_path / "operator"
+    shutil.copytree(TRIAL / "inputs", trial / "inputs")
+    shutil.copytree(TRIAL / "machine", trial / "machine")
+    monkeypatch.setattr(builder, "HERE", trial, raising=False)
+    monkeypatch.setattr(passes, "CALLS", trial / "machine/calls")
+    # Start with no calls, then reject the first pair.
+    shutil.rmtree(passes.CALLS)
+    passes.keep_call("drafting", b"rejected request", b"rejected response")
+    passes.keep_call("drafting", b"accepted request", b"accepted response")
+    original = json.loads((trial / "inputs/catalog.json").read_text())
+    records = {a["record"]["identity"]["package_id"]: a["record"] for a in original["assets"]}
+    monkeypatch.setattr(builder, "_records", lambda root: records)
+    monkeypatch.setattr(builder, "_inventory", lambda kind: dict(schema_version=1, files=[]))
+    for skill in builder.SKILLS:
+        payload = (trial / "inputs/originals" / skill / "SKILL.md").read_bytes()
+        for dest in (
+            root / "catalog" / skill / "SKILL.md",
+            root / "cli/node_modules/openclaw/skills" / skill / "SKILL.md",
+        ):
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(payload)
+    (root / "cli/node_modules/openclaw/LICENSE").write_bytes(b"fixture license")
+    for arm in builder.ARMS:
+        dest = root / "host" / f"arm-{arm}.json"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(trial / "inputs/configs" / f"host-{arm}.json", dest)
+    for arm in ("provider_only", "recommendations"):
+        dest = root / f"gateway-{arm}" / "relaymind.toml"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(trial / "inputs/configs" / f"gateway-{arm}.toml", dest)
+    (root / "release").mkdir()
+    (root / "release/relaymind-openclaw-provider-0.1.0.tgz").write_bytes(b"fixture package")
+    builder.draft(root)
+    for source in (trial / "inputs/configs").iterdir():
+        assert source.read_bytes() == (TRIAL / "inputs/configs" / source.name).read_bytes()
+    catalog = json.loads((trial / "inputs/catalog.json").read_text())
+    rejected = {e["id"]: e for e in catalog["evidence"] if "superseded" in e["id"]}
+    assert set(rejected) == {"drafting-superseded-1-request", "drafting-superseded-1-response"}
+    assert b"No draft was rejected" not in (trial / "inputs/evidence/authorship.txt").read_bytes()
+    cases_path = trial / "inputs/cases.json"
+    cases = json.loads(cases_path.read_text())
+    for case in cases["cases"]:
+        assert set(rejected) <= set(case["authorship_evidence_ids"])
+    # Labels are produced only after the draft evidence is finalized.
+    labels_path = trial / "inputs/labels.json"
+    labels = json.loads(labels_path.read_text())
+    labels["cases_digest"] = canonical_digest(cases)
+    labels_path.write_text(json.dumps(labels))
+    if rerun:
+        passes.keep_call("drafting", b"late request", b"late response")
+        with pytest.raises(SystemExit, match="drafting_evidence_stale"):
+            builder.freeze(root, cases_path, labels_path)
+        assert not (trial / "frozen").exists()
+        return
+    builder.freeze(root, cases_path, labels_path)
+    manifest = json.loads((trial / "frozen/inputs.json").read_text())
+    lock_ref = next(d for d in manifest["documents"] if d["kind"] == "lock")
+    lock = json.loads((trial / "frozen" / lock_ref["path"]).read_text())
+    for evidence_id, ref in rejected.items():
+        item = next(e for e in manifest["evidence"] if e["id"] == evidence_id)
+        payload = (trial / "frozen" / item["path"]).read_bytes()
+        bound = next(e for e in lock["evidence"] if e["id"] == evidence_id)
+        assert bound["sha256"] == ref["sha256"] == hashlib.sha256(payload).hexdigest()
+        assert bound["bytes"] == len(payload)
+
+
+def prepare_observation(observer, tmp_path, monkeypatch, arm):
+    # Synthetic macOS execution remains testable on every CI platform.
+    monkeypatch.setattr(observer.sys, "platform", "darwin")
+    monkeypatch.setitem(
+        sys.modules,
+        "resource",
+        SimpleNamespace(
+            RUSAGE_CHILDREN=0,
+            getrusage=lambda _: SimpleNamespace(ru_utime=0, ru_stime=0, ru_maxrss=100),
+        ),
+    )
+    root, obs = tmp_path / "root", tmp_path / "observations"
+    config = {}
+    config_path = root / "host" / f"arm-{arm}.json"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(json.dumps(config))
+    executable = root / "cli/node_modules/.bin/openclaw"
+    executable.parent.mkdir(parents=True)
+    executable.touch()
+    executable.chmod(0o700)
+    task = dict(id="task-1", prompt_case_id="case-1")
+    freeze = dict(
+        configurations=[
+            dict(arm=arm, host_config_digest=canonical_digest(config), provider="fixture")
+        ]
+    )
+    monkeypatch.setattr(
+        observer,
+        "_frozen",
+        lambda path: (dict(tasks=[task]), freeze, {"case-1": dict(task_text="test")}),
+    )
+    monkeypatch.setattr(observer, "HERE", TRIAL, raising=False)
+    monkeypatch.setattr(observer, "_machine_names", lambda: [b"fixture-machine"])
+    monkeypatch.setattr(
+        observer,
+        "_transcript",
+        lambda *a: [
+            dict(
+                event=dict(
+                    message=dict(
+                        role="assistant",
+                        model="fixture",
+                        timestamp=20000,
+                        responseId="r",
+                        text="fixture-machine",
+                    )
+                )
+            )
+        ],
+    )
+    monkeypatch.setattr(observer, "_run_ids", lambda *a: set())
+    monkeypatch.setattr(observer, "_gateway_events", lambda *a: [dict(text="fixture-machine")])
+    import relaymind.evaluation.asset_host_runner as runner
+
+    monkeypatch.setattr(runner, "attempts_from_trace", lambda *a, **kw: [])
+    gateway = root / f"gateway-{arm}"
+    gateway.mkdir()
+    (gateway / "stdout.log").write_text("Application token: fixture-token\n")
+    for key in observer.SECRETS:
+        monkeypatch.setenv(key, "fixture-credential")
+    clock = iter([10.0, 21.0])
+    monkeypatch.setattr(observer.time, "time", lambda: next(clock))
+    seen = []
+
+    def run(argv, **kwargs):
+        if "exec" in argv:
+            path = obs / "evidence/0001/host-dispatch.json"
+            seen.append(json.loads(path.read_text()) if path.exists() else None)
+        return subprocess.CompletedProcess(
+            argv, 0, stdout=b'{"sessionId":"session-1","text":"fixture-machine"}'
+        )
+
+    monkeypatch.setattr(observer.subprocess, "run", run)
+    plan = tmp_path / "plan.json"
+    plan.write_text(json.dumps(dict(planned=[dict(ordinal=1, task_id="task-1", arm=arm)])))
+    receipt = tmp_path / "receipt.json"
+    receipt.write_text('{"recommendation_id":"rec-1","text":"fixture-machine"}')
+    args = SimpleNamespace(
+        root=root,
+        observations=obs,
+        inputs=tmp_path / "inputs.json",
+        plan=plan,
+        ordinal=1,
+        not_run=None,
+        timeout=10,
+        recommendation_receipt=receipt,
+        interactions=0,
+        human_wait_ms=0,
+    )
+    return args, seen
+
+
+@pytest.mark.parametrize("arm", ["native", "provider_only", "recommendations"])
+def test_every_kept_payload_redacts_machine_names(observer, tmp_path, monkeypatch, arm):
+    """RM16, AC36: test actual file writes, including the early envelope write."""
+    args, _ = prepare_observation(observer, tmp_path, monkeypatch, arm)
+    maintained = observer.__file__.endswith("m1_trial_observe.py")
+    if maintained:
+        trial = tmp_path / "trial"
+        trial.mkdir()
+        (trial / "usage-relationship.md").write_bytes(b"observed on fixture-machine\n")
+        monkeypatch.setattr(observer, "HERE", trial)
+    observer.observe(args)
+    names = ["host-envelope.json", "host-transcript.jsonl", "recommendation-receipt.json"]
+    if arm != "native":
+        names.append("gateway-trace.json")
+    if maintained:
+        names.append("usage-relationship.md")
+    for name in names:
+        directory = (
+            args.observations
+            if name == "usage-relationship.md"
+            else args.observations / "evidence/0001"
+        )
+        payload = (directory / name).read_bytes()
+        assert b"fixture-machine" not in payload
+        assert b"<machine-name>" in payload
+
+
+def test_clean_relationship_keeps_its_bytes_and_evidence_reference(tmp_path, monkeypatch):
+    """RM16/AC36: redaction leaves clean relationship evidence reproducible."""
+    observer = module(REPO / "scripts/m1_trial_observe.py")
+    args, _ = prepare_observation(observer, tmp_path, monkeypatch, "native")
+    expected = (observer.HERE / "usage-relationship.md").read_bytes()
+    observer.observe(args)
+    assert (args.observations / "usage-relationship.md").read_bytes() == expected
+    observation = json.loads((args.observations / "row-0001.json").read_bytes())
+    assert (
+        dict(id="usage-relationship", file="usage-relationship.md", provenance="observed")
+        in observation["evidence"]
+    )
+
+
+def test_dispatch_is_persisted_before_host_execution(tmp_path, monkeypatch):
+    observer = module(REPO / "scripts/m1_trial_observe.py")
+    args, seen = prepare_observation(observer, tmp_path, monkeypatch, "native")
+    observer.observe(args)
+    assert seen == [
+        dict(
+            schema_version=1,
+            task_id="task-1",
+            arm="native",
+            started_at="1970-01-01T00:00:10.000000Z",
+        )
+    ]
+    observation = json.loads((args.observations / "row-0001.json").read_text())
+    assert "host-dispatch:0001" in observation["row"]["evidence_ids"]
+    assert any(e["id"] == "host-dispatch:0001" for e in observation["evidence"])
+    # Native inference start remains unknown; host dispatch is separate evidence.
+    assert observation["row"]["attempts"][0]["started_at"] is None
+
+
+def test_machine_names_include_all_system_names(observer, monkeypatch):
+    """RM16/AC36: discovery includes full and short names, longest first."""
+    import socket
+
+    monkeypatch.setattr(observer.sys, "platform", "darwin")
+    monkeypatch.setattr(socket, "gethostname", lambda: "fixture-host.invalid")
+    names = dict(
+        ComputerName="fixture computer",
+        LocalHostName="fixture-local",
+        HostName="fixture-host.invalid",
+    )
+    monkeypatch.setattr(
+        observer.subprocess,
+        "run",
+        lambda argv, **kw: subprocess.CompletedProcess(argv, 0, stdout=names[argv[-1]] + "\n"),
+    )
+    result = observer._machine_names()
+    assert set(result) == {
+        b"fixture-host.invalid",
+        b"fixture-host",
+        b"fixture computer",
+        b"fixture-local",
+    }
+    assert result == sorted(result, key=len, reverse=True)
+    payload = b" / ".join(result)
+    assert observer.redact(payload) == b" / ".join([b"<machine-name>"] * len(result))
+
+
+def test_record_checks_repository_paths_with_an_external_trial(builder, tmp_path, monkeypatch):
+    """RM16/AC36: committing the maintained harness does not require private files."""
+    monkeypatch.setattr(builder, "HERE", tmp_path / "private-trial", raising=False)
+
+    def run(argv, **kwargs):
+        paths = argv[argv.index("--") + 1 :]
+        assert all(Path(path).is_relative_to(builder.REPO) for path in paths)
+        return subprocess.CompletedProcess(argv, 0, stdout="")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    builder._check_committed()
+
+
+def test_record_requires_published_bundle(builder, tmp_path, monkeypatch):
+    """RM16/AC36: record subjects must have contained repository paths."""
+    monkeypatch.setattr(builder, "REPO", tmp_path / "repo")
+    monkeypatch.setattr(builder, "_check_committed", lambda: None)
+    with pytest.raises(SystemExit, match="publish the bundle under docs/evidence/m10"):
+        builder.record(
+            tmp_path / "private-bundle",
+            "new-trial",
+            None,
+            "fixture-owner",
+            os_build="fixture-build",
+            hostname_sha256="a" * 64,
+        )
+
+
+def test_untracked_maintained_harness_is_not_a_committed_revision(builder, tmp_path, monkeypatch):
+    """RM16/AC36: an untracked script cannot claim to belong to HEAD."""
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts/m1_trial_inputs.py").write_text("# untracked fixture\n")
+    monkeypatch.setattr(builder, "REPO", tmp_path)
+    with pytest.raises(SystemExit, match="harness_uncommitted"):
+        builder._check_committed()
+
+
+@pytest.mark.parametrize(
+    "assignment",
+    [
+        '[external_model]\n  base_url = "https://example.invalid"\n',
+        '[external_model]\n\tbase_url="https://example.invalid"\n',
+        'external_model.base_url = "https://example.invalid"\n',
+        "'external_model'.'base_url' = \"https://example.invalid\"\n",
+        '["external_model"]\n"base_url" = "https://example.invalid"\n',
+        '["external\\u005fmodel"]\n"base\\u005furl" = "https://example.invalid"\n',
+        '[external_model]\nbase_url = """\nhttps://example.invalid\n"""\n',
+    ],
+)
+def test_base_url_key_spellings_are_omitted(builder, assignment):
+    """RM16/AC36: decoded dotted/quoted keys and multiline values cannot leak."""
+    text = assignment + '[other]\nbase_url_note = "kept: a different key"\n'
+    kept = builder._omit_base_url(text)
+    assert "example.invalid" not in kept
+    assert "base_url" not in tomllib.loads(kept).get("external_model", {})
+    assert 'base_url_note = "kept: a different key"' in kept
+
+
+@pytest.mark.parametrize("ending", ["", "\n", "\r\n"])
+def test_clean_gateway_config_is_byte_preserved(builder, ending):
+    """RM16/AC36: omission must not reserialize a clean configuration."""
+    text = '# retained comment\n[external_model]\nmodel = "fixture"' + ending
+    assert builder._omit_base_url(text) == text
+
+
+def test_base_url_remaining_in_inline_table_is_refused(builder):
+    """RM16/AC36: refuse a URL that cannot be omitted without changing other settings."""
+    with pytest.raises(SystemExit, match="external_model.base_url") as caught:
+        builder._omit_base_url(
+            'external_model = {base_url = "https://example.invalid", model = "fixture"}\n'
+        )
+    assert "example.invalid" not in str(caught.value)
+
+
+@pytest.mark.parametrize("arm", ["native", "provider_only", "recommendations"])
+@pytest.mark.parametrize("location", ["provider", "plugin"])
+def test_draft_refuses_literal_host_base_url_before_copying(
+    builder, tmp_path, monkeypatch, arm, location
+):
+    """RM16/AC36: host arm URLs must use the environment placeholder."""
+    trial, root = tmp_path / "trial", tmp_path / "operator"
+    monkeypatch.setattr(builder, "HERE", trial, raising=False)
+    monkeypatch.setattr(builder, "SKILLS", ())
+    monkeypatch.setattr(builder, "_records", lambda root: {})
+    monkeypatch.setattr(builder, "_read_json", lambda path: {"excluded": []})
+    license_path = root / "cli/node_modules/openclaw/LICENSE"
+    license_path.parent.mkdir(parents=True)
+    license_path.write_bytes(b"fixture license")
+    (root / "host").mkdir(parents=True)
+    for name in builder.ARMS:
+        url = "https://example.invalid" if name == arm else "${RELAYMIND_EXTERNAL_BASE_URL}"
+        config = {"models": {"providers": {"external-direct": {"baseUrl": url}}}}
+        if location == "plugin":
+            config = {"plugins": {"entries": {"relaymind": {"config": {"baseUrl": url}}}}}
+        (root / "host" / f"arm-{name}.json").write_text(json.dumps(config))
+    for name in ("provider_only", "recommendations"):
+        gateway = root / f"gateway-{name}"
+        gateway.mkdir()
+        (gateway / "relaymind.toml").write_text('[external_model]\nmodel = "fixture"\n')
+    with pytest.raises(SystemExit, match="baseUrl.*RELAYMIND_EXTERNAL_BASE_URL") as caught:
+        builder.draft(root)
+    assert "example.invalid" not in str(caught.value)
+    assert not trial.exists()
+
+
+def test_git_runs_in_the_repository_from_an_outside_directory(builder, tmp_path, monkeypatch):
+    """RM16/AC36: an operator working in the external trial directory still
+    reads the repository's commit, never the working directory's."""
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    monkeypatch.chdir(outside)
+    head = builder._head_commit()
+    expected = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=REPO, capture_output=True, text=True, check=True
+    ).stdout.strip()
+    assert head == expected
+    assert builder._preregistration(head)["commit"] == expected
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--trial-dir", "T", "draft", "--root", "R"],
+        ["draft", "--trial-dir", "T", "--root", "R"],
+        ["draft", "--root", "R", "--trial-dir", "T"],
+    ],
+)
+def test_trial_dir_before_or_after_the_subcommand(builder, argv):
+    """RM16/AC36: --trial-dir is accepted on either side of the subcommand."""
+    args = builder.parse_args(argv)
+    assert args.command == "draft"
+    assert args.trial_dir == Path("T")
+    assert args.root == Path("R")
+
+
+def test_trial_dir_is_required(builder, capsys):
+    with pytest.raises(SystemExit):
+        builder.parse_args(["draft", "--root", "R"])
+    assert "--trial-dir" in capsys.readouterr().err
+
+
+def _documented(text, script):
+    """Every ``python scripts/<script> ...`` code span, placeholders filled."""
+    import re
+    import shlex
+
+    found = []
+    for match in re.finditer(rf"`python scripts/{re.escape(script)}([^`]*)`", text):
+        words = re.sub(r"<[^>]+>", "1", match.group(1))
+        found.append(shlex.split(words))
+    return found
+
+
+def test_readme_commands_match_the_parsers(builder):
+    """RM16/AC36: the documented commands parse, so docs and parsers cannot drift."""
+    readme = (REPO / "scripts/README.md").read_text(encoding="utf-8")
+    inputs = _documented(readme, "m1_trial_inputs.py")
+    commands = {builder.parse_args(argv).command for argv in inputs}
+    assert commands == {"draft", "freeze", "record"}
+    assert all("--trial-dir" in argv for argv in inputs)
+    maintained = module(REPO / "scripts/m1_trial_observe.py")
+    observers = _documented(readme, "m1_trial_observe.py")
+    assert observers
+    for argv in observers:
+        assert "--trial-dir" in argv
+        maintained.build_parser().parse_args(argv)
+
+
+def test_docstring_examples_match_the_parser(builder):
+    """RM16/AC36: the module docstring examples carry --trial-dir and parse."""
+    import re
+    import shlex
+
+    examples = re.findall(r"^``(--trial-dir [^`]*)``$", builder.__doc__, re.MULTILINE)
+    parsed = [builder.parse_args(shlex.split(re.sub(r"[\[\]]", "", line))) for line in examples]
+    assert {args.command for args in parsed} == {"draft", "freeze", "record"}
+
+
+def test_observer_trial_dir_is_required():
+    maintained = module(REPO / "scripts/m1_trial_observe.py")
+    row = ["--root", "R", "--inputs", "I", "--plan", "P", "--ordinal", "1"]
+    row += ["--observations", "O"]
+    with pytest.raises(SystemExit):
+        maintained.build_parser().parse_args(row)
+    args = maintained.build_parser().parse_args([*row, "--trial-dir", "T"])
+    assert args.trial_dir == Path("T")
+
+
+def test_maintained_observer_imports_without_resource(monkeypatch):
+    """RM16/AC36: portable inspection must not import Unix execution dependencies."""
+    monkeypatch.setitem(sys.modules, "resource", None)
+    maintained = module(REPO / "scripts/m1_trial_observe.py")
+    assert maintained.build_parser()
+
+
+@pytest.mark.parametrize("platform", ["win32", "linux", "darwin"])
+def test_machine_names_without_scutil(monkeypatch, platform):
+    """RM16/AC36: non-macOS discovery and missing scutil retain socket names."""
+    import socket
+
+    maintained = module(REPO / "scripts/m1_trial_observe.py")
+    monkeypatch.setattr(maintained.sys, "platform", platform)
+    monkeypatch.setattr(socket, "gethostname", lambda: "fixture-host.invalid")
+    calls = []
+
+    def missing(*args, **kwargs):
+        calls.append(args)
+        raise FileNotFoundError("scutil")
+
+    monkeypatch.setattr(maintained.subprocess, "run", missing)
+    assert set(maintained._machine_names()) == {b"fixture-host.invalid", b"fixture-host"}
+    assert bool(calls) == (platform == "darwin")
+
+
+def test_missing_gateway_token_names_only_the_stdout_path(tmp_path, monkeypatch):
+    """RM16/AC36: failed startup is a clean error without captured secrets."""
+    maintained = module(REPO / "scripts/m1_trial_observe.py")
+    args, seen = prepare_observation(maintained, tmp_path, monkeypatch, "provider_only")
+    stdout = args.root / "gateway-provider_only/stdout.log"
+    stdout.write_text("startup failed: fixture-secret\n")
+    with pytest.raises(SystemExit) as caught:
+        maintained.observe(args)
+    assert str(stdout) in str(caught.value)
+    assert "token" in str(caught.value).lower()
+    assert "fixture-secret" not in str(caught.value)
+    assert not seen
+    assert not (args.root / "runs").exists()
+    assert not args.observations.exists()
+    stdout.write_text("Application token: fixture-token\n")
+    maintained.observe(args)
+    assert len(seen) == 1
+    assert (args.observations / "row-0001.json").exists()
+
+
+@pytest.mark.parametrize("failure", ["store", "executable", "credentials", "token_store"])
+def test_observer_pre_host_checks_leave_no_run_state(tmp_path, monkeypatch, failure):
+    """RM16/AC36: pre-host failures leave an ordinal available for retry."""
+    maintained = module(REPO / "scripts/m1_trial_observe.py")
+    arm = "native" if failure == "credentials" else "provider_only"
+    args, seen = prepare_observation(maintained, tmp_path, monkeypatch, arm)
+    if failure == "store":
+
+        def unavailable(*args):
+            raise OSError("fixture store unavailable")
+
+        monkeypatch.setattr(maintained, "_run_ids", unavailable)
+    elif failure == "executable":
+        (args.root / "cli/node_modules/.bin/openclaw").unlink()
+    elif failure == "credentials":
+        for key in maintained.SECRETS:
+            monkeypatch.delenv(key)
+    else:
+        monkeypatch.setattr(
+            maintained.subprocess, "run", lambda argv, **kw: subprocess.CompletedProcess(argv, 1)
+        )
+    with pytest.raises((SystemExit, OSError)):
+        maintained.observe(args)
+    assert not seen
+    assert not (args.root / "runs").exists()
+    assert not args.observations.exists()
+
+
+@pytest.mark.parametrize("missing", ["relationship", "receipt"])
+def test_observer_checks_inputs_before_creating_a_run(tmp_path, monkeypatch, missing):
+    """RM16/AC36: absent local evidence must not spend a host run."""
+    maintained = module(REPO / "scripts/m1_trial_observe.py")
+    args, seen = prepare_observation(maintained, tmp_path, monkeypatch, "native")
+    if missing == "relationship":
+        monkeypatch.setattr(maintained, "HERE", tmp_path / "missing")
+    else:
+        args.recommendation_receipt.unlink()
+    with pytest.raises(SystemExit, match="required evidence"):
+        maintained.observe(args)
+    assert not seen
+    assert not (args.root / "runs").exists()
+    assert not args.observations.exists()
+
+
+@pytest.mark.parametrize("platform", ["win32", "linux"])
+def test_observer_refuses_non_macos_execution(tmp_path, monkeypatch, platform):
+    """RM16/AC36: M1 resource measurements require macOS; pure helpers do not."""
+    maintained = module(REPO / "scripts/m1_trial_observe.py")
+    args, seen = prepare_observation(maintained, tmp_path, monkeypatch, "native")
+    monkeypatch.setattr(maintained.sys, "platform", platform)
+    with pytest.raises(SystemExit, match="macOS"):
+        maintained.observe(args)
+    assert not seen
+    assert not (args.root / "runs").exists()
+
+
+def test_invalid_preregistration_is_a_clean_cli_error(builder):
+    """RM44/AC36: unavailable history is an argument error, not a subprocess traceback."""
+    with pytest.raises(SystemExit, match="preregistration commit.*unavailable"):
+        builder._preregistration("0" * 40)
+
+
+def test_not_run_needs_no_macos_execution_dependencies(tmp_path, monkeypatch):
+    """RM16/AC36: a not_run observation must be writable on Windows without resource."""
+    maintained = module(REPO / "scripts/m1_trial_observe.py")
+    args, seen = prepare_observation(maintained, tmp_path, monkeypatch, "native")
+    monkeypatch.setattr(maintained.sys, "platform", "win32")
+    monkeypatch.setitem(sys.modules, "resource", None)
+    monkeypatch.setattr(maintained, "HERE", tmp_path / "missing")
+    args.not_run = "platform_unavailable"
+    assert maintained.observe(args) == 0
+    assert not seen
+    assert not (args.root / "runs").exists()
+    row = json.loads((args.observations / "row-0001.json").read_text())["row"]
+    assert row["status"] == "not_run"
+    assert row["attempts"] == []
+
+
+@pytest.mark.parametrize(
+    "script,command",
+    [
+        ("m1_trial_inputs.py", "draft"),
+        ("m1_trial_inputs.py", "freeze"),
+        ("m1_trial_observe.py", "observe"),
+    ],
+)
+@pytest.mark.parametrize("alias", [False, True])
+def test_home_operator_root_is_refused_before_writes(tmp_path, monkeypatch, script, command, alias):
+    """RM16/AC36: lexical and resolved private roots cannot leak into copied evidence."""
+    helper = module(REPO / "scripts" / script)
+    home = tmp_path / "private-home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    root = home / "trial"
+    root.mkdir()
+    if alias:
+        link = tmp_path / "alias"
+        try:
+            link.symlink_to(root, target_is_directory=True)
+        except OSError:
+            # Exercise the resolved-path guard even without Windows symlink privileges.
+            resolve = Path.resolve
+            destination = root
+            monkeypatch.setattr(
+                Path,
+                "resolve",
+                lambda path, *args, **kwargs: (
+                    destination if path == link else resolve(path, *args, **kwargs)
+                ),
+            )
+        root = link
+    trial = tmp_path / "new-trial"
+    monkeypatch.setattr(helper, "HERE", trial, raising=False)
+    with pytest.raises(SystemExit, match="operator root.*home"):
+        if command == "draft":
+            helper.draft(root)
+        elif command == "freeze":
+            helper.freeze(root, trial / "cases.json", trial / "labels.json")
+        else:
+            helper.observe(SimpleNamespace(root=root, observations=trial))
+    assert not trial.exists()
+    assert not list((home / "trial").iterdir())
+
+
+@pytest.fixture
+def record_setup(builder, tmp_path, monkeypatch):
+    bundle = tmp_path / "repo/docs/evidence/m10/trial/bundle"
+    shutil.copytree(TRIAL / "bundle", bundle)
+    trial = tmp_path / "private-trial"
+    shutil.copytree(TRIAL / "machine", trial / "machine")
+    monkeypatch.setattr(builder, "HERE", trial, raising=False)
+    monkeypatch.setattr(builder, "REPO", tmp_path / "repo")
+    monkeypatch.setattr(builder, "_check_committed", lambda: None)
+    monkeypatch.setattr(builder, "_head_commit", lambda: "c" * 40)
+    return bundle, trial
+
+
+def write_record(builder, bundle):
+    builder.record(
+        bundle,
+        "new-trial",
+        None,
+        "fixture-owner",
+        os_build="fixture-version fixture-build",
+        hostname_sha256="a" * 64,
+    )
+    return bundle.parent.parent / "new-trial.json"
+
+
+@pytest.mark.parametrize("platform", ["win32", "linux", "darwin"])
+def test_record_uses_explicit_trial_machine_identity(builder, record_setup, monkeypatch, platform):
+    """RM16/RM44, AC36: recording elsewhere must never sample the recorder's machine."""
+    import socket
+
+    bundle, _ = record_setup
+    monkeypatch.setattr(builder.sys, "platform", platform)
+
+    def unexpected(*args, **kwargs):
+        pytest.fail("record sampled the local machine")
+
+    monkeypatch.setattr(subprocess, "run", unexpected)
+    monkeypatch.setattr(socket, "gethostname", unexpected)
+    written = json.loads(write_record(builder, bundle).read_text())
+    assert written["machine"]["os_build"] == "fixture-version fixture-build"
+    assert written["machine"]["hostname_sha256"] == "a" * 64
+    # Historical model-call starts are not host dispatch evidence.
+    assert written["runs_started_at"] is None
+
+
+def test_failed_record_check_leaves_no_record_and_can_retry(builder, record_setup, monkeypatch):
+    """RM16/RM44, AC36: only validated bytes may be published under the record ID."""
+    bundle, _ = record_setup
+    target = bundle.parent.parent / "new-trial.json"
+    before = set(target.parent.iterdir())
+    original = builder.check_written
+
+    def reject(path, *args):
+        assert path.parent == target.parent
+        assert path.exists()
+        assert not target.exists()
+        raise ValueError("fixture rejection")
+
+    monkeypatch.setattr(builder, "check_written", reject)
+    with pytest.raises(ValueError, match="fixture rejection"):
+        write_record(builder, bundle)
+    assert set(target.parent.iterdir()) == before
+    monkeypatch.setattr(builder, "check_written", original)
+    assert write_record(builder, bundle).exists()
+    published = target.read_bytes()
+    with pytest.raises(SystemExit, match="record exists"):
+        write_record(builder, bundle)
+    assert target.read_bytes() == published
+
+
+@pytest.mark.parametrize(
+    "template", ["annotator-a.md", "annotator-b.md", "adjudicator.md", "drafter.md"]
+)
+def test_record_rejects_templates_changed_since_the_call(builder, record_setup, template):
+    """RM40/RM44, AC31/AC36: the prompt digest must identify the actual call's bytes."""
+    bundle, trial = record_setup
+    (trial / "machine" / template).write_text("changed template\n")
+    with pytest.raises(SystemExit, match="prompt_template_mismatch"):
+        write_record(builder, bundle)
+    assert not (bundle.parent.parent / "new-trial.json").exists()

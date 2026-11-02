@@ -13,6 +13,9 @@ from relaymind.selection import asset_lexical
 from test_asset_readiness import configured_catalog
 from test_asset_sources import skill
 
+# Real seconds a test thread may need under load; the wait returns as soon as the event is set.
+OBSERVED_SECONDS = 60
+
 
 @pytest.mark.parametrize("ending", ["idle", "cancelled", "deadline"])
 def test_capture_checkpoint_waits_without_processing_and_keeps_original_deadline(ending):
@@ -48,7 +51,7 @@ def test_capture_checkpoint_waits_without_processing_and_keeps_original_deadline
             processed.set()
 
         task = asyncio.create_task(asyncio.to_thread(work))
-        assert await asyncio.to_thread(observed.wait, 1)
+        assert await asyncio.to_thread(observed.wait, OBSERVED_SECONDS)
         await asyncio.sleep(0.01)
         assert not processed.is_set()
         if ending == "idle":
@@ -414,7 +417,7 @@ def test_valid_large_yaml_pauses_inside_parser_work(tmp_path, monkeypatch, phase
             )
         )
         try:
-            assert await asyncio.to_thread(observed.wait, 3)
+            assert await asyncio.to_thread(observed.wait, OBSERVED_SECONDS)
             # The parser must stop inside its current phase, not at the next file/record gate.
             assert calls <= (
                 5256 if phase == "advancement" else 400 if phase == "characters" else 102
@@ -482,7 +485,7 @@ def test_import_schema_validation_pauses_between_records(tmp_path, monkeypatch):
             )
         )
         try:
-            assert await asyncio.to_thread(observed.wait, 2)
+            assert await asyncio.to_thread(observed.wait, OBSERVED_SECONDS)
             assert calls < 150
         finally:
             busy.clear()
@@ -586,7 +589,7 @@ def test_source_json_object_parser_checks_between_values(tmp_path, monkeypatch):
             )
         )
         try:
-            assert await asyncio.to_thread(observed.wait, 2)
+            assert await asyncio.to_thread(observed.wait, OBSERVED_SECONDS)
             assert calls <= 101
         finally:
             busy.clear()
