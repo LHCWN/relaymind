@@ -122,3 +122,71 @@ digests). Cases, labels, the lock and all configurations are unchanged. Runs
 made under the first preregistration (all 100 episodes and two host rows,
 `h001` native and provider_only) are kept privately as a pilot and are not
 part of any graded report; every graded run starts after the second commit.
+
+## Script repairs after the committed run
+
+RM12, RM16, RM40, RM44; AC31, AC36. The committed run used earlier versions
+of `harness.py`, `run_host.py`, `bundle.py`, `record.py` and `judge.py`.
+These scripts are not digest-bound by the frozen lock. Their repairs do not
+change the lock, its inputs, qualification records or historical evidence,
+and do not establish new measured results.
+
+Future host runs check the reported host version and the provider tarball's
+SHA-256 and byte length against `host-freeze.json` before installation. The
+checked tarball is copied into the run's private directory and that copy is
+installed. **The live native inventory digest is not enforced:** this cohort
+has a frozen inventory document but no pinned inventory collection command.
+This limitation remains part of the evidence review; these checks alone do
+not qualify a run.
+
+`--work` is a parent for a fresh `run-private-*` child owned by this run.
+On close, after stopping the gateway and request gate, that child is removed,
+including host credentials, state databases, gateway logs and sandboxes.
+The parent and existing files are retained. Keep the journal, ledger, report
+and evidence roots outside the private child; cleanup refuses to remove a
+child containing any of those configured paths. Evidence redaction covers
+raw and JSON-escaped run paths, run-path tails, the home directory and
+nonempty secrets. Missing or unreadable transcript/gateway usage retains the
+executed row, with empty attempts and an unavailable-usage reason; the gated
+charge remains in the ledger.
+
+`record.py` supports only positive `host_trial`, `host_acceptance` and
+`adaptation` drafts. Each is checked by `load_record` before it is retained.
+Other scopes and negative operation records require the separate qualification
+record workflow; this builder does not advertise them.
+
+### Host bundle extra evidence
+
+Before `bundle.py host`, stage the original frozen provider package, host
+distribution, rubrics and any task setup evidence in an ordinary directory.
+Pass `--extra-evidence staging/extra.json`. Every `path` in this mapping is
+relative to the mapping file's directory; every optional `relative` is
+relative to the output bundle (or private resolver root when `publish` is
+false). Absolute paths, traversal, empty components and symlinks are refused.
+For example:
+
+```json
+{
+  "package:relaymind-openclaw-provider-0.1.0": {
+    "path": "provider.tgz", "publish": false
+  },
+  "host-distribution:openclaw-2026.10.7": {
+    "path": "host-distribution.tgz", "publish": false
+  },
+  "rubric:h001": {
+    "path": "rubrics/h001.json", "publish": true
+  }
+}
+```
+
+The example is partial. Include **every** `packages[*].evidence_id`,
+`host.distribution_evidence_ids`, `rubric_evidence_ids` from the freeze, and
+`setup_evidence_ids` from the tasks, unless already in the report evidence.
+For this cohort, copy all 100 unchanged `rubrics/h001.json` through
+`rubrics/h100.json` and map each to `rubric:h001` through `rubric:h100`.
+Use the original frozen distribution bytes, not newly packed substitutes.
+Omit `relative` to generate a safe hashed destination. `publish: false` keeps
+the bytes in the private resolver and marks them restricted; publish only
+redistributable evidence. The host bundler refuses a missing required ID.
+Run `grade-host` with the resulting manifest and private resolver to verify
+all bindings; merely including the IDs does not validate their contents.

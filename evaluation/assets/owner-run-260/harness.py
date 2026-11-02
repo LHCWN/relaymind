@@ -40,6 +40,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[2] / "src"))
 
 from relaymind.canonical import canonical_digest  # noqa: E402
+from relaymind.evaluation.asset_run_journal import _fsync_directory  # noqa: E402
 
 PROMPTS = HERE / "prompts"
 DATASET = "relaymind-owner-run-260"
@@ -122,11 +123,7 @@ def durable_write(path, value) -> None:
         handle.flush()
         os.fsync(handle.fileno())
     os.replace(temporary, path)
-    directory = os.open(path.parent, os.O_RDONLY)
-    try:
-        os.fsync(directory)
-    finally:
-        os.close(directory)
+    _fsync_directory(path.parent)
 
 
 def open_ledger(path: Path, held: str) -> dict:

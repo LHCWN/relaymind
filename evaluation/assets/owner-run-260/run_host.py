@@ -43,9 +43,11 @@ closed reason (``FreezeMismatch``).
 """
 
 import argparse
+import hashlib
 import http.server
 import json
 import os
+import re
 import shutil
 import signal
 import sqlite3
@@ -193,16 +195,39 @@ def check_effective(frozen, effective, expected_secrets=None, path=()) -> None:
         raise FreezeMismatch("host_config_mismatch")
 
 
+def check_host_artifacts(freeze, version: str, tarball: Path) -> None:
+    """Refuse a different host version or provider package before installation."""
+    expected = re.escape(freeze["host"]["version"])
+    if not re.fullmatch(rf"(?:OpenClaw )?{expected}(?: \([a-zA-Z0-9]+\))?", version.strip()):
+        raise FreezeMismatch("version_mismatch")
+    packages = [p for p in freeze["packages"] if p["name"] == "@relaymind/openclaw-provider"]
+    payload = tarball.read_bytes()
+    if len(packages) != 1 or hashlib.sha256(payload).hexdigest() != packages[0]["sha256"]:
+        raise FreezeMismatch("tarball_mismatch")
+    if len(payload) != packages[0]["bytes"]:
+        raise FreezeMismatch("tarball_mismatch")
+
+
 def sanitize(text: str, *, secrets, work) -> str:
-    """Remove secrets and the run directory path, also when the host cut its head off."""
+    """Redact raw and JSON-escaped private values, including truncated run paths."""
+    replacements = []
     for secret in secrets:
-        text = text.replace(secret, "<omitted>")
+        if not isinstance(secret, str) or not secret:
+            raise ValueError("empty_secret")
+        replacements.append((secret, "<omitted>"))
     work = str(work)
-    text = text.replace(work, "<run-dir>")
-    for start in range(1, len(work) - MIN_PATH_TAIL + 1):
-        tail = work[start:]
-        if tail in text:
-            text = text.replace(tail, "<run-dir>")
+    replacements.append((work, "<run-dir>"))
+    replacements.extend(
+        (work[start:], "<run-dir>") for start in range(1, len(work) - MIN_PATH_TAIL + 1)
+    )
+    home = Path.home()
+    if home != Path(home.anchor):  # A root home would rewrite every path.
+        replacements.append((str(home), "<home>"))
+    for value, replacement in replacements:
+        # Longer escaped forms first; replacing raw text first could leave escapes behind.
+        forms = {value, json.dumps(value, ensure_ascii=False)[1:-1], json.dumps(value)[1:-1]}
+        for form in sorted(forms, key=len, reverse=True):
+            text = text.replace(form, replacement)
     return text
 
 
@@ -576,6 +601,8 @@ class Run:
             os.environ["RELAYMIND_EXTERNAL_API_KEY"],
             os.environ["RELAYMIND_EXTERNAL_BASE_URL"],
         ]
+        if any(not secret for secret in self.secrets):
+            raise ValueError("empty_secret")
         self.budget = Budget(
             args.ledger,
             cap=args.cap,
@@ -596,11 +623,18 @@ class Run:
             [str(self.args.openclaw)], self.work / name, provider_network=provider_network
         )
 
+    def prepare_work(self):
+        """Own a fresh private child; operator-supplied roots remain outside it."""
+        self.work.mkdir(parents=True, exist_ok=True)
+        self.work = Path(tempfile.mkdtemp(prefix="run-private-", dir=self.work))
+        info = self.work.stat()
+        self._owned_work = (self.work, info.st_dev, info.st_ino)
+
     def setup(self):
         import run_openclaw_eval as m9
 
-        self.work.mkdir(parents=True, exist_ok=True)
         os.umask(0o077)
+        self.prepare_work()
         # Both arms reach the provider only through the gate.
         self.gate = RequestGate(
             os.environ["RELAYMIND_EXTERNAL_BASE_URL"], max_output=self.budget.max_output
@@ -610,8 +644,13 @@ class Run:
         relay_frozen = self.frozen["provider_only"]["host"]
         model = self.frozen["provider_only"]["config"]["model"]
         self.native = self.host("native-home", True)
-        if self.native.run(["--version"], timeout=m9.SETUP_TIMEOUT)["status"] != "completed":
+        version = self.native.run(["--version"], timeout=m9.SETUP_TIMEOUT)
+        if version["status"] != "completed":
             raise SystemExit("native_setup_failed")
+        # Install the checked private copy, so the caller's tarball cannot change afterward.
+        package = self.work / "provider.tgz"
+        shutil.copyfile(self.args.tarball, package)
+        check_host_artifacts(read(self.args.freeze), version["stdout"], package)
         native_secrets = dict(apiKey=os.environ["RELAYMIND_EXTERNAL_API_KEY"], baseUrl=gate_url)
         self.native.merge_config(realize(native_frozen, native_secrets))
         check_effective(native_frozen, read(self.native.config_path), native_secrets)
@@ -653,7 +692,7 @@ class Run:
             raise FreezeMismatch("gateway_url_mismatch")
         self.relay = self.host("relay-home", False)
         steps, _, ok = m9.setup_relaymind(
-            "relaymind_external_only", self.relay, handle, self.args.tarball, {}
+            "relaymind_external_only", self.relay, handle, package, {}
         )
         if not ok:
             raise SystemExit("relay_setup_failed")
@@ -669,12 +708,22 @@ class Run:
             self.gateway.stop()
         if self.gate is not None:
             self.gate.stop()
-        native = getattr(self, "native", None)
-        paths = [self.work / "gateway" / "relaymind.toml"]
-        if native is not None:
-            paths.append(Path(native.config_path))
-        for path in paths:
-            path.unlink(missing_ok=True)
+        owned = getattr(self, "_owned_work", None)
+        if owned is None:
+            return
+        path, device, inode = owned
+        if not path.exists():
+            return
+        info = path.lstat()
+        if path.is_symlink() or path.is_junction() or (info.st_dev, info.st_ino) != (device, inode):
+            raise ValueError("private_work_replaced")
+        # Refuse cleanup if a caller moved a persistent root into the private child.
+        args = getattr(self, "args", None)
+        for name in ("journal", "evidence", "ledger", "output"):
+            protected = getattr(args, name, None)
+            if protected is not None and Path(protected).resolve().is_relative_to(path.resolve()):
+                raise ValueError("private_work_contains_evidence")
+        shutil.rmtree(path)
 
     # -- one row -------------------------------------------------------------------
     def run_ids(self):
@@ -721,10 +770,7 @@ class Run:
                     ).stdout.decode("utf-8")
                 if not isinstance(text, str) or '"usage"' not in text:
                     continue
-                try:
-                    value = json.loads(text)
-                except ValueError:
-                    continue
+                value = json.loads(text)
                 stack = [value]
                 while stack:
                     item = stack.pop()
@@ -780,7 +826,13 @@ class Run:
         for path in (sandbox, state):
             shutil.rmtree(path, ignore_errors=True)
             path.mkdir(parents=True)
-        before = set(self.run_ids()) if arm != "native" else set()
+        before = set()
+        gateway_usage_error = False
+        if arm != "native":
+            try:
+                before = set(self.run_ids())
+            except (OSError, sqlite3.Error, ValueError):
+                gateway_usage_error = True
         prompt = self.prompts[task["prompt_case_id"]]
         started = now()
         self.gate.open_row(key, self.budget.row_budget)
@@ -842,7 +894,13 @@ class Run:
         if arm == "native":
             try:
                 usages = self.transcript_usage(state)
-            except (OSError, subprocess.CalledProcessError, UnicodeError):
+            except (
+                OSError,
+                subprocess.CalledProcessError,
+                UnicodeError,
+                sqlite3.Error,
+                ValueError,
+            ):
                 usages = []
                 usage_error = "transcript_usage_unavailable"
             usage_id = self.evidence(
@@ -877,13 +935,27 @@ class Run:
             local_turns = 0
         else:
             time.sleep(1.0)
-            events = self.gateway_events(before)
-            trace_id = self.evidence(key, "gateway-trace.json", events, refs)
+            try:
+                if gateway_usage_error:
+                    raise ValueError("gateway_usage_unavailable")
+                events = self.gateway_events(before)
+            except (OSError, sqlite3.Error, ValueError):
+                events = []
+                usage_error = "gateway_usage_unavailable"
+            trace_id = self.evidence(
+                key, "gateway-trace.json", dict(error=usage_error) if usage_error else events, refs
+            )
             attempts = attempts_from_trace(
                 events, provider=PROVIDER, attempt_prefix=f"{key}-", evidence_id=trace_id
             )
-            local_turns = sum(
-                1 for e in events if e["event_type"] == "model.started" and e["actor"] == "local"
+            local_turns = (
+                None
+                if usage_error
+                else sum(
+                    1
+                    for e in events
+                    if e["event_type"] == "model.started" and e["actor"] == "local"
+                )
             )
         status = {
             "completed": "completed",

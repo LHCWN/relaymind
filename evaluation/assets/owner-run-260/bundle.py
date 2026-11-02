@@ -11,7 +11,6 @@ the written manifest. Nothing is fetched and no secret is read.
 import argparse
 import hashlib
 import json
-import shutil
 import sys
 from pathlib import Path
 
@@ -21,6 +20,12 @@ sys.path.insert(0, str(REPO / "src"))
 
 from relaymind.canonical import canonical_digest, canonical_json  # noqa: E402
 from relaymind.evaluation import asset_evidence  # noqa: E402
+from relaymind.evaluation.asset_corpus_io import (  # noqa: E402
+    DOCUMENT_BYTES,
+    read_local,
+    relative_path,
+)
+from relaymind.evaluation.asset_whole_task import frozen_evidence_ids  # noqa: E402
 
 
 def read(path):
@@ -41,8 +46,14 @@ def inventory(kind: str) -> dict:
 
 
 def put(base: Path, relative: str, payload: bytes) -> None:
-    (base / relative).parent.mkdir(parents=True, exist_ok=True)
-    (base / relative).write_bytes(payload)
+    relative_path(relative)
+    target = base
+    for part in ("", *relative.split("/")):
+        target = target / part
+        if target.is_symlink() or target.is_junction():
+            raise ValueError("unsafe_path")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(payload)
 
 
 class Bundle:
@@ -80,7 +91,12 @@ class Bundle:
             if self.evidence[evidence_id]["sha256"] != sha:
                 raise SystemExit(f"conflicting evidence {evidence_id}")
             return
-        relative = relative or ("evidence/" + hashlib.sha256(evidence_id.encode()).hexdigest())
+        relative = (
+            "evidence/" + hashlib.sha256(evidence_id.encode()).hexdigest()
+            if relative is None
+            else relative
+        )
+        relative_path(relative)
         path = None
         if publish:
             put(self.out, relative, payload)
@@ -110,7 +126,7 @@ class Bundle:
         catalog = json.loads(catalog_raw)
         self.document("catalog", catalog, publish=False, payload=catalog_raw)
         for item in catalog["evidence"]:
-            data = (release / item["path"]).read_bytes()
+            data = read_local(release, item["path"], DOCUMENT_BYTES)
             self.file(
                 item["id"],
                 item["kind"],
@@ -125,9 +141,7 @@ class Bundle:
             self.document(kind, value)
             for item in value["files"]:
                 relative = "originals/" + item["path"]
-                target = self.private / relative
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(REPO / item["path"], target)
+                put(self.private, relative, read_local(REPO, item["path"], DOCUMENT_BYTES))
                 self.resolver.append(
                     dict(
                         id="file:" + hashlib.sha256(item["path"].encode()).hexdigest(),
@@ -145,32 +159,38 @@ class Bundle:
             schema_version=1, documents=documents, evidence=evidence, source_proof_evidence_ids=[]
         )
         data = payload_of(manifest)
-        (self.out / "inputs.json").write_bytes(data)
+        put(self.out, "inputs.json", data)
         report["input_manifest"] = dict(
             path="inputs.json", digest=canonical_digest(manifest), bytes=len(data)
         )
-        report_path.write_bytes(payload_of(report))
+        put(self.out, report_path.relative_to(self.out).as_posix(), payload_of(report))
         entries = sorted(
             {(e["id"], e["hash_kind"], e["hash"]): e for e in self.resolver}.values(),
             key=lambda e: (e["id"], e["hash_kind"], e["hash"]),
         )
-        (self.private / "resolver.json").write_bytes(
-            payload_of(dict(schema_version=1, entries=entries))
-        )
+        put(self.private, "resolver.json", payload_of(dict(schema_version=1, entries=entries)))
 
 
-def add_extra_evidence(bundle: Bundle, extra: dict) -> None:
+def add_extra_evidence(bundle: Bundle, extra: dict, *, root: Path) -> None:
     """Further evidence files; one kept out of the published bundle is restricted."""
     for evidence_id, item in extra.items():
         publish = item.get("publish", True)
+        if item.get("relative") is not None:
+            relative_path(item["relative"])
         bundle.file(
             evidence_id,
             item.get("kind", "original"),
             "redistributable" if publish else "restricted",
-            Path(item["path"]).read_bytes(),
+            read_local(root, item["path"], DOCUMENT_BYTES),
             publish=publish,
             relative=item.get("relative"),
         )
+
+
+def require_host_evidence(bundle: Bundle, tasks: dict, freeze: dict) -> None:
+    """Fail before publishing a manifest whose frozen evidence cannot resolve."""
+    if frozen_evidence_ids(tasks, freeze) - bundle.evidence.keys():
+        raise ValueError("frozen_evidence_missing")
 
 
 def main() -> None:
@@ -190,12 +210,14 @@ def main() -> None:
     parser.add_argument(
         "--extra-evidence",
         type=Path,
-        help="JSON {evidence_id: {path, kind, publish, relative}} of further evidence files",
+        help="JSON {evidence_id: {path, kind, publish, relative}}; paths relative to this JSON",
     )
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--private", type=Path, required=True)
     args = parser.parse_args()
     report = read(args.report)
+    for ref in report["evidence"]:
+        relative_path(ref["path"])
     bundle = Bundle(args.out, args.private)
     args.out.mkdir(parents=True, exist_ok=True)
     root_kind, freeze_kind = (
@@ -209,14 +231,16 @@ def main() -> None:
     bundle.corpus(args.release)
     bundle.inventories()
     for ref in report["evidence"]:
-        data = (args.evidence_root / ref["path"]).read_bytes() if ref["path"] else None
+        data = read_local(args.evidence_root, ref["path"], DOCUMENT_BYTES) if ref["path"] else None
         if data is None:
             raise SystemExit(f"unresolved evidence {ref['id']}")
         bundle.file(
             ref["id"], "original", "redistributable", data, publish=True, relative=ref["path"]
         )
     if args.extra_evidence:
-        add_extra_evidence(bundle, read(args.extra_evidence))
+        add_extra_evidence(bundle, read(args.extra_evidence), root=args.extra_evidence.parent)
+    if args.kind == "host":
+        require_host_evidence(bundle, read(args.root_input), read(args.freeze))
     bundle.write(args.out / "report.json", report)
     print(json.dumps(dict(documents=len(bundle.documents), evidence=len(bundle.evidence))))
 

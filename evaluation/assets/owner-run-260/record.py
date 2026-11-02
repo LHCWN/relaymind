@@ -21,7 +21,6 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[2] / "src"))
-SCHEMA = HERE.parents[2] / "src/relaymind/evaluation/schemas/asset_qualification_record.v1.json"
 # The machine model of the committed #260 records (annotators, adjudicator, drafter).
 MODEL_ID = "glm-5.3"
 
@@ -54,14 +53,12 @@ def machine_identity(machine: dict, environment: dict) -> dict:
     return machine
 
 
-def _enum(field: str) -> list[str]:
-    return json.loads(SCHEMA.read_text(encoding="utf-8"))["properties"][field]["enum"]
-
-
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--scope", choices=_enum("scope"), required=True)
-    p.add_argument("--outcome", choices=_enum("outcome"), default="positive")
+    p.add_argument(
+        "--scope", choices=("host_trial", "host_acceptance", "adaptation"), required=True
+    )
+    p.add_argument("--outcome", choices=("positive",), default="positive")
     p.add_argument("--model-id", default=MODEL_ID, help="the machine annotators' model")
     p.add_argument("--record-id", required=True)
     p.add_argument("--record-dir", type=Path, required=True)
