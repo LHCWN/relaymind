@@ -341,7 +341,7 @@ def test_mcp_record_revisions_match_the_vps3_capture():
 
 def _git_blob_sha256(commit, path):
     result = subprocess.run(
-        ["git", "show", f"{commit}:{path}"], cwd=ROOT, capture_output=True, check=False
+        ["git", "cat-file", "-p", f"{commit}:{path}"], cwd=ROOT, capture_output=True, check=False
     )
     if result.returncode != 0:
         return None
@@ -581,10 +581,16 @@ def shipped_operations(source):
     """The operations arrays of the exported NATIVE_QUALIFICATIONS entries."""
     declaration = re.search(r"export const NATIVE_QUALIFICATIONS\b[^=]*=(.*)", source, re.S)
     assert declaration, "NATIVE_QUALIFICATIONS declaration not found"
-    arrays = re.findall(r"\boperations:\s*(?:Object\.freeze\()?\[([^\]]*)\]", declaration[1])
-    assert arrays, "no operations array in NATIVE_QUALIFICATIONS"
+    registry = declaration[1]
+    keys = list(re.finditer(r"""\boperations["']?\s*:\s*""", registry))
+    assert keys, "no operations array in NATIVE_QUALIFICATIONS"
+    value = re.compile(r"(?:Object\.freeze\s*\(\s*)?\[([^\]]*)\]")
     operations = []
-    for array in arrays:
+    for key in keys:
+        # Every key must hold a literal array: a value this check cannot read fails it.
+        match = value.match(registry, key.end())
+        assert match, f"unreadable operations value: {registry[key.end() :][:40]!r}"
+        array = match[1]
         # Every element is one quoted operation name; anything else fails the check.
         elements = [element.strip() for element in array.split(",")]
         if elements and not elements[-1]:
@@ -624,6 +630,35 @@ def test_the_registry_check_reads_single_quoted_names(array):
     """A single-quoted mcp_use is still a listed operation (#255 review)."""
     listed = f"export const NATIVE_QUALIFICATIONS: X[] = [{{ operations: {array} }}];"
     assert shipped_operations(listed) == [["direct_actions", "mcp_use"]]
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        'operations : ["mcp_use"]',
+        'operations:Object.freeze (["mcp_use"] as const)',
+        'operations : Object.freeze (\n  ["mcp_use"],\n)',
+        '"operations": ["mcp_use"]',
+    ],
+)
+def test_the_registry_check_reads_a_differently_spaced_second_entry(entry):
+    """A later entry cannot hide mcp_use behind its spacing (#267 review)."""
+    listed = (
+        'export const NATIVE_QUALIFICATIONS: X[] = [{ operations: ["direct_actions"] }, '
+        f"{{ {entry} }}];"
+    )
+    assert shipped_operations(listed) == [["direct_actions"], ["mcp_use"]]
+
+
+@pytest.mark.parametrize("value", ["SHIPPED_OPERATIONS", "Object.freeze(SHIPPED_OPERATIONS)"])
+def test_the_registry_check_refuses_an_operations_value_it_cannot_read(value):
+    """A value the check cannot read fails, even beside a readable entry (#267 review)."""
+    listed = (
+        'export const NATIVE_QUALIFICATIONS: X[] = [{ operations: ["direct_actions"] }, '
+        f"{{ operations: {value} }}];"
+    )
+    with pytest.raises(AssertionError, match="unreadable operations value"):
+        shipped_operations(listed)
 
 
 def test_the_registry_check_refuses_an_unreadable_operations_array():
