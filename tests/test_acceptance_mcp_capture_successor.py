@@ -93,7 +93,124 @@ def _replay_inputs(root: Path) -> tuple[Path, Path]:
 def _freeze(module, root: Path, out: Path) -> int:
     capture_dir, servers_json = _replay_inputs(root)
     captured_at = json.loads((CAPTURE / "capture.v1.json").read_bytes())["captured_at"]
-    return module.freeze(capture_dir, servers_json, out, captured_at)
+    return module.freeze(
+        capture_dir, servers_json, out, captured_at, capture_machine_role="linux_host"
+    )
+
+
+@pytest.mark.parametrize(
+    "argument",
+    [
+        "/Users/owner/repo/.venv/bin/python",
+        "/Users/owner/fsroot",
+        "/Users/owner/gitrepo",
+        "/opt/bin/python3",
+        "/home/.venv/bin/python",
+        "/",
+        "~",
+        "~/fsroot",
+        r"C:\workspace\.venv\Scripts\python.exe",
+        "C:/workspace/gitrepo",
+    ],
+)
+def test_absolute_and_home_arguments_are_redacted(successor, argument):
+    """RM12/RM40/AC31: launch arguments never publish local machine paths."""
+    assert successor._placeholder(argument) == "<path>"
+
+
+@pytest.mark.parametrize(
+    ("argument", "expected"),
+    [
+        ("/opt/node_modules/server/index.js", "<npm>/node_modules/server/index.js"),
+        ("/opt/bin/node", "<node>"),
+        ("/opt/py/bin/python", "<python>"),
+        ("/opt/mcp/fsroot", "<fsroot>"),
+        ("/opt/mcp/gitrepo", "<gitrepo>"),
+        ("<npm>/node_modules/server/index.js", "<npm>/node_modules/server/index.js"),
+        ("<python>", "<python>"),
+        ("-m", "-m"),
+        ("mcp_server_git", "mcp_server_git"),
+    ],
+)
+def test_existing_launch_placeholders_are_preserved(successor, argument, expected):
+    """RM40/AC31: the maintained freeze retains the v1 launch representation."""
+    assert successor._placeholder(argument) == expected
+
+
+@pytest.mark.parametrize("role", ["target_macos_m1_8gib", "target_windows_x64", "linux_host"])
+def test_freeze_records_explicit_role_and_redacts_macos_paths(successor, tmp_path, role):
+    """RM12/RM16/RM40/AC31: record the supplied role and redact local launch paths."""
+    capture_dir, servers_json = _replay_inputs(tmp_path)
+    servers = json.loads(servers_json.read_bytes())
+    servers[0]["argv"] = [
+        "/Users/owner/repo/.venv/bin/python",
+        "-m",
+        "mcp_server_git",
+        "/Users/owner/fsroot",
+        "/Users/owner/gitrepo",
+    ]
+    servers_json.write_bytes(json.dumps(servers).encode("utf-8"))
+    out = tmp_path / "out"
+    assert (
+        successor.main(
+            [
+                "freeze",
+                str(capture_dir),
+                str(servers_json),
+                str(out),
+                "2026-11-01T00:00:00Z",
+                "--machine-role",
+                role,
+            ]
+        )
+        == 0
+    )
+    payload = (out / "capture.v1.json").read_bytes()
+    document = json.loads(payload)
+    assert document["capture_machine_role"] == role
+    assert document["servers"][0]["launch"] == [
+        "<path>",
+        "-m",
+        "mcp_server_git",
+        "<path>",
+        "<path>",
+    ]
+    assert b"/Users/" not in payload
+
+
+@pytest.mark.parametrize("options", [[], ["--machine-role", "unknown"]])
+def test_freeze_refuses_missing_or_unknown_role_before_io(successor, tmp_path, capsys, options):
+    """RM16/RM40/AC31: a missing or unknown machine role writes nothing."""
+    with pytest.raises(SystemExit) as error:
+        successor.main(
+            [
+                "freeze",
+                str(tmp_path / "capture"),
+                str(tmp_path / "servers.json"),
+                str(tmp_path / "out"),
+                "2026-11-01T00:00:00Z",
+                *options,
+            ]
+        )
+    assert error.value.code == 2
+    assert ("invalid choice" if options else "required") in capsys.readouterr().err
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_freeze_function_refuses_unknown_role_before_io(successor, tmp_path, capsys):
+    """RM16/RM40/AC31: direct callers also cannot write an invented machine role."""
+    assert (
+        successor.freeze(
+            tmp_path / "capture",
+            tmp_path / "servers.json",
+            tmp_path / "out",
+            "2026-11-01T00:00:00Z",
+            capture_machine_role="unknown",
+        )
+        == 2
+    )
+    assert "invalid capture machine role" in capsys.readouterr().err
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_the_simulated_windows_newline_makes_the_as_run_freeze_write_crlf(
@@ -188,3 +305,17 @@ def test_session_close_closes_stdin_and_stdout(successor, tmp_path):
     assert session.process.stdin.closed
     assert session.process.stdout.closed
     assert session.process.returncode is not None
+
+
+@pytest.mark.parametrize(
+    ("argument", "expected"),
+    [
+        ("--root=/Users/owner/Documents", "--root=<path>"),
+        ("--root=~/Documents", "--root=<path>"),
+        ("--root=C:\\Users\\owner\\Documents", "--root=<path>"),
+        ("--mode=fast", "--mode=fast"),
+    ],
+)
+def test_an_option_value_is_redacted_like_a_bare_path(successor, argument, expected):
+    """RM39: a path after --flag= cannot carry a home directory into a capture."""
+    assert successor._placeholder(argument) == expected

@@ -128,6 +128,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   selection; the README states that the report's `memory.complete` does not
   mean complete coverage and which private harness address remains in the VPS
   capture.
+  The MacBook lifecycle run at HEAD `2f4ddecc` was recorded dirty. The run did
+  not record which files differed, so the exact source state beyond the HEAD
+  label cannot be established. Its tested provider tarball is byte-identical
+  to the clean VPS run's: both install checks record 94770 bytes and SHA-256
+  `85512a7bba21273180c63d03c07ecd0db5a976515cab97392ffc3f497f67b6e2`.
 - #274 native Windows platform evidence (RM38; AC29, AC37), with a pending
   qualification draft in `docs/evidence/m10/windows-platform-run-2026-11-01/`.
   The 15 install-check lifecycle steps pass. The separate platform report

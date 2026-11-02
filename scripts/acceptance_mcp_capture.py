@@ -7,7 +7,8 @@ that capture's ``lock.v1.json`` binds their bytes. A new capture uses this
 script and becomes a new capture version, never a replacement of v1.
 
     python scripts/acceptance_mcp_capture.py capture --servers servers.json --out CAPTURE_DIR
-    python scripts/acceptance_mcp_capture.py freeze CAPTURE_DIR servers.json OUT_DIR CAPTURED_AT
+    python scripts/acceptance_mcp_capture.py freeze CAPTURE_DIR servers.json OUT_DIR CAPTURED_AT \\
+        --machine-role ROLE
 
 ``capture`` starts every pinned server of ``servers.json`` locally over stdio,
 sends ``initialize``, ``notifications/initialized`` and ``tools/list``
@@ -22,6 +23,7 @@ canonical ``schema_hash``, and the selection of exactly 100 tools) and
 of every referenced file, this script included). This script copies itself
 into OUT_DIR when it is missing there and refuses an OUT_DIR copy with other
 bytes, so the lock binds the bytes that ran.
+The required machine role identifies the capture host under spec section 12.6.6.
 
 Selection rule: order every captured tool by SHA-256 of the UTF-8 text
 ``<server_id>/<tool_name>`` and keep the first 100; the rest are recorded as
@@ -42,7 +44,7 @@ import shutil
 import subprocess
 import sys
 import time
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from relaymind.canonical import canonical_digest
 from relaymind.tools.registry import check_parameters_schema
@@ -51,6 +53,8 @@ PROTOCOL = "2025-06-18"
 TIMEOUT = 90.0
 QUOTA = 100
 SCRIPT = Path(__file__).resolve()
+# The three owner-run machine roles in spec 0.66 section 12.6.6.
+MACHINE_ROLES = ("target_macos_m1_8gib", "target_windows_x64", "linux_host")
 
 
 def _sha(payload: bytes) -> str:
@@ -243,10 +247,15 @@ def capture_all(servers_json: Path, out: Path) -> int:
 
 
 def _placeholder(arg: str) -> str:
+    flag, separator, value = arg.partition("=")
+    if separator and flag.startswith("-"):
+        return flag + separator + _placeholder(value)
     arg = re.sub(r"^.*/node_modules/", "<npm>/node_modules/", arg)
     arg = re.sub(r"^.*/bin/node$", "<node>", arg)
     arg = re.sub(r"^.*/py/bin/python$", "<python>", arg)
     arg = re.sub(r"^.*/mcp/(fsroot|gitrepo)$", r"<\1>", arg)
+    if arg.startswith(("/", "~")) or PureWindowsPath(arg).is_absolute():
+        return "<path>"
     return arg
 
 
@@ -260,7 +269,17 @@ def _place_script(out: Path) -> bytes | None:
     return source if target.read_bytes() == source else None
 
 
-def freeze(capture_dir: Path, servers_json: Path, out: Path, captured_at: str) -> int:
+def freeze(
+    capture_dir: Path,
+    servers_json: Path,
+    out: Path,
+    captured_at: str,
+    *,
+    capture_machine_role: str,
+) -> int:
+    if capture_machine_role not in MACHINE_ROLES:
+        print("invalid capture machine role", file=sys.stderr)
+        return 2
     capture_dir, servers_json, out = Path(capture_dir), Path(servers_json), Path(out)
     captured = json.loads((capture_dir / "capture.raw.json").read_bytes())
     launches = {s["id"]: s for s in json.loads(servers_json.read_bytes())}
@@ -310,7 +329,7 @@ def freeze(capture_dir: Path, servers_json: Path, out: Path, captured_at: str) -
         kind="relaymind-acceptance-mcp-capture",
         version=1,
         captured_at=captured_at,
-        capture_machine_role="linux_host",
+        capture_machine_role=capture_machine_role,
         capture_tool=dict(path=SCRIPT.name, sha256=_sha(script)),
         protocol_version_requested=PROTOCOL,
         servers=servers,
@@ -357,10 +376,17 @@ def main(argv: list[str] | None = None) -> int:
     frozen.add_argument("servers_json", type=Path)
     frozen.add_argument("out_dir", type=Path)
     frozen.add_argument("captured_at")
+    frozen.add_argument("--machine-role", required=True, choices=MACHINE_ROLES)
     args = parser.parse_args(argv)
     if args.command == "capture":
         return capture_all(args.servers, args.out)
-    return freeze(args.capture_dir, args.servers_json, args.out_dir, args.captured_at)
+    return freeze(
+        args.capture_dir,
+        args.servers_json,
+        args.out_dir,
+        args.captured_at,
+        capture_machine_role=args.machine_role,
+    )
 
 
 if __name__ == "__main__":

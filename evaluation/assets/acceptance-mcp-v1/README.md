@@ -91,6 +91,19 @@ when a session ends. `capture_mcp_tools.py` and `freeze_mcp_capture.py` in this
 folder are the as-run copies whose bytes `lock.v1.json` binds; they stay
 unchanged, and the steps above only reproduce this v1 freeze.
 
+From a checkout with `src` on the import path, freeze a new capture with:
+
+```bash
+python scripts/acceptance_mcp_capture.py freeze CAPTURE_DIR servers.json OUT_DIR CAPTURED_AT \
+    --machine-role target_macos_m1_8gib
+```
+
+Set the required `--machine-role` to the actual capture machine's role from
+spec section 12.6.6: `target_macos_m1_8gib`, `target_windows_x64` or
+`linux_host`. `capture` still requires POSIX pipes. The maintained freeze
+keeps the existing launch placeholders and replaces other absolute or
+home-relative path arguments with `<path>`.
+
 ## What this is not
 
 This is not yet an `AssetCatalogSetV1` acceptance release. Still missing for

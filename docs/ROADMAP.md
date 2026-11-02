@@ -1793,6 +1793,12 @@ inventory check compares the running package); the evidence README gives that
 procedure and a test runs it on POSIX systems, skipping Windows even when bash
 and tar are installed.
 
+The MacBook lifecycle run at HEAD `2f4ddecc` was recorded dirty. The run did
+not record which files differed, so the exact source state beyond the HEAD
+label cannot be established. Its tested provider tarball is byte-identical
+to the clean VPS run's: both install checks record 94770 bytes and SHA-256
+`85512a7bba21273180c63d03c07ecd0db5a976515cab97392ffc3f497f67b6e2`.
+
 Correction to that digest-bound README's Verify section (RM16; spec 12.6.5,
 12.6.6): a later checkout can reject the reports with `inventory_membership`
 when the source file set differs, or `unsupported_generator` when the file
