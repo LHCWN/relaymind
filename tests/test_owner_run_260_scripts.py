@@ -394,8 +394,17 @@ def test_a_budget_cancelled_row_is_a_known_non_success():
     assert [r["success"] for r in rows] == [True, False, False, False, None]
 
 
-def test_the_host_turn_is_stopped_when_usage_cannot_be_read(tmp_path):
+def test_the_host_turn_is_stopped_when_usage_cannot_be_read(tmp_path, monkeypatch):
     """L2: a failing usage read never leaves the host process running."""
+    children = []
+    original = run_host.subprocess.Popen
+
+    def capture(*args, **kwargs):
+        child = original(*args, **kwargs)
+        children.append(child)
+        return child
+
+    monkeypatch.setattr(run_host.subprocess, "Popen", capture)
     pid_file = tmp_path / "pid"
     script = (
         f"import os, time; open({str(pid_file)!r}, 'w').write(str(os.getpid()))\ntime.sleep(60)"
@@ -419,11 +428,8 @@ def test_the_host_turn_is_stopped_when_usage_cannot_be_read(tmp_path):
             limit_reached=lambda used: False,
             poll=0.05,
         )
-    pid = int(pid_file.read_text())
-    with pytest.raises(ProcessLookupError):
-        import os
-
-        os.kill(pid, 0)
+    child = next(c for c in children if c.pid == int(pid_file.read_text()))
+    assert child.poll() is not None
 
 
 # --- second review of #278: the token guard holds before dispatch ----------------
@@ -608,6 +614,8 @@ def test_the_executor_reserves_before_dispatch_and_keeps_the_charge_on_failure(
     run.budget = budget(tmp_path, cap=300_000, row=200_000)
     run.prompts = {"c1": "prompt"}
     run.work = tmp_path / "work"
+    run.evidence_root = tmp_path / "evidence"
+    run.secrets = []
     run.native = type("Host", (), dict(command=["openclaw"], env={}, config_path="c"))()
     seen = {}
 
@@ -630,7 +638,7 @@ def test_the_executor_reserves_before_dispatch_and_keeps_the_charge_on_failure(
 
     monkeypatch.setattr(run_host, "run_bounded", broken)
     entry = next(c for c in FREEZE["configurations"] if c["arm"] == "native")
-    with pytest.raises(OSError):
+    with pytest.raises(OSError, match="evidence volume full"):
         run.execute(dict(id="t1", prompt_case_id="c1"), "native", entry)
     assert seen["reserved_at_dispatch"] == 200_000
     resumed = budget_from(tmp_path, cap=300_000, row=200_000)
@@ -887,9 +895,10 @@ def test_unpublished_extra_evidence_is_recorded_as_restricted(tmp_path):
     bundle_script.add_extra_evidence(
         bundle,
         {
-            "extra:private": dict(path=str(private), publish=False),
-            "extra:public": dict(path=str(public)),
+            "extra:private": dict(path=private.name, publish=False),
+            "extra:public": dict(path=public.name),
         },
+        root=tmp_path,
     )
     assert bundle.evidence["extra:private"]["access"] == "restricted"
     assert bundle.evidence["extra:private"]["path"] is None
@@ -1082,7 +1091,14 @@ def test_chat_keeps_the_exact_transmitted_request_bytes(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "failure", [FileNotFoundError(), run_host.subprocess.CalledProcessError(1, ["zstd"])]
+    "failure",
+    [
+        FileNotFoundError(),
+        run_host.subprocess.CalledProcessError(1, ["zstd"]),
+        sqlite3.OperationalError("missing table"),
+        sqlite3.DatabaseError("corrupt"),
+        json.JSONDecodeError("invalid", "{", 1),
+    ],
 )
 def test_transcript_decode_failure_retains_row_with_unknown_cost(tmp_path, monkeypatch, failure):
     """RM16/RM44, AC36: missing/broken decompression cannot lose the executed row."""
@@ -1578,45 +1594,68 @@ def test_resumed_label_adjudication_never_reuses_a_batch_name(tmp_path, monkeypa
     assert resumed == ["machine-adjudicator-002", "machine-adjudicator-003"]
 
 
-def test_record_scopes_come_from_the_schema_and_outcome_and_model_are_arguments(tmp_path):
-    """RM44 (spec 0.66 section 12.6.6): every schema scope, both outcomes, and the
-    model identity are arguments; the defaults are those of the committed record."""
-    schema = read(ROOT / "src/relaymind/evaluation/schemas/asset_qualification_record.v1.json")
+@pytest.mark.parametrize("scope", ["host_trial", "host_acceptance", "adaptation"])
+def test_supported_record_scopes_load(tmp_path, scope):
+    """RM44/AC36: every advertised builder combination passes the real loader."""
+    from relaymind.evaluation.asset_qualification_record import load_record
+
     parser = record_script.build_parser()
     actions = {a.dest: a for a in parser._actions}
-    assert list(actions["scope"].choices) == schema["properties"]["scope"]["enum"]
-    assert list(actions["outcome"].choices) == schema["properties"]["outcome"]["enum"]
+    assert list(actions["scope"].choices) == ["host_trial", "host_acceptance", "adaptation"]
+    assert list(actions["outcome"].choices) == ["positive"]
     committed = read(EVIDENCE / "m10-owner-run-260-adaptation.json")
-    assert actions["outcome"].default == committed["outcome"]
-    assert actions["model_id"].default == committed["drafter"]["model_id"]
-    machines = [a for k, a in committed["annotators"].items() if k != "family_relation"]
-    assert {a["model_id"] for a in machines} == {actions["model_id"].default}
-    machine, environment = tmp_path / "machine.json", tmp_path / "environment.json"
-    write(machine, dict(os="linux"))
-    write(environment, dict(os="linux", os_version="Linux-7"))
-    subject = tmp_path / "report.json"
-    write(subject, {})
-    harness_file = tmp_path / "harness.py"
-    harness_file.write_text("")
+    write(tmp_path / "machine.json", committed["machine"])
+    write(tmp_path / "environment.json", {})
+    subjects = []
+    for role in ("report", "freeze", "episodes" if scope == "adaptation" else "tasks"):
+        path = tmp_path / f"{role}.json"
+        document = dict(
+            rows=[
+                dict(
+                    status="completed",
+                    evidence_ids=[],
+                    attempts=[dict(started_at="2026-11-01T00:00:00Z")],
+                )
+            ]
+        )
+        if role == "report" and scope in {"host_trial", "host_acceptance"}:
+            capture = tmp_path / "host-dispatch.json"
+            write(
+                capture,
+                dict(
+                    schema_version=1,
+                    task_id="t1",
+                    arm="native",
+                    started_at="2026-11-01T00:00:00Z",
+                ),
+            )
+            payload = capture.read_bytes()
+            document["rows"][0].update(
+                task_id="t1", arm="native", evidence_ids=["host-dispatch:t1-native"]
+            )
+            document["evidence"] = [
+                dict(
+                    id="host-dispatch:t1-native",
+                    path=capture.name,
+                    sha256=harness.sha256(payload),
+                    bytes=len(payload),
+                    provenance="observed",
+                )
+            ]
+        write(path, document)
+        subjects += ["--subject", role, str(path)]
     args = parser.parse_args(
         [
             "--scope",
-            "host_trial",
-            "--outcome",
-            "negative",
-            "--model-id",
-            "other-model",
+            scope,
             "--record-id",
             "r1",
             "--record-dir",
             str(tmp_path),
-            "--subject",
-            "report",
-            str(subject),
             "--machine",
-            str(machine),
+            str(tmp_path / "machine.json"),
             "--environment",
-            str(environment),
+            str(tmp_path / "environment.json"),
             "--prereg-commit",
             "0" * 40,
             "--prereg-time",
@@ -1626,17 +1665,23 @@ def test_record_scopes_come_from_the_schema_and_outcome_and_model_are_arguments(
             "--repository-commit",
             "0" * 40,
             "--harness",
-            str(harness_file),
+            str(SCRIPTS / "record.py"),
             "--owner-login",
             "owner",
+            *subjects,
         ]
     )
     record = record_script.build_record(args)
-    assert (record["scope"], record["outcome"]) == ("host_trial", "negative")
-    assert record["drafter"]["model_id"] == "other-model"
-    assert {a["model_id"] for k, a in record["annotators"].items() if k != "family_relation"} == {
-        "other-model"
-    }
+    path = tmp_path / "record.json"
+    write(path, record)
+    assert load_record(path).record_id == "r1"
+    for flag, value in (
+        ("--scope", "platform"),
+        ("--scope", "host_operation"),
+        ("--outcome", "negative"),
+    ):
+        with pytest.raises(SystemExit):
+            parser.parse_args([flag, value])
 
 
 @pytest.mark.parametrize("platform", ["linux", "win32"])
@@ -1681,6 +1726,8 @@ def test_the_host_turn_stop_ends_the_whole_tree_on_each_platform(monkeypatch, pl
     monkeypatch.setattr(run_host.subprocess, "Popen", popen)
     monkeypatch.setattr(run_host.subprocess, "run", run)
     monkeypatch.setattr(run_host.os, "killpg", killpg, raising=False)
+    # Supply the POSIX signal only for the simulated branch on Windows.
+    monkeypatch.setattr(run_host.signal, "SIGKILL", 9, raising=False)
     result = run_host.run_bounded(
         ["host"], env=None, timeout=-1, usage=lambda: 0, limit_reached=lambda used: False
     )
@@ -1694,6 +1741,7 @@ def test_the_host_turn_stop_ends_the_whole_tree_on_each_platform(monkeypatch, pl
     else:
         assert options["start_new_session"] is True and "creationflags" not in options
         assert ("killpg", 4242, run_host.signal.SIGTERM) in calls
+        assert ("killpg", 4242, run_host.signal.SIGKILL) in calls
         assert not any(c[0] == "run" for c in calls if isinstance(c, tuple))
 
 
@@ -1721,6 +1769,155 @@ def test_windows_stop_falls_back_to_kill_when_taskkill_is_missing(monkeypatch):
     monkeypatch.setattr(run_host.subprocess, "run", missing)
     run_host._stop(Child())
     assert calls == ["kill"]
+
+
+@pytest.fixture
+def dispatch_run(tmp_path, monkeypatch):
+    run = object.__new__(run_host.Run)
+    run.frozen = run_host.frozen_arm_configs(FREEZE, CONFIGS, MODEL)
+    run.budget = budget(tmp_path)
+    run.prompts = {"c1": "prompt"}
+    run.work = tmp_path / "work"
+    run.evidence_root = tmp_path / "evidence"
+    run.secrets = []
+    run.native = run.relay = SimpleNamespace(command=["fixture-host"], env={}, config_path="c")
+    run.gate = SimpleNamespace(
+        open_row=lambda *a: None,
+        charged=lambda: 10,
+        refused=False,
+        close_row=lambda: dict(prompt=8, completion=2, charged=10, refused=False),
+    )
+    monkeypatch.setattr(run, "run_ids", lambda: [])
+    monkeypatch.setattr(run, "gateway_events", lambda before: [])
+    monkeypatch.setattr(run_host.time, "sleep", lambda seconds: None)
+    return run
+
+
+@pytest.mark.parametrize("arm", ["native", "provider_only"])
+@pytest.mark.parametrize("status", ["completed", "failed", "timed_out"])
+def test_host_dispatch_is_durable_before_invocation_and_bound_to_row(
+    dispatch_run, monkeypatch, arm, status
+):
+    """RM16/RM44, AC36: even a failed dispatch has a verifiable start capture."""
+    from relaymind.evaluation.asset_qualification_record import first_host_dispatch
+
+    run = dispatch_run
+    started = "2026-11-03T00:00:00.000000Z"
+    monkeypatch.setattr(run_host, "now", lambda: started)
+    capture = run.evidence_root / f"host-runs/t1-{arm}/host-dispatch.json"
+    synced = []
+    fsync = run_host.os.fsync
+
+    def sync(fd):
+        synced.append(run_host.os.fstat(fd).st_ino)
+        fsync(fd)
+
+    monkeypatch.setattr(run_host.os, "fsync", sync)
+
+    def executed(*args, **kwargs):
+        assert capture.is_file(), "dispatch must be persisted before invoking the host"
+        assert capture.stat().st_ino in synced
+        assert read(capture) == dict(schema_version=1, task_id="t1", arm=arm, started_at=started)
+        return dict(
+            status=status,
+            exit_code=0 if status == "completed" else 1,
+            elapsed_ms=1,
+            row_tokens_at_stop=None,
+            stdout='{"ok":true}',
+            stderr="",
+        )
+
+    monkeypatch.setattr(run_host, "run_bounded", executed)
+    row, refs = run.execute(dict(id="t1", prompt_case_id="c1"), arm, run.frozen[arm]["config"])
+    assert row["status"] == {"timed_out": "timeout"}.get(status, status)
+    dispatch_refs = [r for r in refs if r["id"].startswith("host-dispatch:")]
+    assert len(dispatch_refs) == 1
+    assert dispatch_refs[0]["id"] in row["evidence_ids"]
+    assert first_host_dispatch(dict(rows=[row], evidence=refs), run.evidence_root) == started
+
+
+@pytest.mark.parametrize("crash", [False, True])
+def test_journal_resume_preserves_dispatch_and_skips_have_no_capture(
+    dispatch_run, tmp_path, monkeypatch, crash
+):
+    """RM16/RM44, AC36: resume never replaces an already dispatched row's capture."""
+    run = dispatch_run
+    tasks = read(SCRIPTS / "host-tasks.json")
+    run.prompts = {t["prompt_case_id"]: "prompt" for t in tasks["tasks"]}
+    calls = []
+
+    def executed(*args, **kwargs):
+        captures = list(run.evidence_root.rglob("host-dispatch.json"))
+        assert len(captures) == 1
+        calls.append(captures[0])
+        if crash:
+            raise RuntimeError("interrupted")
+        return dict(
+            status="failed",
+            exit_code=1,
+            elapsed_ms=1,
+            row_tokens_at_stop=None,
+            stdout="",
+            stderr="",
+        )
+
+    monkeypatch.setattr(run_host, "run_bounded", executed)
+    from whole_task_helpers import ENVIRONMENT, H
+
+    def plan():
+        return run_host.run_host_plan(
+            tasks,
+            FREEZE,
+            run.execute,
+            tmp_path / "journal.jsonl",
+            environment=ENVIRONMENT,
+            artifacts=[],
+            qualification="fixture",
+            input_manifest=dict(path="inputs.json", digest=H, bytes=1),
+            interrupted=lambda: bool(calls),
+            skip_reason=run.skip_reason,
+        )
+
+    if crash:
+        with pytest.raises(RuntimeError, match="interrupted"):
+            plan()
+    else:
+        plan()
+    capture = calls[0]
+    original = (capture.read_bytes(), capture.stat().st_mtime_ns)
+    resumed = plan()
+    assert len(calls) == 1
+    assert (capture.read_bytes(), capture.stat().st_mtime_ns) == original
+    assert any(r["status"] == "not_run" for r in resumed["rows"])
+    assert all(not r["evidence_ids"] for r in resumed["rows"] if r["status"] == "not_run")
+    assert list(run.evidence_root.rglob("host-dispatch.json")) == [capture]
+
+
+def test_existing_dispatch_capture_is_never_overwritten(dispatch_run, monkeypatch):
+    """RM16/RM44, AC36: even an inconsistent fresh journal cannot replace evidence."""
+    run = dispatch_run
+    capture = run.evidence_root / "host-runs/t1-native/host-dispatch.json"
+    capture.parent.mkdir(parents=True)
+    capture.write_bytes(b"original capture")
+    monkeypatch.setattr(run_host, "run_bounded", lambda *a, **kw: pytest.fail("host dispatched"))
+    with pytest.raises(FileExistsError):
+        run.execute(dict(id="t1", prompt_case_id="c1"), "native", run.frozen["native"]["config"])
+    assert capture.read_bytes() == b"original capture"
+
+
+def test_pre_start_refusals_do_not_write_dispatch(dispatch_run):
+    """RM16/RM44, AC36: unavailable choices and exhausted budgets never dispatch."""
+    run = dispatch_run
+    task = dict(id="t1", prompt_case_id="c1")
+    assert run.skip_reason(task, "recommendations", {}) == "person_choice_unavailable"
+    with pytest.raises(run_host.ExecutorFailed, match="person_choice_unavailable"):
+        run.execute(task, "recommendations", {})
+    run.budget.cap = 0
+    config = run.frozen["native"]["config"]
+    assert run.skip_reason(task, "native", config) == "budget_cap"
+    with pytest.raises(run_host.ExecutorFailed, match="budget_cap"):
+        run.execute(task, "native", config)
+    assert not list(run.evidence_root.rglob("host-dispatch.json"))
 
 
 def test_a_timed_out_row_has_reason_timeout(tmp_path, monkeypatch):
@@ -1762,3 +1959,341 @@ def test_a_timed_out_row_has_reason_timeout(tmp_path, monkeypatch):
         outcome.update(status=status, code=code)
         row, _ = run.execute(dict(id=f"t{n}", prompt_case_id="c1"), "native", config)
         assert (row["status"], row["reason"]) == (row_status, reason)
+
+
+@pytest.mark.parametrize("platform", ["nt", "posix"])
+def test_durable_reservations_use_the_platform_directory_flush(tmp_path, monkeypatch, platform):
+    """RM03/AC36: file flush and replacement precede dispatch on both platforms."""
+    from relaymind.evaluation import asset_run_journal
+
+    calls = []
+    fake_os = SimpleNamespace(
+        name=platform,
+        O_RDONLY=0,
+        open=lambda *a: calls.append("open") or 42,
+        fsync=lambda fd: calls.append(("fsync", fd)),
+        close=lambda fd: calls.append(("close", fd)),
+    )
+    monkeypatch.setattr(asset_run_journal, "os", fake_os)
+    ledger = harness.Ledger(tmp_path / "ledger", 100)
+    ledger.reserve("stage", "attempt", 20)
+    assert harness.Ledger(tmp_path / "ledger", 100).total == 20
+    run_host.Budget(tmp_path / "budget", cap=100, row_budget=20, max_output=10).reserve("row")
+    assert calls == ([] if platform == "nt" else ["open", ("fsync", 42), ("close", 42)] * 2)
+
+
+@pytest.mark.parametrize("work", ["C:\\private\\scratch\\run", "/private/scratch/run"])
+def test_canonical_evidence_redacts_paths_and_secrets(tmp_path, monkeypatch, work):
+    """RM12/RM44: canonical JSON escaping must not expose private paths or secrets."""
+    from relaymind.canonical import canonical_json
+
+    home = tmp_path / "home"
+    monkeypatch.setattr(run_host.Path, "home", lambda: home)
+    secret = 'credential\\with"escapes'
+    text = canonical_json(dict(error=f"{work}/state; {home}/cache; {secret}"))
+    clean = run_host.sanitize(text, secrets=[secret], work=work)
+    assert json.loads(clean) == dict(error="<run-dir>/state; <home>/cache; <omitted>")
+    with pytest.raises(ValueError, match="empty_secret"):
+        run_host.sanitize(text, secrets=[""], work=work)
+
+
+@pytest.mark.parametrize("bad", ["version", "tarball", None])
+def test_host_freeze_checks_version_and_package_bytes(tmp_path, bad):
+    """RM44/AC36: setup refuses host/package drift before any provider dispatch."""
+    import hashlib
+
+    freeze = json.loads(json.dumps(FREEZE))
+    tarball = tmp_path / "package.tgz"
+    tarball.write_bytes(b"frozen package")
+    freeze["packages"][0]["sha256"] = hashlib.sha256(tarball.read_bytes()).hexdigest()
+    freeze["packages"][0]["bytes"] = tarball.stat().st_size
+    version = f"OpenClaw {freeze['host']['version']} (fixture)"
+    if bad == "version":
+        version = "OpenClaw 0.0.0 (fixture)"
+    if bad == "tarball":
+        tarball.write_bytes(b"different package")
+    if bad:
+        with pytest.raises(run_host.FreezeMismatch, match=f"{bad}_mismatch"):
+            run_host.check_host_artifacts(freeze, version, tarball)
+    else:
+        run_host.check_host_artifacts(freeze, version, tarball)
+
+
+@pytest.mark.parametrize("rows", [{"x": {}}, [None, "bad"], None])
+def test_judge_malformed_shapes_remain_retryable(tmp_path, monkeypatch, rows):
+    """RM16/RM44: malformed judgments retain earlier paid batches and can retry."""
+    args = SimpleNamespace(
+        items=tmp_path / "items",
+        output=tmp_path / "output",
+        template="judge-a.txt",
+        ledger=tmp_path / "ledger",
+        cap=10**9,
+        batch=1,
+        name="judge",
+        log=tmp_path / "log",
+    )
+    write(args.items, dict(items=[dict(blind_id="x", request="r", rubric=[], answer="a")]))
+    write(args.output, {"earlier": dict(success=True)})
+    monkeypatch.setattr(
+        judge.harness,
+        "chat",
+        lambda *a: dict(choices=[dict(message=dict(content=json.dumps(dict(judgments=rows))))]),
+    )
+    judge.cmd_judge(args)
+    assert read(args.output) == {"earlier": dict(success=True)}
+
+
+@pytest.mark.parametrize("relative", ["../escape", "/escape", "C:/escape", "a//b", ""])
+def test_bundle_rejects_unsafe_paths_before_io(tmp_path, relative):
+    """RM44/AC36: report and extra locators cannot escape their declared root."""
+    bundle = bundle_script.Bundle(tmp_path / "out", tmp_path / "private")
+    with pytest.raises(ValueError, match="unsafe_path"):
+        bundle_script.add_extra_evidence(bundle, {"e": dict(path=relative)}, root=tmp_path)
+    with pytest.raises(ValueError, match="unsafe_path"):
+        bundle.file("e", "original", "redistributable", b"data", publish=True, relative=relative)
+    assert not (tmp_path / "out").exists()
+
+
+def test_bundle_refuses_source_and_destination_symlinks(tmp_path):
+    """RM44/AC36: ordinary files only, including every output path component."""
+    source = tmp_path / "source"
+    source.write_bytes(b"private")
+    link = tmp_path / "link"
+    try:
+        link.symlink_to(source)
+    except OSError:
+        pytest.skip("symlink creation unavailable")
+    bundle = bundle_script.Bundle(tmp_path / "out", tmp_path / "private")
+    with pytest.raises(ValueError):
+        bundle_script.add_extra_evidence(bundle, {"e": dict(path="link")}, root=tmp_path)
+    (tmp_path / "out").mkdir()
+    (tmp_path / "out" / "link").symlink_to(tmp_path, target_is_directory=True)
+    with pytest.raises(ValueError, match="unsafe_path"):
+        bundle.file(
+            "e", "original", "redistributable", b"overwrite", publish=True, relative="link/source"
+        )
+    assert source.read_bytes() == b"private"
+
+
+def test_documented_extra_mapping_covers_all_frozen_host_evidence(tmp_path):
+    """RM44/AC36: the documented mapping resolves every freeze-required ID."""
+    from relaymind.evaluation.asset_whole_task import frozen_evidence_ids
+
+    bundle = bundle_script.Bundle(tmp_path / "out", tmp_path / "private")
+    required = frozen_evidence_ids(read(SCRIPTS / "host-tasks.json"), FREEZE)
+    extra = {}
+    for n, evidence_id in enumerate(sorted(required)):
+        path = tmp_path / f"input-{n}"
+        if evidence_id.startswith("rubric:"):
+            path.write_bytes(
+                (SCRIPTS / "rubrics" / f"{evidence_id.split(':')[1]}.json").read_bytes()
+            )
+        else:
+            path.write_bytes(b"fixture distribution")
+        extra[evidence_id] = dict(path=path.name, publish=False)
+    bundle_script.add_extra_evidence(bundle, extra, root=tmp_path)
+    bundle_script.require_host_evidence(bundle, read(SCRIPTS / "host-tasks.json"), FREEZE)
+    assert required <= bundle.evidence.keys()
+    bundle.evidence.pop(next(iter(required)))
+    with pytest.raises(ValueError, match="frozen_evidence_missing"):
+        bundle_script.require_host_evidence(bundle, read(SCRIPTS / "host-tasks.json"), FREEZE)
+
+
+def test_close_removes_only_owned_private_state(tmp_path):
+    """RM12/RM44: cleanup owns its fresh child, never evidence or journal roots."""
+    run = object.__new__(run_host.Run)
+    run.work = tmp_path
+    run.gateway = run.gate = None
+    for name in ("evidence", "journal", "unrelated"):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "keep").write_bytes(b"keep")
+    run.prepare_work()
+    private = run.work
+    for name in ("native-home", "relay-home", "gateway", "state", "sandboxes"):
+        (private / name).mkdir()
+        (private / name / "credential").write_bytes(b"secret")
+    run.close()
+    run.close()
+    assert not private.exists()
+    assert all(
+        (tmp_path / name / "keep").read_bytes() == b"keep"
+        for name in ("evidence", "journal", "unrelated")
+    )
+
+
+def test_close_does_not_remove_an_unowned_work_directory(tmp_path):
+    """RM12: a failed setup cannot claim an operator's existing directory."""
+    run = object.__new__(run_host.Run)
+    run.work = tmp_path
+    run.gateway = run.gate = None
+    (tmp_path / "keep").write_bytes(b"keep")
+    run.close()
+    assert (tmp_path / "keep").exists()
+
+
+def test_script_revisions_are_not_bound_by_the_frozen_lock():
+    """RM16/RM44: repair scripts without rewriting any recorded input or evidence."""
+    import hashlib
+
+    lock = read(SCRIPTS / "lock.json")
+    digests = {e["sha256"] for e in lock["evidence"]}
+    for name in ("harness.py", "run_host.py", "bundle.py", "record.py", "judge.py"):
+        assert hashlib.sha256((SCRIPTS / name).read_bytes()).hexdigest() not in digests
+    for name in ("cases", "labels"):
+        assert canonical_digest(read(SCRIPTS / f"{name}.json")) == lock[name]["digest"]
+
+
+@pytest.mark.parametrize("arm", ["native", "provider_only"])
+@pytest.mark.parametrize("failure", ["missing_table", "corrupt", "json"])
+def test_unreadable_usage_databases_keep_executed_rows(tmp_path, monkeypatch, arm, failure):
+    """RM16/RM44/AC36: real SQLite and JSON read failures retain unknown costs."""
+    run = object.__new__(run_host.Run)
+    run.frozen = run_host.frozen_arm_configs(FREEZE, CONFIGS, MODEL)
+    run.budget = budget(tmp_path)
+    run.prompts = {"c1": "prompt"}
+    run.work = tmp_path / "work"
+    run.evidence_root = tmp_path / "evidence"
+    run.secrets = []
+    run.store = tmp_path / "gateway.sqlite"
+    run.native = run.relay = SimpleNamespace(command=["fixture-host"], env={}, config_path="c")
+    run.gate = SimpleNamespace(
+        open_row=lambda *a: None,
+        charged=lambda: 10,
+        refused=False,
+        close_row=lambda: dict(prompt=8, completion=2, charged=10, refused=False),
+    )
+    with sqlite3.connect(run.store) as conn:
+        conn.execute("CREATE TABLE runs(run_id TEXT)")
+
+    def executed(*args, **kwargs):
+        db = run.work / f"state/t1-{arm}/openclaw-agent.sqlite" if arm == "native" else run.store
+        if failure == "corrupt":
+            db.write_bytes(b"not a database")
+        else:
+            with sqlite3.connect(db) as conn:
+                if arm == "provider_only":
+                    conn.execute("INSERT INTO runs VALUES ('run-1')")
+                if failure == "json" and arm == "native":
+                    conn.execute("CREATE TABLE transcript_events(seq, event_json, event_zstd)")
+                    conn.execute("INSERT INTO transcript_events VALUES(1, ?, NULL)", ('{"usage":',))
+        return dict(
+            status="completed",
+            exit_code=0,
+            elapsed_ms=1,
+            row_tokens_at_stop=10,
+            stdout='{"ok":true}',
+            stderr="",
+        )
+
+    monkeypatch.setattr(run_host, "run_bounded", executed)
+    if arm == "provider_only" and failure == "json":
+
+        def broken(*args):
+            raise json.JSONDecodeError("invalid", "{", 1)
+
+        monkeypatch.setattr(run_host.live_acceptance, "_traces", broken)
+    config = run.frozen[arm]["config"]
+    row, refs = run.execute(dict(id="t1", prompt_case_id="c1"), arm, config)
+    reason = "transcript_usage_unavailable" if arm == "native" else "gateway_usage_unavailable"
+    assert row["status"] == "completed" and row["reason"] == reason
+    assert row["attempts"] == []
+    assert row["local_turns"] == (0 if arm == "native" else None)
+    assert run.budget.spent() == 10
+    assert any(read(run.evidence_root / r["path"]) == dict(error=reason) for r in refs)
+
+
+def test_provider_usage_failure_before_dispatch_still_retains_the_row(tmp_path, monkeypatch):
+    """RM16/RM44: a missing baseline cannot attribute other rows' calls to this row."""
+
+    def broken(self):
+        raise sqlite3.DatabaseError("unavailable")
+
+    monkeypatch.setattr(run_host.Run, "run_ids", broken)
+    test_unreadable_usage_databases_keep_executed_rows(
+        tmp_path, monkeypatch, "provider_only", "corrupt"
+    )
+
+
+def test_close_refuses_replaced_or_protected_private_roots(tmp_path):
+    """RM12/RM44: ownership does not authorize deleting persistent evidence."""
+    run = object.__new__(run_host.Run)
+    run.work = tmp_path
+    run.gateway = run.gate = None
+    run.prepare_work()
+    run.args = SimpleNamespace(evidence=run.work / "evidence")
+    run.args.evidence.mkdir()
+    with pytest.raises(ValueError, match="private_work_contains_evidence"):
+        run.close()
+    assert run.args.evidence.is_dir()
+
+
+def test_host_setup_rejects_freeze_drift_before_installation(tmp_path, monkeypatch):
+    """RM44/AC36: the setup path invokes the freeze guard before any install."""
+    run = object.__new__(run_host.Run)
+    run.work = tmp_path / "work"
+    run.frozen = run_host.frozen_arm_configs(FREEZE, CONFIGS, MODEL)
+    run.budget = SimpleNamespace(max_output=10)
+    run.gateway = run.gate = None
+    tarball = tmp_path / "package.tgz"
+    tarball.write_bytes(b"wrong package")
+    run.args = SimpleNamespace(freeze=SCRIPTS / "host-freeze.json", tarball=tarball)
+    monkeypatch.setenv("RELAYMIND_EXTERNAL_BASE_URL", "https://provider.invalid")
+    monkeypatch.setattr(
+        run_host,
+        "RequestGate",
+        lambda *a, **kw: SimpleNamespace(
+            start=lambda: "http://loopback.invalid", stop=lambda: None
+        ),
+    )
+    monkeypatch.setattr(
+        run,
+        "host",
+        lambda *a: SimpleNamespace(
+            run=lambda *a, **kw: dict(
+                status="completed", stdout=f"OpenClaw {FREEZE['host']['version']}"
+            )
+        ),
+    )
+    try:
+        with pytest.raises(run_host.FreezeMismatch, match="tarball_mismatch"):
+            run.setup()
+    finally:
+        run.close()
+
+
+def test_bundle_manifest_outputs_refuse_symlinks(tmp_path):
+    """RM44/AC36: final manifest writes also stay within the bundle root."""
+    bundle = bundle_script.Bundle(tmp_path / "out", tmp_path / "private")
+    bundle.out.mkdir()
+    bundle.private.mkdir()
+    outside = tmp_path / "keep"
+    outside.write_bytes(b"keep")
+    try:
+        (bundle.out / "inputs.json").symlink_to(outside)
+    except OSError:
+        pytest.skip("symlink creation unavailable")
+    with pytest.raises(ValueError, match="unsafe_path"):
+        bundle.write(bundle.out / "report.json", {})
+    assert outside.read_bytes() == b"keep"
+
+
+@pytest.mark.parametrize("relative", ["../escape", "/escape", "C:/escape"])
+def test_host_bundle_rejects_report_paths_before_copying(tmp_path, monkeypatch, relative):
+    """RM44/AC36: report locators are checked before creating any bundle files."""
+    report = tmp_path / "raw.json"
+    write(report, dict(evidence=[dict(id="e", path=relative)]))
+    argv = ["bundle.py", "host", "--report", str(report)]
+    for name in ("release", "root-input", "freeze", "configs", "evidence-root", "out", "private"):
+        argv += ["--" + name, str(tmp_path / name)]
+    monkeypatch.setattr(sys, "argv", argv)
+    with pytest.raises(ValueError, match="unsafe_path"):
+        bundle_script.main()
+    assert not (tmp_path / "out").exists()
+    assert not (tmp_path / "private").exists()
+
+
+def test_a_root_home_directory_does_not_rewrite_every_path(monkeypatch):
+    """A container whose home is the file system root keeps its other paths readable."""
+    monkeypatch.setattr(run_host.Path, "home", classmethod(lambda cls: run_host.Path("/")))
+    text = run_host.sanitize('{"path":"/usr/bin/node"}', secrets=[], work="/tmp/relaymind-run-dir")
+    assert text == '{"path":"/usr/bin/node"}'

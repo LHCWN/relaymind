@@ -150,10 +150,14 @@ def cmd_judge(args) -> None:
         answer = harness.chat(ledger, args.name, messages, args.log, name)
         try:
             rows = harness.answer_json(answer)["judgments"]
+            if not isinstance(rows, list):
+                raise TypeError
         except (ValueError, KeyError, TypeError):
             print("unparsed", name, file=sys.stderr)
             continue
         for row in rows:
+            if not isinstance(row, dict):
+                continue
             if row.get("blind_id") in asked and isinstance(row.get("success"), bool):
                 out[row["blind_id"]] = dict(success=row["success"], notes=str(row.get("notes")))
         write(args.output, out)

@@ -31,7 +31,8 @@
   on every command; for `m1_trial_inputs.py` it may come before or after the
   command name. Prepare that directory with new `inputs/captures`, machine
   templates and `usage-relationship.md` as in the historical trial; use a fresh
-  operator root. Run
+  operator root outside the home directory (including resolved symlink targets).
+  The helpers refuse home roots before copying configurations or evidence. Run
   `python scripts/m1_trial_inputs.py --trial-dir <new-trial-directory> draft --root <operator-root>`
   again after every drafting pass, **before** labels bind the cases, then
   `python scripts/m1_trial_inputs.py --trial-dir <new-trial-directory> freeze --root <operator-root> --cases <cases> --labels <labels>`.
@@ -39,16 +40,25 @@
   lock; freeze rejects stale drafting evidence. The observer takes the archived
   observer's row arguments **and** the required `--trial-dir` (the archived
   observer had no such option), and records `host-dispatch.json` before
-  invoking the host:
+  invoking the host. Execution and resource measurements require macOS; parsing
+  and evidence inspection are portable. The usage relationship and optional
+  recommendation receipt must be readable before execution:
   `python scripts/m1_trial_observe.py --trial-dir <new-trial-directory> --root <operator-root> --inputs <frozen-inputs> --plan <plan> --ordinal <ordinal> --observations <observations>`.
   Bundle the observations with `asset_whole_task.py trial` as before. Review
   the new bundle for privacy, then copy it unchanged into a fresh
   `docs/evidence/m10/<new-trial>/bundle` directory; the record requires
   contained paths there. After committing the harness, use
-  `python scripts/m1_trial_inputs.py --trial-dir <new-trial-directory> record --bundle <bundle> --record-id <new-id> --owner-login <login>`;
+  `python scripts/m1_trial_inputs.py --trial-dir <new-trial-directory> record --bundle <bundle> --record-id <new-id> --owner-login <login> --os-build <full-build> --hostname-sha256 <hostname-digest>`;
+  supply the trial machine's full OS build (OS version plus `sw_vers -buildVersion`
+  captured on that Mac) and SHA-256 of its UTF-8 hostname without a newline.
+  Keep the raw hostname private. Recording may happen elsewhere: these explicit
+  values supplement the bundle's environment lock; the recorder's machine is
+  never sampled. Templates must still match the kept requests' system messages;
   add `--preregistration <commit>` only for a genuine preregistration. The record
-  command refuses an existing record. The old scripts, captures and records
-  under `docs/evidence/` remain historical evidence.
+  command refuses an existing record and publishes a temporary file only after
+  validation succeeds. Every executed row of a preregistered report needs a bound
+  host-dispatch capture; model-call timestamps cannot replace it. The old
+  scripts, captures and records under `docs/evidence/` remain historical evidence.
 - `asset_operations_run.py` — the AC29 operations run kit (`startup`,
   `operations`, `platform`); `asset_platform_run.py` — the `Platform runs`
   workflow steps (`ordinary`, `platform`, `verify`) on GitHub-hosted runners
