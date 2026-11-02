@@ -360,6 +360,9 @@ def walkthrough_composition(language: str, shooter: Shooter, font_dir: Path | No
     """The ordinary composition with its native skill selection localized."""
 
     class WalkthroughComposition(ORDINARY.OrdinaryComposition):
+        def failure_reasons(self):
+            return super().failure_reasons() | {"walkthrough_font_home", "walkthrough_font_dir"}
+
         def prepare_host(self, host, environment, work, config_path):
             # Runs after the harness created the isolated home, before any browser starts;
             # a font that cannot be installed fails the named install step.
@@ -768,7 +771,12 @@ def record(args) -> int:
     if args.font_dir is not None:
         # One private copy: every language installs exactly the bytes the manifest lists.
         font_snapshot = work_root / "fonts"
-        fonts = snapshot_fonts(args.font_dir.absolute(), font_snapshot)
+        try:
+            fonts = snapshot_fonts(args.font_dir.absolute(), font_snapshot)
+        except (OSError, ValueError):
+            shutil.rmtree(work_root)
+            out.rmdir()
+            return _refused("walkthrough_font_dir")
     outcomes = {}
     for language in args.languages:
         media = out / language
