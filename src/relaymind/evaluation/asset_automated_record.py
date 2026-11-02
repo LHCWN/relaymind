@@ -20,7 +20,7 @@ from relaymind.evaluation.asset_automated_host import (
     bind_inputs,
 )
 from relaymind.evaluation.asset_corpus_io import DOCUMENT_BYTES, parse_json, read_local
-from relaymind.evaluation.asset_qualification_record import _read_bound, _time
+from relaymind.evaluation.asset_qualification_record import _read_bound, _time, first_host_dispatch
 from relaymind.evaluation.asset_whole_task import grade_host_report
 
 FILE_BYTES = 16 * 1024 * 1024
@@ -28,6 +28,12 @@ FILE_BYTES = 16 * 1024 * 1024
 
 def _reject() -> None:
     raise AutomatedHostRejected("automated_record_binding")
+
+
+def _timestamp(value):
+    if not isinstance(value, str):
+        _reject()
+    return _time(value)
 
 
 def _file(root: Path, ref: Mapping) -> bytes:
@@ -129,18 +135,34 @@ def load_automated_record(path: Path) -> dict:
         _reject()
     dispatch = record["first_dispatch"]
     _closed(dispatch, "at capture")
+    dispatch_time = _timestamp(dispatch["at"])
+    prereg_time = _timestamp(prereg["committed_at"])
     capture = parse_json(_file(root, dispatch["capture"]))
     if not isinstance(capture, Mapping) or capture.get("started_at") != dispatch["at"]:
         _reject()
-    if _time(prereg["committed_at"]) > _time(dispatch["at"]):
+    # Resolve private assembled paths without changing the original report.
+    # Reuse the whole-row dispatch contract: every started row needs exactly
+    # one observed, exact-shape capture for its task and arm, before its calls.
+    by_id = {ref["id"]: ref for ref in evidence}
+    resolved_report = dict(
+        report, evidence=[dict(ref, path=by_id[ref["id"]]["path"]) for ref in report["evidence"]]
+    )
+    first = first_host_dispatch(resolved_report, root)
+    if first is None or dispatch_time != _timestamp(first) or prereg_time > dispatch_time:
         _reject()
-    known_starts = [
-        a["started_at"]
+    used_ids = {
+        identity
         for row in report["rows"]
-        for a in row["attempts"]
-        if a["started_at"] is not None
-    ]
-    if known_starts and _time(dispatch["at"]) > min(map(_time, known_starts)):
+        if row["status"] != "not_run"
+        for identity in row["evidence_ids"]
+    }
+    if not any(
+        ref["id"] in used_ids
+        and ref["id"].startswith("host-dispatch:")
+        and (ref["sha256"], ref["bytes"])
+        == (dispatch["capture"]["sha256"], dispatch["capture"]["bytes"])
+        for ref in report["evidence"]
+    ):
         _reject()
     judging = record["judging"]
     _closed(judging, "blind_manifest blind_map judgments usage captures")
@@ -179,9 +201,9 @@ def load_automated_record(path: Path) -> dict:
         ):
             _reject()
         if (
-            not _time(dispatch["at"])
-            <= _time(review["started_at"])
-            <= _time(review["completed_at"])
+            not _timestamp(dispatch["at"])
+            <= _timestamp(review["started_at"])
+            <= _timestamp(review["completed_at"])
         ):
             _reject()
         payloads = {key: _file(root, review[key]) for key in ("prompt", "input", "output", "usage")}

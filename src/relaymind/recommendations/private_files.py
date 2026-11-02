@@ -146,22 +146,30 @@ def _write_all(descriptor: int, data: bytes) -> None:
         pending = pending[written:]
 
 
-def create_private_file_exclusive(path: Path, data: bytes) -> bool:
+def create_private_file_exclusive(
+    path: Path, data: bytes, *, maximum: int = MAX_PRIVATE_FILE_BYTES
+) -> bool:
     """Create a complete private file, or report that one already exists.
 
-    The bytes are written and synced under a temporary name in the same
+    The default bounds credential files; artifact callers must supply their own
+    explicit finite byte limit. Privacy and exclusive creation apply at any limit.
+    On POSIX, bytes are written and synced under a temporary name in the same
     directory, then hard-linked to the final name, which never replaces an
     existing entry. A crash or a failed write therefore never leaves a
     truncated file under the final name; leftover temporary files from an
     earlier crash are never read or removed here: another creator may still
-    own them. Each call removes only its own temporary entry.
+    own them. Each call removes only its own temporary entry. Windows creates
+    the final entry exclusively with its protected DACL before writing; a crash
+    can leave a partial private file, so consumers must verify its complete bytes.
     """
-    if len(data) > MAX_PRIVATE_FILE_BYTES:
+    if type(maximum) is not int or maximum < 0:
+        raise PrivateFileError("invalid private file bound")
+    if len(data) > maximum:
         raise PrivateFileError("private file too large")
     if os.name == "nt":
         from relaymind.recommendations._windows_private_files import create_windows_private_file
 
-        return create_windows_private_file(path, data)
+        return create_windows_private_file(path, data, maximum=maximum)
     try:
         with _parent(path) as (_, parent, name, _):
             prefix = f".{name}.partial-"

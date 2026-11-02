@@ -267,10 +267,16 @@ def test_real_loopback_proposal_uses_reserved_gate_and_read_only_channel(tmp_pat
         run.gate.open_row("t-recommendations", 15000)
         refs = []
         actual_prompt = run.prepare_prompt(
-            {"prompt_case_id": "p"}, "recommendations", "t-recommendations", refs
+            {"id": "t", "prompt_case_id": "p"}, "recommendations", "t-recommendations", refs
         )
         charged = run.gate.close_row()
         assert charged["charged"] == 9
+        marker = json.loads(
+            (run.evidence_root / "host-runs/t-recommendations/host-dispatch.json").read_bytes()
+        )
+        assert marker["started_at"] <= charged["calls"][0]["started_at"]
+        run.dispatch_evidence({"id": "t"}, "recommendations", "t-recommendations", refs)
+        assert sum(r["id"] == "host-dispatch:t-recommendations" for r in refs) == 1
         assert actual_prompt.startswith("original task")
         assert "untrusted" in actual_prompt
         assert [item[:2] for item in received] == [
@@ -408,3 +414,74 @@ def test_gate_attempts_keep_reported_cached_and_reasoning_components():
     assert attempts[0]["cached_tokens"] == 3
     assert attempts[0]["reasoning_tokens"] == 2
     assert attempts[0]["token_relationship"] == "unknown"
+
+
+def test_large_gate_capture_is_durable_before_row_settlement(tmp_path):
+    """RM16/RM44: a valid >1 MiB SSE capture must not lose the row evidence."""
+    module = _automated()
+    run = object.__new__(module.AutomatedRun)
+    run.evidence_root = tmp_path
+    run._row_refs = []
+    run.sanitize = lambda text: text
+    refs = []
+    payload = b"x" * (1024 * 1024 + 123)
+    run.evidence("task-native", "gated-calls.json", payload, refs)
+    assert (tmp_path / "host-runs/task-native/gated-calls.json").read_bytes() == payload
+    assert refs[0]["bytes"] == len(payload)
+    assert run._row_refs == refs
+
+
+def test_driver_failure_keeps_prior_whole_row_dispatch_marker(tmp_path):
+    """RM16/RM44: whole-row dispatch predates recommendations, including failures."""
+    import json
+
+    import pytest
+
+    module = _automated()
+    run = object.__new__(module.AutomatedRun)
+    run.evidence_root = tmp_path
+    run._row_refs = []
+    run.sanitize = lambda text: text
+    run.protocol = {"profile": "test"}
+    run.prompts = {"p": "original"}
+    run.gateway_token, run.gateway_url = "test-key", "http://127.0.0.1"
+    run.recommendations = {"user_id": "u", "workspace_id": "w"}
+    task = {"id": "t", "prompt_case_id": "p"}
+    refs = []
+
+    def fail(*args, **kwargs):
+        marker = tmp_path / "host-runs/t-recommendations/host-dispatch.json"
+        assert marker.exists()
+        value = json.loads(marker.read_bytes())
+        assert set(value) == {"schema_version", "task_id", "arm", "started_at"}
+        assert value["task_id"] == "t" and value["arm"] == "recommendations"
+        assert value["started_at"] <= module.legacy.now()
+        raise ValueError("driver unavailable")
+
+    run._http = fail
+    with pytest.raises(ValueError, match="driver unavailable"):
+        run.prepare_prompt(task, "recommendations", "t-recommendations", refs)
+    assert refs[0]["id"] == "host-dispatch:t-recommendations"
+    assert run.dispatch_evidence(task, "recommendations", "t-recommendations", refs)
+    assert sum(ref["id"] == "host-dispatch:t-recommendations" for ref in refs) == 1
+
+
+def test_host_command_timestamp_is_distinct_from_earlier_row_marker(tmp_path, monkeypatch):
+    """RM16: host elapsed time starts after preparation, without rewriting row evidence."""
+    module = _automated()
+    run = object.__new__(module.AutomatedRun)
+    run.evidence_root = tmp_path
+    run._row_refs = []
+    run.sanitize = lambda text: text
+    run.protocol = {"profile": "test"}
+    run.prompts = {"p": "original"}
+    times = iter(["2026-11-02T10:00:00Z", "2026-11-02T10:00:01Z", "2026-11-02T10:00:09Z"])
+    monkeypatch.setattr(module.legacy, "now", lambda: next(times))
+    refs = []
+    task = {"id": "t", "prompt_case_id": "p"}
+    assert run.prepare_prompt(task, "native", "t-native", refs) == "original"
+    path = tmp_path / "host-runs/t-native/host-dispatch.json"
+    original = path.read_bytes()
+    assert run.dispatch_evidence(task, "native", "t-native", refs) == "2026-11-02T10:00:09Z"
+    assert path.read_bytes() == original
+    assert sum(ref["id"] == "host-dispatch:t-native" for ref in refs) == 1

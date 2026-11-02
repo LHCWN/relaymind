@@ -48,3 +48,25 @@ def test_bundle_refuses_overlapping_roots_before_writing(tmp_path):
             cls(out, private)
         assert not out.exists()
         assert not private.exists()
+
+
+def test_large_runtime_original_is_copied_privately_without_truncation(tmp_path):
+    """RM12/RM16: transport-sized captures survive private evidence bundling."""
+    path = ROOT / "evaluation/assets/automated-host-277/bundle.py"
+    spec = importlib.util.spec_from_file_location("automated_large_bundle", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    cls = module.private_runtime_bundle(module.legacy.Bundle, {"raw-call"})
+    bundle = cls(tmp_path / "public", tmp_path / "private")
+    payload = b"x" * (1024 * 1024 + 123)
+    bundle.file(
+        "raw-call",
+        "host_transcript",
+        "redistributable",
+        payload,
+        publish=True,
+        relative="raw/response.bin",
+    )
+    assert (tmp_path / "private/raw/response.bin").read_bytes() == payload
+    assert bundle.evidence["raw-call"]["bytes"] == len(payload)
+    assert bundle.evidence["raw-call"]["path"] is None

@@ -33,7 +33,7 @@ def _write_private(path: Path, data: bytes) -> None:
         sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
         from relaymind.recommendations.private_files import create_private_file_exclusive
 
-        if not create_private_file_exclusive(path.absolute(), data):
+        if not create_private_file_exclusive(path.absolute(), data, maximum=MAX_REQUEST_BYTES):
             raise FileExistsError("capture_exists")
         return
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
