@@ -52,13 +52,26 @@ def test_committed_negative_record_loads_and_disables_the_operation(record_id):
     assert record.machine["role"] == "linux_host"
     roles = {subject["role"] for subject in record.document["subjects"]}
     assert roles == {"capture", "inventory"}
-    # The committed record is pending: it lists no known host limitation yet.
-    assert not record.approved
-    assert known_host_limitations([record]) == []
+    # A follow-up review can approve this record; a pending record still lifts nothing.
+    if record.approved:
+        assert known_host_limitations([record]) == [
+            dict(
+                operation=operation["name"],
+                host=operation["host"],
+                host_version=operation["host_version"],
+                finding=operation["finding"],
+                record_id=record_id,
+            )
+        ]
+    else:
+        assert known_host_limitations([record]) == []
 
 
 @pytest.mark.parametrize("record_id", sorted(RECORDS))
-def test_an_approved_copy_of_the_record_is_a_known_host_limitation(record_id, tmp_path):
+@pytest.mark.parametrize("approved", [False, True])
+def test_a_reviewed_copy_obeys_the_committed_record_check(
+    record_id, tmp_path, monkeypatch, approved
+):
     """RM39; AC30, AC35: once its review is written in, the record lists the limitation.
 
     The review is filled in a temporary copy; the committed record is never edited.
@@ -68,21 +81,29 @@ def test_an_approved_copy_of_the_record_is_a_known_host_limitation(record_id, tm
     for subject in document["subjects"]:
         shutil.copyfile(EVIDENCE / subject["path"], tmp_path / subject["path"])
     document["review"].update(
-        pull_request=267, reviewer_logins=["reviewer-one"], approved_at="2026-11-05T00:00:00Z"
+        pull_request=267 if approved else None,
+        reviewer_logins=["reviewer-one"] if approved else [],
+        approved_at="2026-11-05T00:00:00Z" if approved else None,
     )
     (tmp_path / source.name).write_text(json.dumps(document, indent=2) + "\n")
     record = load_record(tmp_path / source.name)
     operation = document["operation"]
-    assert record.approved
-    assert known_host_limitations([record]) == [
-        dict(
-            operation=operation["name"],
-            host="openclaw",
-            host_version="2026.10.7",
-            finding=RECORDS[record_id][1],
-            record_id=record_id,
-        )
-    ]
+    monkeypatch.setattr(sys.modules[__name__], "EVIDENCE", tmp_path)
+    test_committed_negative_record_loads_and_disables_the_operation(record_id)
+    assert record.approved is approved
+    assert known_host_limitations([record]) == (
+        [
+            dict(
+                operation=operation["name"],
+                host="openclaw",
+                host_version="2026.10.7",
+                finding=RECORDS[record_id][1],
+                record_id=record_id,
+            )
+        ]
+        if approved
+        else []
+    )
 
 
 def _module(name, relative):
@@ -270,7 +291,30 @@ def test_no_negative_skill_loaded_use_record_is_committed():
     for path in EVIDENCE.glob("m10-*.json"):
         document = json.loads(path.read_text())
         operation = document.get("operation") or {}
-        assert operation.get("name") != "skill_loaded_use", path.name
+        assert not (
+            document.get("outcome") == "negative"
+            and operation.get("name") == "skill_loaded_use"
+            and operation.get("finding") == "stop_point_absent"
+        ), path.name
+
+
+@pytest.mark.parametrize("outcome", ["positive", "negative"])
+def test_loaded_use_record_guard_allows_only_the_positive_record(tmp_path, monkeypatch, outcome):
+    """RM39; AC30: a positive loaded-use qualification is permitted by section 12.6.6."""
+    document = dict(
+        outcome=outcome,
+        operation=dict(
+            name="skill_loaded_use",
+            finding="qualified" if outcome == "positive" else "stop_point_absent",
+        ),
+    )
+    (tmp_path / "m10-loaded-use.json").write_text(json.dumps(document))
+    monkeypatch.setattr(sys.modules[__name__], "EVIDENCE", tmp_path)
+    if outcome == "positive":
+        test_no_negative_skill_loaded_use_record_is_committed()
+    else:
+        with pytest.raises(AssertionError):
+            test_no_negative_skill_loaded_use_record_is_committed()
 
 
 def test_mcp_record_binds_the_corrected_discovery_capture():
@@ -409,6 +453,22 @@ def test_ci_runs_record_checks_with_history_and_installed_packages():
 
 
 def _assert_capture_privacy(text):
+    def check_fields(value):
+        if isinstance(value, dict):
+            for key, item in value.items():
+                # The search inventory's host object describes the pinned package,
+                # not a machine. Keep this exception closed to that metadata.
+                package_metadata = key == "host" and item == dict(
+                    package="openclaw", version="2026.10.7", sdk_package_version="2026.10.7"
+                )
+                if key.lower() in {"hostname", "host", "machinename"} and not package_metadata:
+                    assert isinstance(item, str) and re.fullmatch(r"sha256:[0-9a-fA-F]{64}", item)
+                check_fields(item)
+        elif isinstance(value, list):
+            for item in value:
+                check_fields(item)
+
+    check_fields(json.loads(text))
     assert "runnervm" not in text
     assert re.findall(r"host=(?!sha256:[0-9a-f]{64})[^ |\\\"]+", text) == []
     # These are the documented VPS substitution and the standard CI account.
@@ -584,13 +644,16 @@ def shipped_operations(source):
     registry = declaration[1]
     keys = list(re.finditer(r"""\boperations["']?\s*:\s*""", registry))
     assert keys, "no operations array in NATIVE_QUALIFICATIONS"
-    value = re.compile(r"(?:Object\.freeze\s*\(\s*)?\[([^\]]*)\]")
+    value = re.compile(
+        r"(?P<freeze>Object\.freeze\s*\(\s*)?\[(?P<array>[^\]]*)\]\s*"
+        r"(?:as\s+const\b\s*)?(?(freeze),?\s*\)\s*(?:as\s+const\b\s*)?)(?=[,}])"
+    )
     operations = []
     for key in keys:
         # Every key must hold a literal array: a value this check cannot read fails it.
         match = value.match(registry, key.end())
         assert match, f"unreadable operations value: {registry[key.end() :][:40]!r}"
-        array = match[1]
+        array = match["array"]
         # Every element is one quoted operation name; anything else fails the check.
         elements = [element.strip() for element in array.split(",")]
         if elements and not elements[-1]:
@@ -665,3 +728,34 @@ def test_the_registry_check_refuses_an_unreadable_operations_array():
     listed = "export const NATIVE_QUALIFICATIONS: X[] = [{ operations: [MCP_USE] }];"
     with pytest.raises(AssertionError, match="unreadable operations array"):
         shipped_operations(listed)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        '["direct_actions"].concat(["mcp_use"])',
+        'Object.freeze(["direct_actions"]).concat(["mcp_use"])',
+        '["direct_actions"].slice(0)',
+        'Object.freeze(["direct_actions"] as const).slice(0)',
+    ],
+)
+def test_registry_check_rejects_array_expressions(value):
+    """RM39; AC30, AC35: the literal must be the entire operations value."""
+    source = f"export const NATIVE_QUALIFICATIONS = [{{ operations: {value} }}];"
+    with pytest.raises(AssertionError, match="unreadable operations value"):
+        shipped_operations(source)
+
+
+@pytest.mark.parametrize("key", ["hostname", "HOSTNAME", "host", "hostName", "machineName"])
+@pytest.mark.parametrize("value", ["private-laptop", "sha256:" + "a" * 63, "sha256:" + "a" * 65])
+def test_capture_privacy_rejects_plaintext_json_hostnames(key, value):
+    """RM16/RM37: hostname fields are private at every nesting level."""
+    for document in ({key: value}, {"machine": {key: value}}, {"env": [{key: value}]}):
+        with pytest.raises(AssertionError):
+            _assert_capture_privacy(json.dumps(document))
+
+
+@pytest.mark.parametrize("key", ["hostname", "HOSTNAME", "host", "hostName", "machineName"])
+def test_capture_privacy_accepts_hashed_json_hostnames(key):
+    """RM16/RM37: published hostname fields carry only a SHA-256 digest."""
+    _assert_capture_privacy(json.dumps({"env": [{key: "sha256:" + "aB" * 32}]}))
