@@ -1,0 +1,20 @@
+{
+  "recorder": "opencode2-cli-recorder",
+  "version": "1",
+  "tool": "opencode2",
+  "requested_model": "opencode-go/glm-5.3-flash",
+  "agent": "benchmark-review",
+  "agent_definition_sha256": "a06d472d7337439a5df4e274d0271680e73bdde17615052a8c3df18bbd2c35f5",
+  "resumed_session_id": "ses_e62b3d396ffeFNtpx9HRYlb32I",
+  "started_at": "2026-11-02T17:41:15Z",
+  "completed_at": "2026-11-02T17:41:44Z",
+  "exit_code": 0,
+  "observed_session_ids": [
+    "ses_e62b3d396ffeFNtpx9HRYlb32I"
+  ],
+  "prompt_sha256": "1ea7aebc8e340a91cf47647b5aef83932675a3415d2afb0e2003bbd142ad9d86",
+  "input_sha256": "ccea3190eeea8f733edf38f4b4bdc19173b147099ed702a643a04facce131468",
+  "output_sha256": "19266fe45266500a4a54c785bdb24af4c7b60806991170ef18a83c7e402b74c3",
+  "prior_invocation_sha256": "0eba866ff2bbfd89981f040b449ddab02fbad04957163ef9488f6c4fe8174d6d",
+  "prior_output_sha256": "c494047396273c8d1ead4753dbcc109b45abfd79b37ed46cdf20fe5a6daeabb9"
+}

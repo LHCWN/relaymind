@@ -3624,3 +3624,24 @@ revision binding remains unsupported by the qualified composition and requires
 a supported host integration decision in #187 before later MCP use. Human
 allow/deny approval, live-model task quality and supported-platform acceptance
 are not_run. Spec 0.50 RM08/RM09/RM12/RM16/RM33 and AC24 remain normative.
+
+
+## 2026-11-02 — Retained loaded-use fence on the pinned VPS
+
+RM16/RM37/RM39; AC28/AC30; spec 0.68 sections 7.6.1 and 12.6.6.
+The [capture and invocation record](evidence/m10/retained-boundary-20261102/README.md)
+records the actual Linux x86-64 VPS, pinned OpenClaw 2026.10.7, qualification
+command and deterministic receiving endpoint. The retained borrow reaches the
+provider and its currentness check survives RPC completion. Fresh public
+library dispatch at that boundary refuses; positive, stale and deleted cases
+send zero model requests. Reset is refused and waiting revocation remains
+unrun. These are diagnostic observations, not positive loaded-use qualification
+or model-quality measurements.
+
+The [scoped negative record](evidence/m10/m10-negative-loaded-use-openclaw-2026.10.7.json)
+binds the captures, supported SDK search, normative scope and two actual
+OpenCode 2 review contexts. Both approve without material findings, and the
+record verifier validates their original outputs and bindings. This establishes
+a reviewed limitation of the pinned supported native composition, not universal
+impossibility for custom executors or later hosts. Loaded use remains disabled.
+The original withdrawn claim and all failed or unrun controls remain unchanged.

@@ -11,7 +11,9 @@ codebase.
    requirement IDs from it (RM01–RM44, AC01–AC37; RM30 and AC23 are retired;
    RM33 and AC24 specify the M9 OpenClaw integration, added in 0.47 and
    revised in 0.49 and 0.50; RM34–RM44 and AC25–AC37 define M10
-   recommendations, added in 0.51 and revised in 0.52, 0.53, 0.55, 0.56, 0.57, 0.58, 0.59, 0.60, 0.61, 0.62, 0.63, 0.64, 0.65 and 0.66; the spec is at 0.66). Implementation status
+   recommendations, added in 0.51 and revised through 0.68; the spec is at 0.68).
+   Sections 12.6.6–12.6.7 define recorded automated qualification review and
+   the separate automated host experiment. Implementation status
    is recorded in docs/ROADMAP.md. If code and spec disagree,
    the spec wins. If the spec is wrong, revise the spec first, then change
    the code.

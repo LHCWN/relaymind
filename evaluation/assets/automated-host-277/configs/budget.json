@@ -1,0 +1,12 @@
+{
+ "format": "relaymind.automated_host_task_budget.v1",
+ "host_turn_timeout_s": 600,
+ "retries": 0,
+ "per_generation_seconds": 120,
+ "external_seconds": 120,
+ "row_token_limit": 250000,
+ "total_token_limit": 13000000,
+ "judge_token_limit": 300000,
+ "max_output_tokens": 8192,
+ "context_limit": 128000
+}

@@ -61,6 +61,9 @@ class Bundle:
         self.out, self.private = out.absolute(), private.absolute()
         self.documents, self.evidence, self.resolver = [], {}, []
 
+    def put_private(self, relative: str, payload: bytes) -> None:
+        put(self.private, relative, payload)
+
     def document(self, kind: str, value: dict, *, publish: bool = True, payload=None) -> None:
         payload = payload_of(value) if payload is None else payload
         digest = canonical_digest(value)
@@ -77,7 +80,7 @@ class Bundle:
             put(self.out, relative, payload)
             path = relative
         else:
-            put(self.private, relative, payload)
+            self.put_private(relative, payload)
             self.resolver.append(
                 dict(id=name, hash_kind="canonical", hash=digest, bytes=len(payload), path=relative)
             )
@@ -102,7 +105,7 @@ class Bundle:
             put(self.out, relative, payload)
             path = relative
         else:
-            put(self.private, relative, payload)
+            self.put_private(relative, payload)
             self.resolver.append(
                 dict(
                     id=evidence_id,
@@ -141,7 +144,7 @@ class Bundle:
             self.document(kind, value)
             for item in value["files"]:
                 relative = "originals/" + item["path"]
-                put(self.private, relative, read_local(REPO, item["path"], DOCUMENT_BYTES))
+                self.put_private(relative, read_local(REPO, item["path"], DOCUMENT_BYTES))
                 self.resolver.append(
                     dict(
                         id="file:" + hashlib.sha256(item["path"].encode()).hexdigest(),
@@ -168,7 +171,7 @@ class Bundle:
             {(e["id"], e["hash_kind"], e["hash"]): e for e in self.resolver}.values(),
             key=lambda e: (e["id"], e["hash_kind"], e["hash"]),
         )
-        put(self.private, "resolver.json", payload_of(dict(schema_version=1, entries=entries)))
+        self.put_private("resolver.json", payload_of(dict(schema_version=1, entries=entries)))
 
 
 def add_extra_evidence(bundle: Bundle, extra: dict, *, root: Path) -> None:

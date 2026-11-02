@@ -1,0 +1,214 @@
+"""RM16/RM44; AC36: judging uses frozen model and prompt identities."""
+
+import importlib.util
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def module():
+    path = ROOT / "evaluation/assets/automated-host-277/judge.py"
+    spec = importlib.util.spec_from_file_location("automated_judging", path)
+    result = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(result)
+    return result
+
+
+def test_judging_selects_frozen_model_without_changing_old_defaults():
+    m = module()
+    protocol = m.read(m.HERE / "protocol.json")
+    entry = m.judging_identity(
+        protocol, ["judge", "--template", "judge-a.txt", "--name", "judge-a"]
+    )
+    assert entry["model"] == "glm-5.3-flash"
+    assert entry["temperature"] == 0
+
+
+def test_judging_refuses_unfrozen_template_and_identity():
+    m = module()
+    protocol = m.read(m.HERE / "protocol.json")
+    for args in (
+        ["judge", "--template", "../owner-run-260/prompts/judge-a.txt", "--name", "judge-a"],
+        ["judge", "--template", "judge-a.txt", "--name", "other"],
+    ):
+        with pytest.raises(ValueError):
+            m.judging_identity(protocol, args)
+
+
+def test_judging_refuses_changed_template_digest():
+    m = module()
+    protocol = m.read(m.HERE / "protocol.json")
+    protocol["judges"][2]["prompt_sha256"] = "0" * 64
+    with pytest.raises(ValueError):
+        m.judging_identity(protocol, ["adjudicate"])
+
+
+def test_judging_retains_failed_response_and_unknown_charge(tmp_path, monkeypatch):
+    m = module()
+    calls = []
+
+    class Ledger:
+        path = tmp_path / "ledger.json"
+
+        def reserve(self, *args):
+            calls.append(("reserve", args))
+            return 1
+
+        def unknown(self, entry):
+            calls.append(("unknown", entry))
+
+        def settle(self, entry, usage):
+            calls.append(("settle", usage))
+
+    monkeypatch.setenv("RELAYMIND_EXTERNAL_BASE_URL", "https://example.invalid/v4")
+    monkeypatch.setenv("RELAYMIND_EXTERNAL_API_KEY", "private-test-key")
+
+    def transport(url, payload, headers, timeout, **kwargs):
+        assert timeout == 120
+        assert b"private-test-key" not in payload
+        return {"outcome": "completed", "status": 200, "body": b"not-json"}
+
+    chat = m.bounded_judge_chat("glm-5.3-flash", 0, lambda p, n: len(p) + n, transport)
+    with pytest.raises(ValueError):
+        chat(Ledger(), "judge-a", [], tmp_path, "batch")
+    assert [c[0] for c in calls] == ["reserve", "unknown"]
+
+
+def test_blind_and_apply_keep_original_rubric_directory():
+    m = module()
+    assert m.command_home("blind") == m.HERE.parent / "owner-run-260"
+    assert m.command_home("apply") == m.HERE.parent / "owner-run-260"
+    assert m.command_home("judge") == m.HERE
+
+
+def test_blinding_manifest_binds_items_without_revealing_map(tmp_path):
+    import json
+
+    m = module()
+    items = tmp_path / "items.json"
+    digest = tmp_path / "map-digest.json"
+    items.write_text(
+        json.dumps(
+            {"format": "relaymind.owner_run_blind_items.v1", "items": [{"blind_id": "blind"}]}
+        )
+    )
+    digest.write_text(
+        json.dumps(
+            {
+                "format": "relaymind.owner_run_blind_map_digest.v1",
+                "map_canonical_sha256": "a" * 64,
+                "items": 1,
+            }
+        )
+    )
+    manifest = m.blinding_manifest(items, digest)
+    m.validate_blinding(manifest, items)
+    assert manifest["map_canonical_sha256"] == "a" * 64
+    assert "map" not in manifest
+    items.write_text('{"items":[]}')
+    with pytest.raises(ValueError, match="blinding_items"):
+        m.validate_blinding(manifest, items)
+
+
+def test_judging_recovers_completed_capture_without_second_dispatch(tmp_path, monkeypatch):
+    import json
+
+    from test_owner_run_260_scripts import run_host
+
+    m = module()
+    ledger = run_host.harness.Ledger(tmp_path / "ledger.json", 10000)
+    calls = []
+    answer = {"choices": [], "usage": {"prompt_tokens": 4, "completion_tokens": 5}}
+    monkeypatch.setenv("RELAYMIND_EXTERNAL_BASE_URL", "https://example.invalid/v4")
+    monkeypatch.setenv("RELAYMIND_EXTERNAL_API_KEY", "fixture-key")
+
+    def transport(url, payload, headers, timeout, *, capture_root):
+        calls.append(payload)
+        folder = capture_root / "worker"
+        folder.mkdir(parents=True)
+        (folder / "result.json").write_text(json.dumps({"status": 200, "outcome": "completed"}))
+        (folder / "response.bin").write_text(json.dumps(answer))
+        (folder / "request.bin").write_bytes(payload)
+        raise RuntimeError("crash after captured response")
+
+    chat = m.bounded_judge_chat("model", 0, lambda p, n: 500, transport)
+    with pytest.raises(RuntimeError):
+        chat(ledger, "judge-a", [], tmp_path / "log", "batch")
+    recovered = chat(
+        run_host.harness.Ledger(tmp_path / "ledger.json", 10000),
+        "judge-a",
+        [],
+        tmp_path / "log",
+        "batch",
+    )
+    assert recovered == answer
+    assert len(calls) == 1
+    settled = run_host.harness.Ledger(tmp_path / "ledger.json", 10000)
+    assert settled.total == 9
+    assert len(settled.data["reservations"]) == 1
+    assert chat(settled, "judge-a", [], tmp_path / "log", "batch") == answer
+    assert settled.total == 9
+
+
+def test_judging_refuses_replay_after_incomplete_dispatch(tmp_path, monkeypatch):
+    from test_owner_run_260_scripts import run_host
+
+    m = module()
+    ledger = run_host.harness.Ledger(tmp_path / "ledger.json", 10000)
+    calls = []
+    monkeypatch.setenv("RELAYMIND_EXTERNAL_BASE_URL", "https://example.invalid/v4")
+    monkeypatch.setenv("RELAYMIND_EXTERNAL_API_KEY", "fixture-key")
+
+    def transport(*args, **kwargs):
+        calls.append(1)
+        raise RuntimeError("connection lost")
+
+    chat = m.bounded_judge_chat("model", 0, lambda p, n: 500, transport)
+    with pytest.raises(RuntimeError):
+        chat(ledger, "judge-a", [], tmp_path / "log", "batch")
+    with pytest.raises(ValueError, match="judge_invocation_incomplete"):
+        chat(ledger, "judge-a", [], tmp_path / "log", "batch")
+    assert len(calls) == 1
+    assert ledger.total == 500
+
+
+def test_paid_judging_requires_committed_blinding_before_ledger(tmp_path):
+    import json
+
+    m = module()
+    items = tmp_path / "items.json"
+    digest = tmp_path / "map-digest.json"
+    manifest = tmp_path / "manifest.json"
+    items.write_text(json.dumps({"format": "relaymind.owner_run_blind_items.v1", "items": []}))
+    digest.write_text(
+        json.dumps(
+            {
+                "format": "relaymind.owner_run_blind_map_digest.v1",
+                "map_canonical_sha256": "a" * 64,
+                "items": 0,
+            }
+        )
+    )
+    manifest.write_text(json.dumps(m.blinding_manifest(items, digest)))
+    checked = []
+    with pytest.raises(ValueError, match="blinding_commit_required"):
+        m.require_blinding(lambda *args: checked.append(args), None, manifest, items)
+    assert checked == []
+    m.require_blinding(lambda *args: checked.append(args), "b" * 40, manifest, items)
+    assert checked == [("b" * 40, [manifest])]
+    items.write_text("{}")
+    with pytest.raises(ValueError, match="blinding_items"):
+        m.require_blinding(lambda *args: None, "b" * 40, manifest, items)
+
+
+def test_shared_judge_cap_has_exclusive_lock(tmp_path):
+    m = module()
+    ledger = tmp_path / "ledger.json"
+    with m.ledger_lock(ledger):
+        with pytest.raises(ValueError, match="judge_ledger_locked"):
+            with m.ledger_lock(ledger):
+                pytest.fail("concurrent ledger admitted")
+    with m.ledger_lock(ledger):
+        pass

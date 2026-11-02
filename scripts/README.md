@@ -910,3 +910,29 @@ rescan manually, execute assets or change inference budgets/provider. Keep it
 running in the background for the real interval. See the source section in
 `docs/TESTING.md` and the versioned actual/fixture distinctions in
 `docs/evidence/2026-10-30-github-skill-source/README.md`.
+
+### Automated host preregistration (#277)
+
+`asset_automated_host.py` checks the spec 0.67 automated protocol, original
+source tasks and lock, and new task/freeze wrappers (RM16, RM40, RM44; AC31,
+AC36). It writes an exclusive, durable preregistration file; an existing
+output is never overwritten. It makes no network request or model call.
+
+```bash
+python scripts/asset_automated_host.py \
+  --protocol /private/run/protocol.json \
+  --source-tasks evaluation/assets/owner-run-260/host-tasks.json \
+  --source-lock evaluation/assets/owner-run-260/lock.json \
+  --tasks /private/run/tasks.json --freeze /private/run/freeze.json \
+  --output /private/run/preregistration.json
+```
+
+Prepare the private output directory first. The protocol shape is in spec
+12.6.7; use complete actual model and prompt identities. Commit the generated
+file with its frozen inputs before dispatch. This command checks identity
+bindings, not original private catalog availability, execution, review or
+acceptance. The bounded runner, blind judging wrapper and private evidence
+bundler live in `evaluation/assets/automated-host-277/`; its README documents
+the frozen budgets and execution/review sequence. `automated_host_transport.py`
+provides the runner's subprocess-owned, bounded transport. It is an internal
+helper, not an independent credential or model endpoint configuration tool.
