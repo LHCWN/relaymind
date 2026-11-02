@@ -27,6 +27,7 @@ from gateway_helpers import text_turn, tool_turn
 from test_openclaw_host_transport import PACKAGE, REQUIRED, _missing, _node
 from test_openclaw_plugin import client_gateway, drive_plugin
 from test_openclaw_round_trips import ECHO
+from workflow_helpers import github_expression
 
 PINNED = "2026.10.7"
 RUNTIME_FILES = {"package.json", "README.md", "README.zh-CN.md", "openclaw.plugin.json"}
@@ -407,21 +408,32 @@ CI_FILE = Path(__file__).resolve().parent.parent / ".github" / "workflows" / "ci
 
 @pytest.mark.parametrize("job_name", ["check", "openclaw-plugin"])
 @pytest.mark.parametrize(
-    "event_name,base_ref,api_base,expected",
+    "event_name,ref,base_ref,api_base,expected",
     [
-        ("pull_request", "master", "master", ["ubuntu-latest", "macos-latest", "windows-latest"]),
-        ("push", "", None, ["ubuntu-latest", "macos-latest", "windows-latest"]),
-        ("workflow_dispatch", "", None, ["ubuntu-latest", "macos-latest", "windows-latest"]),
-        ("pull_request", "feature", "feature", ["ubuntu-latest"]),
-        # A stacked pull request: base_ref names the stack's bottom (master),
-        # while the pull request's own base is a feature branch.
-        ("pull_request", "master", "feature", ["ubuntu-latest"]),
+        (
+            "pull_request",
+            "refs/pull/7/merge",
+            "master",
+            "master",
+            ["ubuntu-latest", "windows-latest"],
+        ),
+        (
+            "push",
+            "refs/heads/master",
+            "",
+            None,
+            ["ubuntu-latest", "macos-latest", "windows-latest"],
+        ),
+        ("push", "refs/tags/v1", "", None, ["ubuntu-latest", "windows-latest"]),
+        ("workflow_dispatch", "refs/heads/master", "", None, ["ubuntu-latest", "windows-latest"]),
+        ("pull_request", "refs/pull/7/merge", "feature", "feature", ["ubuntu-latest"]),
+        ("pull_request", "refs/pull/7/merge", "master", "feature", ["ubuntu-latest"]),
     ],
 )
 def test_ci_platform_matrix_for_each_event(
-    job_name, event_name, base_ref, api_base, expected, tmp_path
+    job_name, event_name, ref, base_ref, api_base, expected, tmp_path
 ):
-    """RM33/AC24: stacked PRs save capacity; master PRs and pushes cover every OS."""
+    """RM33/AC24: macOS runs only on master pushes; other coverage is retained."""
     import yaml
 
     workflow = yaml.safe_load(CI_FILE.read_text("utf-8"))
@@ -433,6 +445,7 @@ def test_ci_platform_matrix_for_each_event(
     plan = workflow["jobs"]["plan"]
     assert plan["permissions"] == {"pull-requests": "read"}
     (step,) = plan["steps"]
+    assert step["env"]["REF"] == "${{ github.ref }}"
     assert step["env"]["BASE"] == "${{ github.base_ref }}"
     assert step["env"]["PR"] == "${{ github.event.pull_request.number }}"
     bash = shutil.which("bash")
@@ -448,6 +461,7 @@ def test_ci_platform_matrix_for_each_event(
     env = dict(
         os.environ,
         EVENT=event_name,
+        REF=ref,
         BASE=base_ref,
         PR="7" if event_name == "pull_request" else "",
         REPO="owner/repo",
@@ -519,80 +533,11 @@ def test_a_driver_knows_it_is_the_entry_point_on_every_supported_platform(driver
     assert "import.meta.url === pathToFileURL(process.argv[1]).href" in source
 
 
-def _github_expression(text: str, context: dict):
-    """Evaluate the small GitHub Actions expression subset the CI workflow uses.
-
-    Supports property paths, single-quoted strings, ``!``, ``==``, ``!=``,
-    ``&&`` and ``||`` with the documented value-returning semantics; a missing
-    property is null and strings compare ignoring case, as on GitHub.
-    """
-    import re
-
-    pattern = r"\|\||&&|==|!=|!|\(|\)|'[^']*'|[A-Za-z_][\w.-]*"
-    tokens = re.findall(pattern, text)
-    assert re.sub(pattern, "", text).strip() == "", text
-    pos = 0
-
-    def peek():
-        return tokens[pos] if pos < len(tokens) else None
-
-    def take():
-        nonlocal pos
-        pos += 1
-        return tokens[pos - 1]
-
-    def primary():
-        token = take()
-        if token == "(":
-            value = either()
-            assert take() == ")"
-            return value
-        if token == "!":
-            return not primary()
-        if token.startswith("'"):
-            return token[1:-1]
-        value = context
-        for part in token.split("."):
-            value = value.get(part) if isinstance(value, dict) else None
-        return value
-
-    def fold(value):
-        return value.casefold() if isinstance(value, str) else value
-
-    def compare():
-        left = primary()
-        while peek() in ("==", "!="):
-            op, right = take(), primary()
-            equal = fold(left) == fold(right)
-            left = equal if op == "==" else not equal
-        return left
-
-    def both():
-        left = compare()
-        while peek() == "&&":
-            take()
-            right = compare()
-            left = right if left else left
-        return left
-
-    def either():
-        left = both()
-        while peek() == "||":
-            take()
-            right = both()
-            left = left if left else right
-        return left
-
-    value = either()
-    assert pos == len(tokens), text
-    return value
-
-
 def _interpolate(template: str, context: dict) -> str:
     import re
 
     def one(match):
-        value = _github_expression(match.group(1), context)
+        value = github_expression(match.group(1), context)
         if isinstance(value, bool):
             return "true" if value else "false"
         return "" if value is None else str(value)
@@ -613,7 +558,7 @@ def _interpolate(template: str, context: dict) -> str:
     ],
 )
 def test_ci_reruns_the_matrix_when_a_stacked_pr_is_retargeted(action, changes, plans, edit_group):
-    """RM33/AC24: a stacked PR retargeted to master gets the full matrix before merge.
+    """RM33/AC24: a stacked PR retargeted to master gets Linux and Windows coverage before merge.
 
     Retargeting sends a pull_request ``edited`` event. The plan job's condition
     and the concurrency group are evaluated for each event shape; the plan step
@@ -636,6 +581,6 @@ def test_ci_reruns_the_matrix_when_a_stacked_pr_is_retargeted(action, changes, p
             "event": event,
         }
     }
-    assert bool(_github_expression(workflow["jobs"]["plan"]["if"], context)) is plans
+    assert bool(github_expression(workflow["jobs"]["plan"]["if"], context)) is plans
     group = _interpolate(workflow["concurrency"]["group"], context)
     assert group == ("ci-CI-7-edit" if edit_group else "ci-CI-7")

@@ -1014,8 +1014,10 @@ and native x86-64 Windows machines; those runs remain open in #241, #235 and
 
 The separate workflow `.github/workflows/platform-runs.yml` (`Platform runs`)
 runs the kit on `macos-latest` (Apple Silicon, arm64), `windows-latest` (native
-x86-64 Windows) and `ubuntu-latest`. It starts by hand (`workflow_dispatch`)
-or on a pull request that changes a file the run depends on: `src/relaymind`,
+x86-64 Windows) and `ubuntu-latest`. Qualifying pushes to `master` run all
+three platforms in the same workflow, including direct pushes without a PR.
+Manual runs (`workflow_dispatch`) and pull requests run Linux and Windows.
+Pushes and pull requests start it only when a file the run depends on changes: `src/relaymind`,
 its scripts, `integrations/openclaw`, the default skills, the test helpers and
 fixtures the bundle and the ordinary harness load, `pyproject.toml` and the
 specification. Other pull requests stay fast. Each platform runs:
@@ -1081,7 +1083,8 @@ catalog (with 100 genuine MCP tools) does not exist yet. The interactive host
 approvals are not exercised. A runner report is functional evidence about the
 hosted platform only.
 
-**Run and record.**
+**Run and record.** A manual run captures Linux and Windows only, including
+when `<branch>` is `master`:
 
 ```bash
 gh workflow run platform-runs.yml --ref <branch>
@@ -1090,6 +1093,19 @@ gh run download <run-id> -D docs/evidence/<date>-asset-platform-runs-github-runn
 python scripts/asset_platform_run.py verify \
   docs/evidence/<date>-asset-platform-runs-github-runners/<run-id>
 ```
+
+For all three platforms, use the `Platform runs` workflow created by a push to
+`master` that touches the dependency paths. Find its run ID, then use the same
+watch, download and verify commands above:
+
+```bash
+gh run list --workflow platform-runs.yml --branch master --event push
+```
+
+Do not combine artifacts from different commits or describe a manual run as
+three-platform evidence. `verify` checks the reports supplied; it does not
+require all three operating systems to be present. A successful verification
+of a manual run therefore says nothing about macOS.
 
 `verify` prints one line per report and exits 1 when any report fails a grader,
 records harness errors, is missing its other half, or none is found. Run it from a checkout at the run's commit

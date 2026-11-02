@@ -1659,10 +1659,12 @@ inputs do not block tooling implementation or explicitly unqualified fixture run
 
 #241/#235 platform runs on GitHub-hosted runners (RM38, RM39, RM44; AC29,
 AC37): the separate `Platform runs` workflow
-(`.github/workflows/platform-runs.yml`; manual, or on pull requests that change
-its files) runs on `macos-latest` (arm64), `windows-latest` (native x86-64) and
-`ubuntu-latest`. It runs the lexical portion of the AC29 operations protocol as
-a fixture (`scripts/asset_operations_run.py operations`): ten clean launches from a
+(`.github/workflows/platform-runs.yml`) runs on `macos-latest` (arm64),
+`windows-latest` (native x86-64) and `ubuntu-latest` together on qualifying
+pushes to `master`. Pull requests and manual dispatches run Windows and Linux;
+macOS is restricted to master pushes to conserve runner budget. Pushes and PRs
+retain the dependency path filter. It runs the lexical portion of the AC29
+operations protocol as a fixture (`scripts/asset_operations_run.py operations`): ten clean launches from a
 generated 300-skill catalog, a recommendations-disabled memory baseline, and
 the 60-second 2 req/s workload. The workload has four 25-record metadata-import
 batches and a derived rebuild, driven by the existing `run_workload` through an

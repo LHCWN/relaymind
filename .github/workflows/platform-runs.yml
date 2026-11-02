@@ -19,6 +19,30 @@ name: Platform runs
 # protocol inventory binds (tests/test_asset_platform_run.py checks it).
 
 on:
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/platform-runs.yml
+      - .gitattributes
+      - pyproject.toml
+      - docs/SPECIFICATION.md
+      - src/relaymind/**
+      - scripts/asset_platform_run.py
+      - scripts/asset_operations_run.py
+      - scripts/asset_whole_task.py
+      - scripts/openclaw_install_check.py
+      - integrations/openclaw/**
+      - skills/**
+      - tests/test_asset_whole_task_inputs.py
+      - tests/whole_task_helpers.py
+      - tests/api_helpers.py
+      - tests/gateway_helpers.py
+      - tests/helpers.py
+      - tests/recommendation_helpers.py
+      - tests/test_asset_catalog.py
+      - tests/test_asset_sources.py
+      - tests/fixtures/asset-benchmark/**
+      - tests/fixtures/sandbox/**
   workflow_dispatch:
   pull_request:
     paths:
@@ -57,7 +81,9 @@ jobs:
       # Each platform reports its own result.
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+        # Master pushes collect all platforms together, including direct pushes.
+        # PRs and manual runs omit macOS to conserve runner budget.
+        os: ${{ fromJSON(github.event_name == 'push' && github.ref == 'refs/heads/master' && '["macos-latest", "windows-latest", "ubuntu-latest"]' || '["windows-latest", "ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
     # Every step has its own limit, and their sum (120) stays below the job's,
     # so a long step that reaches its own limit still leaves time for the
