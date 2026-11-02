@@ -537,10 +537,13 @@ def _workflow():
 
 
 def test_the_workflow_runs_on_the_three_hosted_platforms():
+    """RM38/RM39/AC37: preserve platform coverage with macOS on master pushes only."""
     workflow = _workflow()
     triggers = workflow[True]  # YAML 1.1 reads the bare key "on" as true.
+    assert triggers["push"]["branches"] == ["master"]
     assert "workflow_dispatch" in triggers
     paths = triggers["pull_request"]["paths"]
+    assert triggers["push"]["paths"] == paths
     for path in (
         ".github/workflows/platform-runs.yml",
         "scripts/asset_platform_run.py",
@@ -551,11 +554,25 @@ def test_the_workflow_runs_on_the_three_hosted_platforms():
         assert _covered(path, paths), path
     (job,) = workflow["jobs"].values()
     assert job["strategy"]["fail-fast"] is False
-    assert set(job["strategy"]["matrix"]["os"]) == {
-        "macos-latest",
-        "windows-latest",
-        "ubuntu-latest",
-    }
+    from test_openclaw_install import _github_expression
+
+    expression = job["strategy"]["matrix"]["os"]
+    assert expression.startswith("${{ fromJSON(") and expression.endswith(") }}")
+    for event, ref, macos in (
+        ("push", "refs/heads/master", True),
+        ("push", "refs/tags/v1", False),
+        ("pull_request", "refs/pull/7/merge", False),
+        ("workflow_dispatch", "refs/heads/master", False),
+    ):
+        platforms = json.loads(
+            _github_expression(
+                expression[len("${{ fromJSON(") : -len(") }}")],
+                {"github": {"event_name": event, "ref": ref}},
+            )
+        )
+        assert set(platforms) == (
+            {"macos-latest"} if macos else {"ubuntu-latest", "windows-latest"}
+        )
     assert job["timeout-minutes"] <= 130
     assert workflow["permissions"] == {"contents": "read"}
 

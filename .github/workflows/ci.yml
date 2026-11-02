@@ -5,8 +5,8 @@ on:
     branches: [master]
     tags: ['v*']
   # No base-branch filter: stacked PRs must get CI too, on Linux only to
-  # conserve CI capacity. Every PR must target master and pass the full
-  # Linux/macOS/Windows matrix before merge; pushes also run all platforms.
+  # conserve CI capacity. Master PRs run Linux and Windows; macOS runs
+  # only on pushes to master, never on tags or manual runs.
   # Retargeting a stacked PR to master is an "edited" event, so the matrix is
   # planned again without a new commit; other edits start no jobs.
   pull_request:
@@ -25,8 +25,8 @@ concurrency:
 
 jobs:
   # Stacked PRs (base is not master) run Linux only to conserve CI capacity; a
-  # PR to master, pushes and manual runs use all platforms, so every PR gets the
-  # full matrix before it merges. The decision is printed in this job's log.
+  # PR to master, tag pushes and manual runs use Linux and Windows. Only a
+  # master push adds macOS. The decision is printed in this job's log.
   plan:
     # Only a base-branch change re-plans an edited pull request.
     if: github.event.action != 'edited' || github.event.changes.base
@@ -40,6 +40,7 @@ jobs:
       - id: os
         env:
           EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
           BASE: ${{ github.base_ref }}
           PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
@@ -52,8 +53,10 @@ jobs:
           fi
           if [ "$EVENT" = "pull_request" ] && [ "$BASE" != "master" ]; then
             os='["ubuntu-latest"]'
-          else
+          elif [ "$EVENT" = "push" ] && [ "$REF" = "refs/heads/master" ]; then
             os='["ubuntu-latest", "macos-latest", "windows-latest"]'
+          else
+            os='["ubuntu-latest", "windows-latest"]'
           fi
           echo "event=$EVENT base=$BASE platforms=$os"
           echo "os=$os" >> "$GITHUB_OUTPUT"

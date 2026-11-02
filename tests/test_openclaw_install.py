@@ -407,21 +407,32 @@ CI_FILE = Path(__file__).resolve().parent.parent / ".github" / "workflows" / "ci
 
 @pytest.mark.parametrize("job_name", ["check", "openclaw-plugin"])
 @pytest.mark.parametrize(
-    "event_name,base_ref,api_base,expected",
+    "event_name,ref,base_ref,api_base,expected",
     [
-        ("pull_request", "master", "master", ["ubuntu-latest", "macos-latest", "windows-latest"]),
-        ("push", "", None, ["ubuntu-latest", "macos-latest", "windows-latest"]),
-        ("workflow_dispatch", "", None, ["ubuntu-latest", "macos-latest", "windows-latest"]),
-        ("pull_request", "feature", "feature", ["ubuntu-latest"]),
-        # A stacked pull request: base_ref names the stack's bottom (master),
-        # while the pull request's own base is a feature branch.
-        ("pull_request", "master", "feature", ["ubuntu-latest"]),
+        (
+            "pull_request",
+            "refs/pull/7/merge",
+            "master",
+            "master",
+            ["ubuntu-latest", "windows-latest"],
+        ),
+        (
+            "push",
+            "refs/heads/master",
+            "",
+            None,
+            ["ubuntu-latest", "macos-latest", "windows-latest"],
+        ),
+        ("push", "refs/tags/v1", "", None, ["ubuntu-latest", "windows-latest"]),
+        ("workflow_dispatch", "refs/heads/master", "", None, ["ubuntu-latest", "windows-latest"]),
+        ("pull_request", "refs/pull/7/merge", "feature", "feature", ["ubuntu-latest"]),
+        ("pull_request", "refs/pull/7/merge", "master", "feature", ["ubuntu-latest"]),
     ],
 )
 def test_ci_platform_matrix_for_each_event(
-    job_name, event_name, base_ref, api_base, expected, tmp_path
+    job_name, event_name, ref, base_ref, api_base, expected, tmp_path
 ):
-    """RM33/AC24: stacked PRs save capacity; master PRs and pushes cover every OS."""
+    """RM33/AC24: macOS runs only on master pushes; other coverage is retained."""
     import yaml
 
     workflow = yaml.safe_load(CI_FILE.read_text("utf-8"))
@@ -433,6 +444,7 @@ def test_ci_platform_matrix_for_each_event(
     plan = workflow["jobs"]["plan"]
     assert plan["permissions"] == {"pull-requests": "read"}
     (step,) = plan["steps"]
+    assert step["env"]["REF"] == "${{ github.ref }}"
     assert step["env"]["BASE"] == "${{ github.base_ref }}"
     assert step["env"]["PR"] == "${{ github.event.pull_request.number }}"
     bash = shutil.which("bash")
@@ -448,6 +460,7 @@ def test_ci_platform_matrix_for_each_event(
     env = dict(
         os.environ,
         EVENT=event_name,
+        REF=ref,
         BASE=base_ref,
         PR="7" if event_name == "pull_request" else "",
         REPO="owner/repo",
@@ -613,7 +626,7 @@ def _interpolate(template: str, context: dict) -> str:
     ],
 )
 def test_ci_reruns_the_matrix_when_a_stacked_pr_is_retargeted(action, changes, plans, edit_group):
-    """RM33/AC24: a stacked PR retargeted to master gets the full matrix before merge.
+    """RM33/AC24: a stacked PR retargeted to master gets Linux and Windows coverage before merge.
 
     Retargeting sends a pull_request ``edited`` event. The plan job's condition
     and the concurrency group are evaluated for each event shape; the plan step

@@ -1014,8 +1014,10 @@ and native x86-64 Windows machines; those runs remain open in #241, #235 and
 
 The separate workflow `.github/workflows/platform-runs.yml` (`Platform runs`)
 runs the kit on `macos-latest` (Apple Silicon, arm64), `windows-latest` (native
-x86-64 Windows) and `ubuntu-latest`. It starts by hand (`workflow_dispatch`)
-or on a pull request that changes a file the run depends on: `src/relaymind`,
+x86-64 Windows) and `ubuntu-latest`. Pushes to `master` run only macOS,
+avoiding duplicate Linux and Windows platform runs after PR checks.
+Manual runs (`workflow_dispatch`) and pull requests run Linux and Windows.
+Pushes and pull requests start it only when a file the run depends on changes: `src/relaymind`,
 its scripts, `integrations/openclaw`, the default skills, the test helpers and
 fixtures the bundle and the ordinary harness load, `pyproject.toml` and the
 specification. Other pull requests stay fast. Each platform runs:
