@@ -614,6 +614,8 @@ def test_the_executor_reserves_before_dispatch_and_keeps_the_charge_on_failure(
     run.budget = budget(tmp_path, cap=300_000, row=200_000)
     run.prompts = {"c1": "prompt"}
     run.work = tmp_path / "work"
+    run.evidence_root = tmp_path / "evidence"
+    run.secrets = []
     run.native = type("Host", (), dict(command=["openclaw"], env={}, config_path="c"))()
     seen = {}
 
@@ -1607,18 +1609,40 @@ def test_supported_record_scopes_load(tmp_path, scope):
     subjects = []
     for role in ("report", "freeze", "episodes" if scope == "adaptation" else "tasks"):
         path = tmp_path / f"{role}.json"
-        write(
-            path,
-            dict(
-                rows=[
-                    dict(
-                        status="completed",
-                        evidence_ids=[],
-                        attempts=[dict(started_at="2026-11-01T00:00:00Z")],
-                    )
-                ]
-            ),
+        document = dict(
+            rows=[
+                dict(
+                    status="completed",
+                    evidence_ids=[],
+                    attempts=[dict(started_at="2026-11-01T00:00:00Z")],
+                )
+            ]
         )
+        if role == "report" and scope in {"host_trial", "host_acceptance"}:
+            capture = tmp_path / "host-dispatch.json"
+            write(
+                capture,
+                dict(
+                    schema_version=1,
+                    task_id="t1",
+                    arm="native",
+                    started_at="2026-11-01T00:00:00Z",
+                ),
+            )
+            payload = capture.read_bytes()
+            document["rows"][0].update(
+                task_id="t1", arm="native", evidence_ids=["host-dispatch:t1-native"]
+            )
+            document["evidence"] = [
+                dict(
+                    id="host-dispatch:t1-native",
+                    path=capture.name,
+                    sha256=harness.sha256(payload),
+                    bytes=len(payload),
+                    provenance="observed",
+                )
+            ]
+        write(path, document)
         subjects += ["--subject", role, str(path)]
     args = parser.parse_args(
         [
@@ -1745,6 +1769,155 @@ def test_windows_stop_falls_back_to_kill_when_taskkill_is_missing(monkeypatch):
     monkeypatch.setattr(run_host.subprocess, "run", missing)
     run_host._stop(Child())
     assert calls == ["kill"]
+
+
+@pytest.fixture
+def dispatch_run(tmp_path, monkeypatch):
+    run = object.__new__(run_host.Run)
+    run.frozen = run_host.frozen_arm_configs(FREEZE, CONFIGS, MODEL)
+    run.budget = budget(tmp_path)
+    run.prompts = {"c1": "prompt"}
+    run.work = tmp_path / "work"
+    run.evidence_root = tmp_path / "evidence"
+    run.secrets = []
+    run.native = run.relay = SimpleNamespace(command=["fixture-host"], env={}, config_path="c")
+    run.gate = SimpleNamespace(
+        open_row=lambda *a: None,
+        charged=lambda: 10,
+        refused=False,
+        close_row=lambda: dict(prompt=8, completion=2, charged=10, refused=False),
+    )
+    monkeypatch.setattr(run, "run_ids", lambda: [])
+    monkeypatch.setattr(run, "gateway_events", lambda before: [])
+    monkeypatch.setattr(run_host.time, "sleep", lambda seconds: None)
+    return run
+
+
+@pytest.mark.parametrize("arm", ["native", "provider_only"])
+@pytest.mark.parametrize("status", ["completed", "failed", "timed_out"])
+def test_host_dispatch_is_durable_before_invocation_and_bound_to_row(
+    dispatch_run, monkeypatch, arm, status
+):
+    """RM16/RM44, AC36: even a failed dispatch has a verifiable start capture."""
+    from relaymind.evaluation.asset_qualification_record import first_host_dispatch
+
+    run = dispatch_run
+    started = "2026-11-03T00:00:00.000000Z"
+    monkeypatch.setattr(run_host, "now", lambda: started)
+    capture = run.evidence_root / f"host-runs/t1-{arm}/host-dispatch.json"
+    synced = []
+    fsync = run_host.os.fsync
+
+    def sync(fd):
+        synced.append(run_host.os.fstat(fd).st_ino)
+        fsync(fd)
+
+    monkeypatch.setattr(run_host.os, "fsync", sync)
+
+    def executed(*args, **kwargs):
+        assert capture.is_file(), "dispatch must be persisted before invoking the host"
+        assert capture.stat().st_ino in synced
+        assert read(capture) == dict(schema_version=1, task_id="t1", arm=arm, started_at=started)
+        return dict(
+            status=status,
+            exit_code=0 if status == "completed" else 1,
+            elapsed_ms=1,
+            row_tokens_at_stop=None,
+            stdout='{"ok":true}',
+            stderr="",
+        )
+
+    monkeypatch.setattr(run_host, "run_bounded", executed)
+    row, refs = run.execute(dict(id="t1", prompt_case_id="c1"), arm, run.frozen[arm]["config"])
+    assert row["status"] == {"timed_out": "timeout"}.get(status, status)
+    dispatch_refs = [r for r in refs if r["id"].startswith("host-dispatch:")]
+    assert len(dispatch_refs) == 1
+    assert dispatch_refs[0]["id"] in row["evidence_ids"]
+    assert first_host_dispatch(dict(rows=[row], evidence=refs), run.evidence_root) == started
+
+
+@pytest.mark.parametrize("crash", [False, True])
+def test_journal_resume_preserves_dispatch_and_skips_have_no_capture(
+    dispatch_run, tmp_path, monkeypatch, crash
+):
+    """RM16/RM44, AC36: resume never replaces an already dispatched row's capture."""
+    run = dispatch_run
+    tasks = read(SCRIPTS / "host-tasks.json")
+    run.prompts = {t["prompt_case_id"]: "prompt" for t in tasks["tasks"]}
+    calls = []
+
+    def executed(*args, **kwargs):
+        captures = list(run.evidence_root.rglob("host-dispatch.json"))
+        assert len(captures) == 1
+        calls.append(captures[0])
+        if crash:
+            raise RuntimeError("interrupted")
+        return dict(
+            status="failed",
+            exit_code=1,
+            elapsed_ms=1,
+            row_tokens_at_stop=None,
+            stdout="",
+            stderr="",
+        )
+
+    monkeypatch.setattr(run_host, "run_bounded", executed)
+    from whole_task_helpers import ENVIRONMENT, H
+
+    def plan():
+        return run_host.run_host_plan(
+            tasks,
+            FREEZE,
+            run.execute,
+            tmp_path / "journal.jsonl",
+            environment=ENVIRONMENT,
+            artifacts=[],
+            qualification="fixture",
+            input_manifest=dict(path="inputs.json", digest=H, bytes=1),
+            interrupted=lambda: bool(calls),
+            skip_reason=run.skip_reason,
+        )
+
+    if crash:
+        with pytest.raises(RuntimeError, match="interrupted"):
+            plan()
+    else:
+        plan()
+    capture = calls[0]
+    original = (capture.read_bytes(), capture.stat().st_mtime_ns)
+    resumed = plan()
+    assert len(calls) == 1
+    assert (capture.read_bytes(), capture.stat().st_mtime_ns) == original
+    assert any(r["status"] == "not_run" for r in resumed["rows"])
+    assert all(not r["evidence_ids"] for r in resumed["rows"] if r["status"] == "not_run")
+    assert list(run.evidence_root.rglob("host-dispatch.json")) == [capture]
+
+
+def test_existing_dispatch_capture_is_never_overwritten(dispatch_run, monkeypatch):
+    """RM16/RM44, AC36: even an inconsistent fresh journal cannot replace evidence."""
+    run = dispatch_run
+    capture = run.evidence_root / "host-runs/t1-native/host-dispatch.json"
+    capture.parent.mkdir(parents=True)
+    capture.write_bytes(b"original capture")
+    monkeypatch.setattr(run_host, "run_bounded", lambda *a, **kw: pytest.fail("host dispatched"))
+    with pytest.raises(FileExistsError):
+        run.execute(dict(id="t1", prompt_case_id="c1"), "native", run.frozen["native"]["config"])
+    assert capture.read_bytes() == b"original capture"
+
+
+def test_pre_start_refusals_do_not_write_dispatch(dispatch_run):
+    """RM16/RM44, AC36: unavailable choices and exhausted budgets never dispatch."""
+    run = dispatch_run
+    task = dict(id="t1", prompt_case_id="c1")
+    assert run.skip_reason(task, "recommendations", {}) == "person_choice_unavailable"
+    with pytest.raises(run_host.ExecutorFailed, match="person_choice_unavailable"):
+        run.execute(task, "recommendations", {})
+    run.budget.cap = 0
+    config = run.frozen["native"]["config"]
+    assert run.skip_reason(task, "native", config) == "budget_cap"
+    with pytest.raises(run_host.ExecutorFailed, match="budget_cap"):
+        run.execute(task, "native", config)
+    assert not list(run.evidence_root.rglob("host-dispatch.json"))
 
 
 def test_a_timed_out_row_has_reason_timeout(tmp_path, monkeypatch):

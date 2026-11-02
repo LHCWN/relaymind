@@ -131,6 +131,15 @@ These scripts are not digest-bound by the frozen lock. Their repairs do not
 change the lock, its inputs, qualification records or historical evidence,
 and do not establish new measured results.
 
+Every executed arm now writes `host-dispatch.json` immediately before invoking
+the host, with exclusive creation and a durable flush before any model call
+can start. Its observed `host-dispatch:<task-id>-<arm>` reference binds the
+capture to the row's `evidence_ids`, including failed rows. Pre-start skips
+and `not_run` rows have no capture; journal resume never rewrites a dispatched
+row's capture. The qualification verifier requires this bound dispatch time
+for every executed row in a preregistered host report. The committed partial
+report predates this rule and has no such captures; it remains unchanged.
+
 Future host runs check the reported host version and the provider tarball's
 SHA-256 and byte length against `host-freeze.json` before installation. The
 checked tarball is copied into the run's private directory and that copy is

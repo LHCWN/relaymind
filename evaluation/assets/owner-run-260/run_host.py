@@ -79,6 +79,7 @@ from relaymind.evaluation.asset_host_runner import (  # noqa: E402
     attempts_from_trace,
     run_host_plan,
 )
+from relaymind.evaluation.asset_run_journal import _fsync_directory  # noqa: E402
 from relaymind.evaluation.environment import checkout_environment  # noqa: E402
 
 PROVIDER = "external-openai-compatible"
@@ -747,8 +748,24 @@ class Run:
         payload = value if isinstance(value, bytes) else canonical_json(value).encode("utf-8")
         payload = self.sanitize(payload.decode("utf-8")).encode("utf-8")
         relative = f"host-runs/{key}/{name}"
-        digest = write_bytes(self.evidence_root / relative, payload)
+        path = self.evidence_root / relative
         evidence_id = f"{key}:{name}"
+        if name == "host-dispatch.json":
+            # A dispatch is immutable, including across interrupted/resumed runs.
+            directories = [path.parent]
+            while not directories[-1].exists():
+                directories.append(directories[-1].parent)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("xb") as stream:
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+            for directory in directories:
+                _fsync_directory(directory)
+            digest = dict(sha256=harness.sha256(payload), bytes=len(payload))
+            evidence_id = f"host-dispatch:{key}"
+        else:
+            digest = write_bytes(path, payload)
         refs.append(dict(id=evidence_id, path=relative, provenance="observed", **digest))
         return evidence_id
 
@@ -834,9 +851,16 @@ class Run:
             except (OSError, sqlite3.Error, ValueError):
                 gateway_usage_error = True
         prompt = self.prompts[task["prompt_case_id"]]
-        started = now()
+        refs: list = []
         self.gate.open_row(key, self.budget.row_budget)
         try:
+            started = now()
+            self.evidence(
+                key,
+                "host-dispatch.json",
+                dict(schema_version=1, task_id=task["id"], arm=arm, started_at=started),
+                refs,
+            )
             result = run_bounded(
                 [
                     *host.command,
@@ -861,7 +885,7 @@ class Run:
             )
         finally:
             gated = self.gate.close_row()
-        # Settled from the gate's charge, before any evidence is written.
+        # Settled from the gate's charge before writing result and usage evidence.
         self.budget.settle(
             key,
             arm,
@@ -870,7 +894,6 @@ class Run:
             charged=gated["charged"],
         )
         ended = now()
-        refs: list = []
         report = last_json(result["stdout"])
         self.evidence(
             key,
