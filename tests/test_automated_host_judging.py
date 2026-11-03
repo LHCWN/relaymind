@@ -216,3 +216,40 @@ def test_shared_judge_cap_has_exclusive_lock(tmp_path):
                 pytest.fail("concurrent ledger admitted")
     with m.ledger_lock(ledger):
         pass
+
+
+def test_adjudication_forwards_b_without_abbreviating_wrapper_options(tmp_path, monkeypatch):
+    """RM16/RM44: both judge files reach the command without altering --batch."""
+    from relaymind.evaluation.asset_automated_host import AutomatedHostRejected
+
+    m = module()
+    monkeypatch.setattr(
+        m.sys,
+        "argv",
+        [
+            str(m.HERE / "judge.py"),
+            "--protocol",
+            str(m.HERE / "protocol.json"),
+            "--preregistration-commit",
+            "invalid",
+            "--blind-manifest",
+            str(tmp_path / "manifest.json"),
+            "adjudicate",
+            "--items",
+            str(tmp_path / "items.json"),
+            "--a",
+            str(tmp_path / "a.json"),
+            "--b",
+            str(tmp_path / "b.json"),
+            "--ledger",
+            str(tmp_path / "ledger.json"),
+            "--cap",
+            "300000",
+            "--batch",
+            "6",
+        ],
+    )
+    # Reaching the source guard proves both wrapper parsers accepted the exact
+    # subcommand options. Invalid provenance prevents every paid invocation.
+    with pytest.raises(AutomatedHostRejected, match="preregistration_commit"):
+        m.main()

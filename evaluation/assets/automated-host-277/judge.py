@@ -41,7 +41,7 @@ def judging_identity(protocol: dict, arguments: list[str]) -> dict | None:
             != hashlib.sha256((HERE / "prompts" / (name + ".txt")).read_bytes()).hexdigest()
         ):
             raise ValueError("judge_binding")
-    parser = argparse.ArgumentParser(add_help=False)
+    parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
     parser.add_argument(
         "command", choices=("blind", "bind-blinding", "judge", "adjudicate", "apply")
     )
@@ -313,14 +313,14 @@ def ledger_lock(path: Path):
 
 def main() -> int:
     os.umask(0o077)
-    parser = argparse.ArgumentParser(add_help=False)
+    parser = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
     parser.add_argument("--protocol", type=Path, required=True)
     parser.add_argument("--preregistration-commit", required=True)
     parser.add_argument("--blind-manifest", type=Path, required=True)
     parser.add_argument("--blinding-commit")
     args, rest = parser.parse_known_args()
     entry = judging_identity(read(args.protocol), rest)
-    inspect = argparse.ArgumentParser(add_help=False)
+    inspect = argparse.ArgumentParser(add_help=False, allow_abbrev=False)
     inspect.add_argument("command")
     for name in ("items", "map", "map-digest", "ledger"):
         inspect.add_argument("--" + name, type=Path)
