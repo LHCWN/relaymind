@@ -253,3 +253,33 @@ def test_adjudication_forwards_b_without_abbreviating_wrapper_options(tmp_path, 
     # subcommand options. Invalid provenance prevents every paid invocation.
     with pytest.raises(AutomatedHostRejected, match="preregistration_commit"):
         m.main()
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "Saved <run-dir>/sandboxes/h008-provider_only/result.md; native language retained.",
+        r"Saved C:\sandbox\h006-native\result.md; native language retained.",
+        "Saved sandboxes/h009-provider_only/result.md; native language retained.",
+        "Saved sandboxes/h027-recommendations/result.md; native language retained.",
+    ],
+)
+def test_blind_answers_hide_arm_bearing_run_keys_without_removing_content(answer):
+    """RM16/RM44; AC36: sandbox identities must not reveal arms to blind judges."""
+    import re
+
+    m = module()
+    redacted = m.anonymize_run_identity(answer)
+    assert not re.search(r"h\d{3}-(native|provider_only|recommendations)", redacted)
+    assert "[RUN]" in redacted
+    assert "result.md; native language retained." in redacted
+
+
+def test_blinding_installs_anonymization_before_building_judge_items():
+    """RM16/RM44: the live blind-item builder receives anonymized answer bytes."""
+    from types import SimpleNamespace
+
+    m = module()
+    legacy = SimpleNamespace(final_answer=lambda root, row: "sandboxes/h008-provider_only/x")
+    m.configure_blinding(legacy)
+    assert legacy.final_answer(None, {}) == "sandboxes/[RUN]/x"

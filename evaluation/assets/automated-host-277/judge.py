@@ -30,6 +30,22 @@ def read(path: Path) -> dict:
     return parse_json(path.read_bytes())
 
 
+def anonymize_run_identity(answer: str) -> str:
+    """Hide harness task/arm keys echoed in POSIX or Windows sandbox paths."""
+    return re.sub(
+        r"(?<![\w-])h\d{3}-(?:native|provider_only|recommendations)(?![\w-])",
+        "[RUN]",
+        answer,
+        flags=re.IGNORECASE,
+    )
+
+
+def configure_blinding(legacy) -> None:
+    """Anonymize before the legacy builder freezes judge-visible answers."""
+    original = legacy.final_answer
+    legacy.final_answer = lambda root, row: anonymize_run_identity(original(root, row))
+
+
 def judging_identity(protocol: dict, arguments: list[str]) -> dict | None:
     """Bind the selected judge to its frozen role, model and exact template."""
     protocol = validate_protocol(protocol)
@@ -374,6 +390,8 @@ def main() -> int:
     spec.loader.exec_module(legacy)
     legacy.HERE = command_home(selected.command)
     legacy.write = lambda path, value: _durable(Path(path), value)
+    if selected.command == "blind":
+        configure_blinding(legacy)
     if entry is not None:
         from automated_host_transport import bounded_json_request
 
