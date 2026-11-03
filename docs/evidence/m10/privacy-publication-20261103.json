@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "policy": "local_home_path_redaction",
-  "description": "Only the local home-directory prefix is replaced with /home/vps-user. These are public projections, not original invocation bytes. Original files are retained privately; a public clone cannot verify the transformation. Final qualification-bound review artifacts are unchanged. Historical commits may still contain the previously published paths.",
+  "policy": "local_account_redaction",
+  "description": "Only the local account identifier is replaced with vps-user, including home paths and owner/group fields in command output. These are public projections, not original invocation bytes. Original files are retained privately; a public clone cannot verify the transformation. Final qualification-bound review artifacts are unchanged. Historical commits may still contain the previously published identifiers.",
   "files": [
     {
       "path": "automated-host-20261102/recover-first-row.py",
@@ -42,7 +42,7 @@
       "path": "retained-boundary-20261102/review-a/output.jsonl",
       "original_sha256": "a4947995e05be0d7f193a3a73b3240584f1f50dd0bdd04beb968a977ac187555",
       "original_bytes": 508387,
-      "published_sha256": "9c938c7bb3751c5c4bab69054e0070cfabcacca7ed63fcb91e47eadb2a3316ac",
+      "published_sha256": "262de5c19cf6a99a42f42d1ab3e29facf1763d844f651f2d231a42476a9f4c71",
       "published_bytes": 508387
     },
     {

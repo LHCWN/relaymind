@@ -343,9 +343,12 @@ def main() -> int:
     inspect.add_argument("--cap", type=int)
     inspect.add_argument("--batch", type=int, default=6)
     selected, _ = inspect.parse_known_args(rest)
-    if selected.command == "blind" and any(
-        path is None for path in (selected.items, selected.map, selected.map_digest)
-    ):
+    required = {
+        "blind": (selected.items, selected.map, selected.map_digest),
+        "bind-blinding": (selected.items, selected.map_digest),
+        "apply": (selected.items, selected.map),
+    }.get(selected.command, ())
+    if any(path is None for path in required):
         raise ValueError("blinding_inputs")
     if entry is not None:
         if (

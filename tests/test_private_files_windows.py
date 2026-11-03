@@ -602,3 +602,53 @@ def test_windows_large_artifact_keeps_protected_exclusive_create(tmp_path, monke
         tmp_path / "capture", payload, maximum=len(payload)
     )
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize("maximum", [-1, True, False, 1.5, "10", None])
+def test_windows_reader_rejects_invalid_bounds_before_io(tmp_path, maximum, monkeypatch):
+    """RM12/RM37: native helper validates bounds independently of its wrapper."""
+    from relaymind.recommendations import _windows_private_files as helper
+
+    def forbidden(*args):
+        pytest.fail("invalid bound reached filesystem")
+
+    monkeypatch.setattr(helper, "_parent", forbidden)
+    with pytest.raises(PrivateFileError, match="invalid private file bound"):
+        with helper.open_windows_private_file(tmp_path / "capture", maximum=maximum):
+            pass
+
+
+def test_windows_reader_admits_explicit_artifact_bound(tmp_path, monkeypatch):
+    """RM16/RM37: artifact bounds above the credential default reach native I/O."""
+    from relaymind.recommendations import _windows_private_files as helper
+    from relaymind.recommendations.limits import MAX_PRIVATE_FILE_BYTES
+
+    class ReachedNative(Exception):
+        pass
+
+    def parent(path):
+        raise ReachedNative
+
+    monkeypatch.setattr(helper, "_parent", parent)
+    with pytest.raises(ReachedNative):
+        with helper.open_windows_private_file(
+            tmp_path / "capture", maximum=MAX_PRIVATE_FILE_BYTES + 1
+        ):
+            pass
+
+
+@native
+def test_native_large_private_artifact_round_trip(tmp_path):
+    """RM16/RM37: explicit large captures round-trip through public Windows readers."""
+    from relaymind.recommendations.limits import MAX_PRIVATE_FILE_BYTES
+    from relaymind.recommendations.private_files import (
+        create_private_file_exclusive,
+        read_private_file,
+    )
+
+    data = b"x" * (MAX_PRIVATE_FILE_BYTES + 1)
+    path = tmp_path / "capture"
+    assert create_private_file_exclusive(path, data, maximum=len(data))
+    assert read_private_file(path, maximum=len(data)) == data
+    with pytest.raises(PrivateFileError, match="private file too large"):
+        read_private_file(path)

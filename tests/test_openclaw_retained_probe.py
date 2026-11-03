@@ -3,6 +3,8 @@
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 
 def test_retained_diagnostic_reuses_patched_person_module():
     """AC30: the browser actually admits the diagnostic RPC on its real socket."""
@@ -73,14 +75,59 @@ def test_retained_vps_diagnostic_binds_capture_without_qualifying_use():
             for row in rows
         )
     assert cases[3]["observed"] == "control_refused"
+
+    def captured_source(path):
+        # The live capture keeps its original source binding after harness fixes.
+        if path == "integrations/openclaw/test/host-loaded-use-qualification/qualify.py":
+            frozen = evidence / "fixture-sources/qualify.py.txt"
+            assert frozen.is_file()
+            return frozen
+        return root / path
+
     for row in summary["source_inventory"]:
-        path = root / row["path"]
+        path = captured_source(row["path"])
         if path.exists():
             assert hashlib.sha256(path.read_bytes()).hexdigest() == row["sha256"]
     for row in capture["environment"]["fixture_plugin_sources"]:
         if "/host-loaded-use-qualification/" in row["path"]:
-            assert hashlib.sha256((root / row["path"]).read_bytes()).hexdigest() == row["sha256"]
+            assert (
+                hashlib.sha256(captured_source(row["path"]).read_bytes()).hexdigest()
+                == row["sha256"]
+            )
     # Capture contains only documented home placeholders and disposable accounts.
     text = raw.decode()
     assert all(value == "vps-user" for value in re.findall(r"/home/([^/\s\"]+)", text))
     assert "/Users/" not in text
+
+
+@pytest.mark.parametrize("failed", [False, True])
+def test_retained_event_collection_ignores_blank_lines(tmp_path, monkeypatch, failed):
+    """RM16/RM39: blank JSONL lines neither discard events nor mask host errors."""
+    path = (
+        Path(__file__).parents[1]
+        / "integrations/openclaw/test/host-loaded-use-qualification/qualify.py"
+    )
+    spec = importlib.util.spec_from_file_location("retained_blank_lines", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    probe = object.__new__(module.RetainedComposition)
+    probe.retained_file = tmp_path / "events.jsonl"
+    probe.retained_file.write_text('\n {"phase":"observed"}\n  \n\n')
+
+    def turn(*args, **kwargs):
+        if failed:
+            raise RuntimeError("host failure")
+        return "result"
+
+    monkeypatch.setattr(module.Base, "loaded_use_turn", turn)
+    case = {}
+
+    def rpc(*args):
+        return {"frame": {"ok": True}}
+
+    if failed:
+        with pytest.raises(RuntimeError, match="host failure"):
+            probe.loaded_use_turn(rpc, None, "session", case)
+    else:
+        assert probe.loaded_use_turn(rpc, None, "session", case) == "result"
+    assert case["retained_probe_events"] == [{"phase": "observed"}]

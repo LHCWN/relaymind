@@ -84,3 +84,10 @@ The final prompts and final outputs bound by the qualification record are
 unchanged. No findings, claims, reviewer identities or review times changed.
 A public clone cannot verify private original bytes. Previously published paths
 remain in historical commits; this correction does not rewrite Git history.
+
+The publication correction also replaces the account name in owner/group
+columns of earlier command output. The manifest binds those published copies;
+private original hashes remain unchanged. The diagnostic harness now ignores
+blank JSONL lines. `fixture-sources/qualify.py.txt` retains the exact original
+harness bytes bound by this capture; the capture and qualification record were
+not regenerated or amended for this parser fix.

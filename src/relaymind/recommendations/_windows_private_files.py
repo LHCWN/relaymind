@@ -310,8 +310,8 @@ def open_windows_private_file(
     path: Path, *, maximum: int = MAX_PRIVATE_FILE_BYTES
 ) -> Iterator[PrivateFileLease]:
     """Own read/parent handles until exit; every verification checks current path."""
-    if not 0 <= maximum <= MAX_PRIVATE_FILE_BYTES:
-        raise PrivateFileError("invalid private file size limit")
+    if type(maximum) is not int or maximum < 0:
+        raise PrivateFileError("invalid private file bound")
     try:
         with _parent(path) as (tree, name, user):
             api = tree.api

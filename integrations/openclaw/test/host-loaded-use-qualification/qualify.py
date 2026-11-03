@@ -46,7 +46,9 @@ class RetainedComposition(Base):
             return super().loaded_use_turn(rpc, page, session, case, **kwargs)
         finally:
             case["retained_probe_events"] = [
-                json.loads(line) for line in self.retained_file.read_text().splitlines()
+                json.loads(line)
+                for line in self.retained_file.read_text().splitlines()
+                if line.strip()
             ]
 
     def source_paths(self):
