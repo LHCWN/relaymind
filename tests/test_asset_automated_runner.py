@@ -253,7 +253,12 @@ def test_real_loopback_proposal_uses_reserved_gate_and_read_only_channel(
     url = f"http://127.0.0.1:{server.server_port}"
     run = object.__new__(module.AutomatedRun)
     run.prompts = {"p": "original task"}
-    run.protocol = {"driver": {"model": "fixture-model"}, "per_generation_seconds": 3}
+    run.protocol = {"driver": {"model": "fixture-model"}, "per_generation_seconds": 15}
+    run.frozen_budget = {
+        "recommendation_poll_seconds": 10,
+        "readiness_seconds": 60,
+        "control_request_seconds": 10,
+    }
     run.driver_template = b"Return a bounded JSON proposal."
     run.args = SimpleNamespace(max_output=8192)
     run.recommendations = {"user_id": "u", "workspace_id": "w"}
@@ -265,7 +270,7 @@ def test_real_loopback_proposal_uses_reserved_gate_and_read_only_channel(
         tmp_path / "ledger.json", cap=30000, row_budget=15000, max_output=8192
     )
     run.gate = DeadlineRequestGate(
-        url + "/v1", max_output=8192, timeout=3, capture_root=tmp_path / "upstream"
+        url + "/v1", max_output=8192, timeout=15, capture_root=tmp_path / "upstream"
     )
     monkeypatch.setenv("RELAYMIND_EXTERNAL_API_KEY", "provider-test-key")
     try:
@@ -310,7 +315,10 @@ def test_every_effective_budget_is_frozen():
     module = _automated()
     p = {"total_token_limit": 13000000, "row_token_limit": 250000, "per_generation_seconds": 120}
     budget = {
-        "format": "relaymind.automated_host_task_budget.v1",
+        "format": "relaymind.automated_host_task_budget.v2",
+        "recommendation_poll_seconds": 10,
+        "readiness_seconds": 60,
+        "control_request_seconds": 10,
         "host_turn_timeout_s": 600,
         "retries": 0,
         "per_generation_seconds": 120,
@@ -450,6 +458,11 @@ def test_driver_failure_keeps_prior_whole_row_dispatch_marker(tmp_path):
     run._row_refs = []
     run.sanitize = lambda text: text
     run.protocol = {"profile": "test"}
+    run.frozen_budget = {
+        "recommendation_poll_seconds": 10,
+        "readiness_seconds": 60,
+        "control_request_seconds": 10,
+    }
     run.prompts = {"p": "original"}
     run.gateway_token, run.gateway_url = "test-key", "http://127.0.0.1"
     run.recommendations = {"user_id": "u", "workspace_id": "w"}
@@ -481,6 +494,11 @@ def test_host_command_timestamp_is_distinct_from_earlier_row_marker(tmp_path, mo
     run._row_refs = []
     run.sanitize = lambda text: text
     run.protocol = {"profile": "test"}
+    run.frozen_budget = {
+        "recommendation_poll_seconds": 10,
+        "readiness_seconds": 60,
+        "control_request_seconds": 10,
+    }
     run.prompts = {"p": "original"}
     times = iter(["2026-11-02T10:00:00Z", "2026-11-02T10:00:01Z", "2026-11-02T10:00:09Z"])
     monkeypatch.setattr(module.legacy, "now", lambda: next(times))
@@ -516,3 +534,263 @@ def test_driver_rejects_ambiguous_prose_and_multiple_fences():
     ):
         with pytest.raises(ValueError):
             module.parse_driver_proposal(text)
+
+
+@pytest.fixture
+def proposal_runner(tmp_path, monkeypatch):
+    """RM16/RM44: a deterministic recommendation-driver boundary, with no inference."""
+    from types import SimpleNamespace
+
+    module = _automated()
+    run = object.__new__(module.AutomatedRun)
+    run.evidence_root = tmp_path
+    run._row_refs = []
+    run.sanitize = lambda text: text
+    run.protocol = {"driver": {"model": "fixture"}, "per_generation_seconds": 15}
+    run.frozen_budget = {
+        "recommendation_poll_seconds": 10,
+        "readiness_seconds": 60,
+        "control_request_seconds": 10,
+    }
+    run.driver_template = b"Return a bounded proposal."
+    run.args = SimpleNamespace(max_output=100)
+    run.prompts = {"p": "original"}
+    run.gateway_token, run.gateway_url = "fixture", "http://gateway.invalid"
+    run.recommendations = {"user_id": "u", "workspace_id": "w"}
+    run.gate = SimpleNamespace(url="http://gate.invalid", row={"calls": [{}]})
+    monkeypatch.setenv("RELAYMIND_EXTERNAL_API_KEY", "fixture")
+    return module, run
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        {},
+        {"error": {"message": "provider failed"}},
+        {"choices": []},
+        {"choices": None},
+        {"choices": [{}]},
+        {"choices": [None]},
+        {"choices": [{"message": None}]},
+        {"choices": [{"message": {}}]},
+        {"choices": [{"message": {"content": None}}]},
+        {"choices": [{"message": {"content": []}}]},
+        [],
+        None,
+    ],
+)
+def test_malformed_driver_response_has_durable_rejection(proposal_runner, tmp_path, reply):
+    """RM12/RM16/RM44: malformed envelopes retain raw evidence without a host prompt."""
+    import json
+
+    module, run = proposal_runner
+    responses = iter(
+        [
+            {"state": "ready", "recommendation_id": "rec", "displayed_candidates": []},
+            reply,
+        ]
+    )
+    run._http = lambda *args, **kwargs: next(responses)
+    with pytest.raises(module.AutomatedHostRejected, match="driver_response_invalid"):
+        run.prepare_prompt(
+            {"id": "t", "prompt_case_id": "p"}, "recommendations", "t-recommendations", []
+        )
+    root = tmp_path / "host-runs/t-recommendations"
+    assert json.loads((root / "driver-response.json").read_bytes()) == reply
+    assert json.loads((root / "proposal.json").read_bytes()) == {
+        "status": "rejected",
+        "reason": "driver_response_invalid",
+    }
+    assert not (root / "host-prompt.json").exists()
+    assert run._driver_call_count == 1
+
+
+@pytest.mark.parametrize("expired", [False, True])
+def test_recommendation_poll_wait_preserves_absolute_deadline(
+    proposal_runner, monkeypatch, expired
+):
+    """RM03/RM16: each computing poll waits, with no new request after the deadline."""
+    from types import SimpleNamespace
+
+    module, run = proposal_runner
+    now, sleeps, requests = [0.0], [], []
+
+    def sleep(seconds):
+        sleeps.append(seconds)
+        now[0] += seconds
+
+    monkeypatch.setattr(module, "time", SimpleNamespace(monotonic=lambda: now[0], sleep=sleep))
+
+    def request(url, *args, **kwargs):
+        requests.append((url, kwargs["timeout"]))
+        if len(requests) == 1:
+            now[0] = 9.95 if expired else 0.0
+            return {"state": "computing", "recommendation_id": "rec"}
+        if len(requests) == 2:
+            return {"state": "ready", "recommendation_id": "rec", "displayed_candidates": []}
+        return {"choices": [{"message": {"content": '{"candidate_id":null,"content_hash":null}'}}]}
+
+    run._http = request
+    args = ({"id": "t", "prompt_case_id": "p"}, "recommendations", "t-recommendations", [])
+    if expired:
+        with pytest.raises(module.AutomatedHostRejected, match="recommendation_timeout"):
+            run.prepare_prompt(*args)
+        assert len(requests) == 1
+        assert sleeps == [pytest.approx(0.05)]
+        import json
+
+        observed = run.evidence_root / "host-runs/t-recommendations/recommendation.json"
+        assert json.loads(observed.read_bytes()) == {
+            "state": "computing",
+            "recommendation_id": "rec",
+        }
+        assert run._recommendation_ids == ["rec"]
+    else:
+        assert run.prepare_prompt(*args).startswith("original")
+        assert sleeps == [0.1]
+        assert requests[1][1] == pytest.approx(9.9)
+
+
+@pytest.mark.parametrize(
+    "content,reason",
+    [
+        ("not JSON", "driver_proposal_invalid"),
+        ("{}", "fields"),
+        ('{"candidate_id":"invented","content_hash":"' + "a" * 64 + '"}', "candidate_mismatch"),
+    ],
+)
+def test_invalid_driver_proposal_is_recorded_without_dispatch(
+    proposal_runner, tmp_path, content, reason
+):
+    """RM05/RM12/RM16: invalid choices cannot become a host prompt."""
+    import json
+
+    module, run = proposal_runner
+    reply = {"choices": [{"message": {"content": content}}]}
+    responses = iter(
+        [
+            {"state": "ready", "recommendation_id": "rec", "displayed_candidates": []},
+            reply,
+        ]
+    )
+    run._http = lambda *args, **kwargs: next(responses)
+    with pytest.raises(module.AutomatedHostRejected, match=reason):
+        run.prepare_prompt(
+            {"id": "t", "prompt_case_id": "p"}, "recommendations", "t-recommendations", []
+        )
+    root = tmp_path / "host-runs/t-recommendations"
+    assert json.loads((root / "driver-response.json").read_bytes()) == reply
+    assert json.loads((root / "proposal.json").read_bytes()) == {
+        "status": "rejected",
+        "reason": reason,
+    }
+    assert not (root / "host-prompt.json").exists()
+
+
+@pytest.mark.parametrize(
+    "value",
+    [0, -1, True, "10", float("inf"), float("nan"), pytest.param(10**1000, id="unrepresentable")],
+)
+def test_control_budget_requires_positive_finite_numbers(value):
+    """RM03: future dispatch explicitly freezes every control-request time limit."""
+    from types import SimpleNamespace
+
+    module = _automated()
+    budget = module.legacy.read(module.HERE / "configs/budget.json")
+    budget.update(
+        format="relaymind.automated_host_task_budget.v2",
+        recommendation_poll_seconds=10,
+        readiness_seconds=60,
+        control_request_seconds=10,
+    )
+    protocol = {
+        "total_token_limit": 13000000,
+        "row_token_limit": 250000,
+        "per_generation_seconds": 120,
+    }
+    args = SimpleNamespace(cap=13000000, row_budget=250000, max_output=8192, context_limit=128000)
+    for name in ("recommendation_poll_seconds", "readiness_seconds", "control_request_seconds"):
+        changed = dict(budget, **{name: value})
+        with pytest.raises(module.AutomatedHostRejected, match="budget_value"):
+            module.validate_run_budget(args, protocol, changed)
+
+
+def test_legacy_budget_cannot_silently_dispatch_with_unrecorded_control_limits():
+    """RM03/RM16: historical frozen inputs are retained, never silently upgraded."""
+    from types import SimpleNamespace
+
+    module = _automated()
+    budget = module.legacy.read(module.HERE / "configs/budget.json")
+    protocol = {
+        "total_token_limit": 13000000,
+        "row_token_limit": 250000,
+        "per_generation_seconds": 120,
+    }
+    args = SimpleNamespace(cap=13000000, row_budget=250000, max_output=8192, context_limit=128000)
+    assert budget["format"] == "relaymind.automated_host_task_budget.v1"
+    with pytest.raises(module.AutomatedHostRejected, match="budget_shape"):
+        module.validate_run_budget(args, protocol, budget)
+
+
+@pytest.mark.parametrize("identity", [None, "", 3])
+def test_malformed_computing_view_is_retained_without_poll(proposal_runner, identity):
+    """RM05/RM16: retain the malformed view without constructing a guessed endpoint."""
+    import json
+
+    module, run = proposal_runner
+    view = {"state": "computing", "recommendation_id": identity}
+    calls = []
+
+    def request(*args, **kwargs):
+        calls.append(args)
+        return view
+
+    run._http = request
+    with pytest.raises(module.AutomatedHostRejected, match="recommendation_response_invalid"):
+        run.prepare_prompt(
+            {"id": "t", "prompt_case_id": "p"}, "recommendations", "t-recommendations", []
+        )
+    assert len(calls) == 1
+    observed = run.evidence_root / "host-runs/t-recommendations/recommendation.json"
+    assert json.loads(observed.read_bytes()) == view
+
+
+def test_configured_poll_budget_is_used_and_recorded(proposal_runner, monkeypatch):
+    """RM03/RM16: recorded configuration, not an implicit constant, bounds polling."""
+    import json
+    from types import SimpleNamespace
+
+    module, run = proposal_runner
+    run.frozen_budget["recommendation_poll_seconds"] = 0.05
+    now, timeouts = [0.0], []
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    monkeypatch.setattr(module, "time", SimpleNamespace(monotonic=lambda: now[0], sleep=sleep))
+
+    def request(*args, **kwargs):
+        timeouts.append(kwargs["timeout"])
+        return {"state": "computing", "recommendation_id": "rec"}
+
+    run._http = request
+    with pytest.raises(module.AutomatedHostRejected, match="recommendation_timeout"):
+        run.prepare_prompt(
+            {"id": "t", "prompt_case_id": "p"}, "recommendations", "t-recommendations", []
+        )
+    assert timeouts == [0.05]
+    root = run.evidence_root / "host-runs/t-recommendations"
+    assert (
+        json.loads((root / "automated-dispatch.json").read_bytes())["budgets"] == run.frozen_budget
+    )
+
+
+def test_future_budget_example_is_valid():
+    """RM03/RM16: the documented future config is valid without rewriting v1 inputs."""
+    from types import SimpleNamespace
+
+    module = _automated()
+    budget = module.legacy.read(module.HERE / "budget.v2.example.json")
+    protocol = module.legacy.read(module.HERE / "protocol.json")
+    args = SimpleNamespace(cap=13000000, row_budget=250000, max_output=8192, context_limit=128000)
+    module.validate_run_budget(args, protocol, budget)

@@ -9,9 +9,12 @@ from pathlib import Path
 
 import pytest
 
-# Allow interpreter startup and protected capture initialization on every platform.
-# The separate startup test still enforces a short deadline before any request.
-STREAM_DEADLINE = 3.0
+# Allow cold interpreter startup on every platform, including response-read tests
+# that must reach upstream first. The startup-only test still uses 0.1 seconds.
+REQUEST_TIMEOUT = 15
+STREAM_DEADLINE = REQUEST_TIMEOUT
+# Nested requests own two workers, each with its own startup cost.
+PROXY_TIMEOUT = 2 * REQUEST_TIMEOUT
 
 
 @pytest.mark.parametrize(
@@ -107,7 +110,7 @@ def test_original_capture_is_private_and_excludes_credentials(transport, upstrea
         url,
         b'{"messages":[]}',
         {"Authorization": "Bearer never-save-me"},
-        3,
+        REQUEST_TIMEOUT,
         capture_root=tmp_path,
     )
     assert result["status"] == 200 and result["outcome"] == "completed"
@@ -177,7 +180,7 @@ def test_response_cap_and_read_only_get(transport, upstream, tmp_path):
         url + "/large",
         None,
         {},
-        3,
+        REQUEST_TIMEOUT,
         method="GET",
         capture_root=tmp_path,
         max_response_bytes=100,
@@ -195,7 +198,7 @@ def test_gate_preserves_unknown_charge_and_never_replays(transport, upstream, tm
     endpoint = gate.start()
     try:
         result = transport.bounded_json_request(
-            endpoint + "/chat/completions", b"{}", {}, STREAM_DEADLINE + 5
+            endpoint + "/chat/completions", b"{}", {}, PROXY_TIMEOUT
         )
         assert result["status"] == 504
         row = gate.close_row()
@@ -203,7 +206,9 @@ def test_gate_preserves_unknown_charge_and_never_replays(transport, upstream, tm
         assert row["calls"][0]["usage"] is None
         assert row["calls"][0]["outcome"] == "timeout"
         assert gate.last_closed_row == row
-        rejected = transport.bounded_json_request(endpoint + "/chat/completions", b"{}", {}, 3)
+        rejected = transport.bounded_json_request(
+            endpoint + "/chat/completions", b"{}", {}, REQUEST_TIMEOUT
+        )
         assert rejected["status"] == 400
         assert len(calls) == 1
     finally:
@@ -212,11 +217,15 @@ def test_gate_preserves_unknown_charge_and_never_replays(transport, upstream, tm
 
 def test_gate_accounts_completed_usage_and_retains_original_bytes(transport, upstream, tmp_path):
     url, _ = upstream
-    gate = transport.DeadlineRequestGate(url, max_output=10, timeout=3, capture_root=tmp_path)
+    gate = transport.DeadlineRequestGate(
+        url, max_output=10, timeout=REQUEST_TIMEOUT, capture_root=tmp_path
+    )
     gate.open_row("row", 10000)
     endpoint = gate.start()
     try:
-        result = transport.bounded_json_request(endpoint + "/chat/completions", b"{}", {}, 5)
+        result = transport.bounded_json_request(
+            endpoint + "/chat/completions", b"{}", {}, PROXY_TIMEOUT
+        )
         assert result["status"] == 200
         row = gate.close_row()
         assert row["charged"] == 5
@@ -244,7 +253,7 @@ def test_missing_or_invalid_usage_keeps_reservation(transport, usage):
 def test_close_row_cancels_inflight_work_before_snapshot(transport, upstream, tmp_path, action):
     url, calls = upstream
     gate = transport.DeadlineRequestGate(
-        url + "/slow", max_output=10, timeout=15, capture_root=tmp_path
+        url + "/slow", max_output=10, timeout=PROXY_TIMEOUT, capture_root=tmp_path
     )
     gate.open_row("row", 10000)
     endpoint = gate.start()
@@ -253,11 +262,11 @@ def test_close_row_cancels_inflight_work_before_snapshot(transport, upstream, tm
             endpoint + "/chat/completions",
             b"{}",
             {},
-            20,
+            PROXY_TIMEOUT + REQUEST_TIMEOUT,
         )
     )
     thread.start()
-    deadline = time.monotonic() + 10
+    deadline = time.monotonic() + PROXY_TIMEOUT
     while not calls and time.monotonic() < deadline:
         time.sleep(0.01)
     assert calls
@@ -347,9 +356,9 @@ def test_worker_self_terminates_without_parent_timeout_enforcement(transport, up
     )
     started = time.monotonic()
     try:
-        process.communicate(json.dumps(command).encode(), timeout=5)
+        process.communicate(json.dumps(command).encode(), timeout=REQUEST_TIMEOUT)
         assert process.returncode == 124
-        assert time.monotonic() - started < 5
+        assert time.monotonic() - started < REQUEST_TIMEOUT
     finally:
         if process.poll() is None:
             process.kill()
@@ -361,12 +370,14 @@ def test_gate_normalizes_upstream_base_path(transport, upstream, tmp_path, suffi
     """RM16/RM44: a configured base path keeps exactly one endpoint separator."""
     url, calls = upstream
     gate = transport.DeadlineRequestGate(
-        url + "/provider/v4" + suffix, max_output=10, timeout=10, capture_root=tmp_path
+        url + "/provider/v4" + suffix, max_output=10, timeout=REQUEST_TIMEOUT, capture_root=tmp_path
     )
     gate.open_row("row", 10000)
     endpoint = gate.start()
     try:
-        result = transport.bounded_json_request(endpoint + "/chat/completions", b"{}", {}, 15)
+        result = transport.bounded_json_request(
+            endpoint + "/chat/completions", b"{}", {}, PROXY_TIMEOUT
+        )
         assert result["status"] == 200
         assert calls == ["/provider/v4/chat/completions"]
     finally:

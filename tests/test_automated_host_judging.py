@@ -318,3 +318,30 @@ def test_blind_missing_output_argument_reports_input_error(
     with pytest.raises(ValueError, match="blinding_inputs"):
         m.main()
     assert list(tmp_path.iterdir()) == []
+
+
+def test_judge_bootstrap_locates_transport_without_runner_import(tmp_path):
+    """RM16/RM44: standalone judging owns its imports, independent of runner side effects."""
+    import subprocess
+    import sys
+
+    script = ROOT / "evaluation/assets/automated-host-277/judge.py"
+    code = """
+import importlib.util
+import runpy
+import sys
+from pathlib import Path
+runpy.run_path(sys.argv[1])
+transport = importlib.util.find_spec('automated_host_transport')
+assert transport is not None
+expected = Path(sys.argv[1]).resolve().parents[3] / 'scripts/automated_host_transport.py'
+assert Path(transport.origin) == expected
+"""
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", code, str(script)],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr

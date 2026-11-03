@@ -29,6 +29,25 @@ is 128,000. Judging has a separate shared 300,000-token ledger. Reservations
 include proposal calls and survive crashes or unknown usage. No silent budget
 increase or rerun of a started host row is permitted.
 
+## Future execution budgets
+
+The completed experiment retains its original v1 `configs/budget.json`, freeze,
+tasks and source commits. It is not replayed or silently upgraded. That harness
+used fixed control limits (10 seconds for recommendation polling and each
+control request, 60 seconds for readiness) outside its frozen budget document.
+This omission is a limitation of the historical runner, not a newly measured
+result or a change to the retained outcomes.
+
+The current runner requires `relaymind.automated_host_task_budget.v2` for any
+new execution. `budget.v2.example.json` shows the explicit positive finite
+`recommendation_poll_seconds`, `control_request_seconds` and `readiness_seconds`
+fields in addition to the existing limits. Use a separate configuration directory,
+bind its budget digest into a **new** freeze and task wrapper, and commit that
+preregistration before dispatch. Do not edit this experiment's frozen inputs.
+Every new row's `automated-dispatch.json` records the complete frozen budget.
+Polling waits within that original deadline; timeout/error paths retain the last
+observed recommendation view. Model limits and reservations are unchanged.
+
 ## Execution workflow
 
 1. Verify the original private release against the committed source lock.

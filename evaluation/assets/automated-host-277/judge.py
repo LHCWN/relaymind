@@ -18,6 +18,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "scripts"))
 
 from relaymind.canonical import canonical_digest, canonical_json  # noqa: E402
 from relaymind.evaluation.asset_automated_host import validate_protocol  # noqa: E402

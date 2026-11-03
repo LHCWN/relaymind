@@ -203,6 +203,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Hardened automated-host control polling and provider-response failures. Future executions require explicit v2 control budgets and fresh preregistration; historical inputs and outcomes remain unchanged. Timeout paths retain the last recommendation state, and functional transport tests allow cold worker startup (RM03, RM05, RM16, RM44).
+
 - Addressed #277/#280 review findings: portable transport tests, clear blind-CLI input errors, consistent stored row evidence, fenced JSON proposals, private-file read bounds, and redacted public home paths with retained original bindings. Historical benchmark results and qualification claims are unchanged.
 
 - Spec 0.66 section 12.6.6 owner-run checks (review of #276; RM40, RM44; AC31,

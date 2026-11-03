@@ -9,6 +9,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import math
 import os
 import re
 import signal
@@ -43,13 +44,29 @@ from relaymind.evaluation.asset_whole_task import _not_run  # noqa: E402
 from relaymind.recommendations.private_files import create_private_file_exclusive  # noqa: E402
 
 
-def parse_driver_proposal(content: str):
+def parse_driver_proposal(content: str) -> object:
     """Accept plain JSON or one complete fence; never extract from prose."""
     text = content.strip()
     fenced = re.fullmatch(r"```(?:json)?[ \t]*\r?\n(.*?)\r?\n```", text, re.DOTALL)
     if fenced is not None:
         text = fenced.group(1)
     return parse_json(text.encode("utf-8"))
+
+
+def parse_driver_response(reply: object) -> object:
+    """Validate the provider envelope before interpreting its proposed choice."""
+    if not isinstance(reply, dict) or reply.get("error") is not None:
+        raise AutomatedHostRejected("driver_response_invalid")
+    choices = reply.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        raise AutomatedHostRejected("driver_response_invalid")
+    message = choices[0].get("message")
+    if not isinstance(message, dict) or not isinstance(message.get("content"), str):
+        raise AutomatedHostRejected("driver_response_invalid")
+    try:
+        return parse_driver_proposal(message["content"])
+    except ValueError as error:
+        raise AutomatedHostRejected("driver_proposal_invalid") from error
 
 
 def require_committed_inputs(commit: str, paths: list[Path], *, root: Path = ROOT) -> None:
@@ -136,11 +153,19 @@ def validate_run_budget(args, protocol: dict, budget: dict) -> None:
         "judge_token_limit",
         "max_output_tokens",
         "context_limit",
+        "recommendation_poll_seconds",
+        "readiness_seconds",
+        "control_request_seconds",
     }
-    if set(budget) != expected or budget["format"] != "relaymind.automated_host_task_budget.v1":
+    if set(budget) != expected or budget["format"] != "relaymind.automated_host_task_budget.v2":
         raise AutomatedHostRejected("budget_shape")
     for key in expected - {"format", "retries"}:
-        if type(budget[key]) not in (int, float) or budget[key] <= 0:
+        value = budget[key]
+        try:
+            valid = type(value) in (int, float) and math.isfinite(value) and value > 0
+        except OverflowError:
+            valid = False
+        if not valid:
             raise AutomatedHostRejected("budget_value")
     if (
         budget["host_turn_timeout_s"] != legacy.TIMEOUT
@@ -236,7 +261,7 @@ class AutomatedRun(legacy.Run):
 
     def setup(self):
         super().setup()
-        deadline = time.monotonic() + 60
+        deadline = time.monotonic() + self.frozen_budget["readiness_seconds"]
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -245,7 +270,7 @@ class AutomatedRun(legacy.Run):
                 self.gateway_url + "/relay/v1/recommendations/readiness",
                 None,
                 {"Authorization": "Bearer " + self.gateway_token},
-                timeout=min(10, remaining),
+                timeout=min(self.frozen_budget["control_request_seconds"], remaining),
                 method="GET",
             )
             if view.get("state") == "ready" and view.get("pending_jobs") == 0:
@@ -331,7 +356,11 @@ class AutomatedRun(legacy.Run):
         self.evidence(
             key,
             "automated-dispatch.json",
-            dict(started_at=legacy.now(), protocol_digest=canonical_digest(self.protocol)),
+            dict(
+                started_at=legacy.now(),
+                protocol_digest=canonical_digest(self.protocol),
+                budgets=self.frozen_budget,
+            ),
             refs,
         )
         prompt = super().prepare_prompt(task, arm, key, refs)
@@ -343,7 +372,9 @@ class AutomatedRun(legacy.Run):
             "X-RelayMind-Expected-Workspace": quote(self.recommendations["workspace_id"], safe=""),
         }
         endpoint = self.gateway_url + "/relay/v1/recommendations"
-        deadline = time.monotonic() + 10
+        poll_seconds = self.frozen_budget["recommendation_poll_seconds"]
+        control_seconds = self.frozen_budget["control_request_seconds"]
+        deadline = time.monotonic() + poll_seconds
         view = self._http(
             endpoint,
             canonical_json(
@@ -355,23 +386,40 @@ class AutomatedRun(legacy.Run):
                 )
             ).encode(),
             headers | {"Idempotency-Key": str(uuid4())},
-            timeout=10,
+            timeout=min(poll_seconds, control_seconds),
         )
-        while view.get("state") in ("computing",):
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                raise AutomatedHostRejected("recommendation_timeout")
-            view = self._http(
-                endpoint + "/" + quote(view["recommendation_id"], safe=""),
-                None,
-                headers,
-                timeout=remaining,
-                method="GET",
-            )
-        self.evidence(key, "recommendation.json", view, refs)
+        try:
+            while True:
+                if not isinstance(view, dict):
+                    raise AutomatedHostRejected("recommendation_response_invalid")
+                if view.get("state") not in ("computing", "ready"):
+                    break
+                identity = view.get("recommendation_id")
+                if not isinstance(identity, str) or not identity.strip():
+                    raise AutomatedHostRejected("recommendation_response_invalid")
+                self._recommendation_ids = [identity]
+                if view["state"] == "ready":
+                    break
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise AutomatedHostRejected("recommendation_timeout")
+                time.sleep(min(0.1, remaining))
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise AutomatedHostRejected("recommendation_timeout")
+                view = self._http(
+                    endpoint + "/" + quote(identity, safe=""),
+                    None,
+                    headers,
+                    timeout=min(remaining, control_seconds),
+                    method="GET",
+                )
+        finally:
+            # Preserve the last observed view even when polling or validation fails.
+            # A persistence failure must still abort rather than imply durable evidence.
+            self.evidence(key, "recommendation.json", view, refs)
         if view.get("state") != "ready":
             raise AutomatedHostRejected("recommendation_not_ready")
-        self._recommendation_ids = [view["recommendation_id"]]
         body = dict(
             model=self.protocol["driver"]["model"],
             temperature=0,
@@ -399,8 +447,12 @@ class AutomatedRun(legacy.Run):
         )
         self.evidence(key, "driver-response.json", reply, refs)
         self._driver_call_count = len(self.gate.row["calls"])
-        decision = parse_driver_proposal(reply["choices"][0]["message"]["content"])
-        selected = select_proposal(decision, view["displayed_candidates"])
+        try:
+            decision = parse_driver_response(reply)
+            selected = select_proposal(decision, view["displayed_candidates"])
+        except AutomatedHostRejected as error:
+            self.evidence(key, "proposal.json", dict(status="rejected", reason=str(error)), refs)
+            raise
         self.evidence(key, "proposal.json", dict(decision=decision, selected=selected), refs)
         context = canonical_json(dict(kind="untrusted_recommendation_metadata", selected=selected))
         augmented = (
