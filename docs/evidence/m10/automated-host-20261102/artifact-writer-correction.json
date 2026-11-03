@@ -76,9 +76,16 @@
       "bytes": 8601
     },
     "recovery_method": {
-      "path": "recover-first-row.py",
+      "path": null,
       "sha256": "8e59b2b416ae951d4d80c2ad8bf1f1e321ebe797cc51ae14cc8a485d05194bea",
-      "bytes": 5528
+      "bytes": 5528,
+      "access": "restricted"
+    },
+    "published_recovery_method": {
+      "path": "recover-first-row.py",
+      "sha256": "1591903380c043fa516e527354a40e0e817ab734d5d6dfd4dc734e1265936d21",
+      "bytes": 5528,
+      "redaction_manifest": "../privacy-publication-20261103.json"
     }
   },
   "resume_policy": "Commit this source correction before further inference; preserve the same protocol, journal and ledger. Keep row 1 finished and its full original reservation. The next dispatch is the next planned row, never a replay. Record both source revisions and the correction as a limitation of the experiment."

@@ -41,12 +41,11 @@ def _write_private(path: Path, data: bytes) -> None:
         stream.write(data)
         stream.flush()
         os.fsync(stream.fileno())
-    if os.name != "nt":
-        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
 
 
 def _worker() -> None:
@@ -399,7 +398,7 @@ class DeadlineRequestGate(_legacy().RequestGate):
                     if k.lower() in ("authorization", "content-type", "accept")
                 }
                 result = bounded_json_request(
-                    gate.upstream + self.path.removeprefix("/v1"),
+                    gate.upstream.rstrip("/") + self.path.removeprefix("/v1"),
                     payload,
                     headers,
                     gate.timeout,

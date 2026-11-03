@@ -308,22 +308,20 @@ def test_loaded_use_negative_record_binds_new_evidence_and_requires_review():
         "retained-boundary-20261102/closure-inventory.json",
         "retained-boundary-20261102/scoped-negative.md",
     } <= subjects
-    if record.approved:
-        # load_record verified actual raw outputs and all subject bindings.
-        assert record.machine_review_verified
-        assert record.document["review"]["reviewer_logins"] == []
-        assert record.document["review"]["approved_at"] is None
-        assert known_host_limitations([record]) == [
-            dict(
-                operation="skill_loaded_use",
-                host="openclaw",
-                host_version="2026.10.7",
-                finding="stop_point_absent",
-                record_id=record.record_id,
-            )
-        ]
-    else:
-        assert known_host_limitations([record]) == []
+    assert record.approved
+    # load_record verified actual raw outputs and all subject bindings.
+    assert record.machine_review_verified
+    assert record.document["review"]["reviewer_logins"] == []
+    assert record.document["review"]["approved_at"] is None
+    assert known_host_limitations([record]) == [
+        dict(
+            operation="skill_loaded_use",
+            host="openclaw",
+            host_version="2026.10.7",
+            finding="stop_point_absent",
+            record_id=record.record_id,
+        )
+    ]
 
 
 @pytest.mark.parametrize("outcome", ["positive", "negative"])
@@ -804,3 +802,34 @@ def test_capture_privacy_rejects_plaintext_json_hostnames(key, value):
 def test_capture_privacy_accepts_hashed_json_hostnames(key):
     """RM16/RM37: published hostname fields carry only a SHA-256 digest."""
     _assert_capture_privacy(json.dumps({"env": [{key: "sha256:" + "aB" * 32}]}))
+
+
+def test_published_277_280_artifacts_do_not_expose_local_home_accounts():
+    """RM12/RM16: public projections omit private local account identifiers."""
+    import re
+
+    for directory in (
+        "automated-host-20261102",
+        "automated-host-results-20261103",
+        "retained-boundary-20261102",
+    ):
+        assert (EVIDENCE / directory).is_dir()
+        for path in (EVIDENCE / directory).rglob("*"):
+            if path.is_file():
+                homes = re.findall(rb"/(?:home|Users)/[A-Za-z0-9_.-]+", path.read_bytes())
+                assert all(home == b"/home/vps-user" for home in homes), path
+
+
+def test_privacy_publication_binds_each_redacted_copy():
+    """RM12/RM16: published projections are not labelled as original captures."""
+    import hashlib
+
+    manifest = json.loads((EVIDENCE / "privacy-publication-20261103.json").read_bytes())
+    assert manifest["policy"] == "local_home_path_redaction"
+    assert len({row["path"] for row in manifest["files"]}) == len(manifest["files"])
+    for row in manifest["files"]:
+        payload = (EVIDENCE / row["path"]).read_bytes()
+        assert hashlib.sha256(payload).hexdigest() == row["published_sha256"]
+        assert len(payload) == row["published_bytes"]
+        assert row["original_sha256"] != row["published_sha256"]
+        assert row["original_bytes"] > 0

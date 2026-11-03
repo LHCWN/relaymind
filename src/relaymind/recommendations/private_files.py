@@ -76,6 +76,8 @@ def open_private_file(
     path: Path, *, maximum: int = MAX_PRIVATE_FILE_BYTES
 ) -> Iterator[PrivateFileLease]:
     """Hold checked final/parent descriptors through caller work and verification."""
+    if type(maximum) is not int or maximum < 0:
+        raise PrivateFileError("invalid private file bound")
     if os.name == "nt":
         from relaymind.recommendations._windows_private_files import open_windows_private_file
 

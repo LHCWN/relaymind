@@ -178,3 +178,17 @@ def test_explicit_artifact_bound_keeps_private_exclusive_publication(tmp_path):
     with pytest.raises(PrivateFileError, match="private file too large"):
         create_private_file_exclusive(tmp_path / "oversize", payload, maximum=len(payload) - 1)
     assert not (tmp_path / "oversize").exists()
+
+
+@pytest.mark.parametrize("maximum", [-1, True, False, 1.5, "10", None])
+@pytest.mark.parametrize("operation", ["open_private_file", "read_private_file"])
+def test_private_readers_reject_invalid_bounds_before_io(tmp_path, maximum, operation):
+    """RM12/RM37: readers and writers enforce the same finite integer boundary."""
+    from relaymind.recommendations import private_files
+
+    with pytest.raises(private_files.PrivateFileError, match="invalid private file bound"):
+        if operation == "open_private_file":
+            with private_files.open_private_file(tmp_path / "absent", maximum=maximum):
+                pytest.fail("invalid bound admitted")
+        else:
+            private_files.read_private_file(tmp_path / "absent", maximum=maximum)

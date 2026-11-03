@@ -343,6 +343,10 @@ def main() -> int:
     inspect.add_argument("--cap", type=int)
     inspect.add_argument("--batch", type=int, default=6)
     selected, _ = inspect.parse_known_args(rest)
+    if selected.command == "blind" and any(
+        path is None for path in (selected.items, selected.map, selected.map_digest)
+    ):
+        raise ValueError("blinding_inputs")
     if entry is not None:
         if (
             selected.cap != read(HERE / "configs/budget.json")["judge_token_limit"]
@@ -406,8 +410,7 @@ def main() -> int:
             legacy.main()
     else:
         if selected.command == "blind" and any(
-            path is None or path.exists()
-            for path in (selected.items, selected.map, selected.map_digest)
+            path.exists() for path in (selected.items, selected.map, selected.map_digest)
         ):
             raise ValueError("blinding_output_exists")
         legacy.main()

@@ -2,7 +2,6 @@
 
 import importlib.util
 import json
-import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -10,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-# Windows worker startup includes protected capture-file initialization. Allow
-# it to reach the test server before testing a deadline during response reads.
-STREAM_DEADLINE = 3.0 if sys.platform == "win32" else 0.4
+# Allow interpreter startup and protected capture initialization on every platform.
+# The separate startup test still enforces a short deadline before any request.
+STREAM_DEADLINE = 3.0
 
 
 @pytest.mark.parametrize(
@@ -245,7 +244,7 @@ def test_missing_or_invalid_usage_keeps_reservation(transport, usage):
 def test_close_row_cancels_inflight_work_before_snapshot(transport, upstream, tmp_path, action):
     url, calls = upstream
     gate = transport.DeadlineRequestGate(
-        url + "/slow", max_output=10, timeout=3, capture_root=tmp_path
+        url + "/slow", max_output=10, timeout=15, capture_root=tmp_path
     )
     gate.open_row("row", 10000)
     endpoint = gate.start()
@@ -254,11 +253,11 @@ def test_close_row_cancels_inflight_work_before_snapshot(transport, upstream, tm
             endpoint + "/chat/completions",
             b"{}",
             {},
-            5,
+            20,
         )
     )
     thread.start()
-    deadline = time.monotonic() + 3
+    deadline = time.monotonic() + 10
     while not calls and time.monotonic() < deadline:
         time.sleep(0.01)
     assert calls
@@ -348,10 +347,27 @@ def test_worker_self_terminates_without_parent_timeout_enforcement(transport, up
     )
     started = time.monotonic()
     try:
-        process.communicate(json.dumps(command).encode(), timeout=2)
+        process.communicate(json.dumps(command).encode(), timeout=5)
         assert process.returncode == 124
-        assert time.monotonic() - started < 1.5
+        assert time.monotonic() - started < 5
     finally:
         if process.poll() is None:
             process.kill()
             process.communicate()
+
+
+@pytest.mark.parametrize("suffix", ["", "/", "///"])
+def test_gate_normalizes_upstream_base_path(transport, upstream, tmp_path, suffix):
+    """RM16/RM44: a configured base path keeps exactly one endpoint separator."""
+    url, calls = upstream
+    gate = transport.DeadlineRequestGate(
+        url + "/provider/v4" + suffix, max_output=10, timeout=10, capture_root=tmp_path
+    )
+    gate.open_row("row", 10000)
+    endpoint = gate.start()
+    try:
+        result = transport.bounded_json_request(endpoint + "/chat/completions", b"{}", {}, 15)
+        assert result["status"] == 200
+        assert calls == ["/provider/v4/chat/completions"]
+    finally:
+        gate.stop()

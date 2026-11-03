@@ -123,7 +123,7 @@
       "bytes": 2310
     }
   ],
-  "restricted_originals": "Retained on the VPS in /home/just_dak/relaymind-automated-277/review-assembly-corrected; not included in this public metadata export. A clone alone cannot verify their bytes.",
+  "restricted_originals": "Retained on the VPS in /home/vps-user/relaymind-automated-277/review-assembly-corrected; not included in this public metadata export. A clone alone cannot verify their bytes.",
   "binding_verification": {
     "bindings_verified": true,
     "completion_verified": false,

@@ -203,6 +203,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- Addressed #277/#280 review findings: portable transport tests, clear blind-CLI input errors, consistent stored row evidence, fenced JSON proposals, private-file read bounds, and redacted public home paths with retained original bindings. Historical benchmark results and qualification claims are unchanged.
+
 - Spec 0.66 section 12.6.6 owner-run checks (review of #276; RM40, RM44; AC31,
   AC36): a `same_family` machine_dual record now needs two different template
   digests even when its two model IDs differ. The release validator now

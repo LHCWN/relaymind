@@ -43,6 +43,15 @@ from relaymind.evaluation.asset_whole_task import _not_run  # noqa: E402
 from relaymind.recommendations.private_files import create_private_file_exclusive  # noqa: E402
 
 
+def parse_driver_proposal(content: str):
+    """Accept plain JSON or one complete fence; never extract from prose."""
+    text = content.strip()
+    fenced = re.fullmatch(r"```(?:json)?[ \t]*\r?\n(.*?)\r?\n```", text, re.DOTALL)
+    if fenced is not None:
+        text = fenced.group(1)
+    return parse_json(text.encode("utf-8"))
+
+
 def require_committed_inputs(commit: str, paths: list[Path], *, root: Path = ROOT) -> None:
     """Refuse dispatch unless frozen inputs are exact bytes in an ancestor commit."""
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
@@ -390,7 +399,7 @@ class AutomatedRun(legacy.Run):
         )
         self.evidence(key, "driver-response.json", reply, refs)
         self._driver_call_count = len(self.gate.row["calls"])
-        decision = parse_json(reply["choices"][0]["message"]["content"].encode())
+        decision = parse_driver_proposal(reply["choices"][0]["message"]["content"])
         selected = select_proposal(decision, view["displayed_candidates"])
         self.evidence(key, "proposal.json", dict(decision=decision, selected=selected), refs)
         context = canonical_json(dict(kind="untrusted_recommendation_metadata", selected=selected))
@@ -472,9 +481,8 @@ class AutomatedRun(legacy.Run):
         row["recommendation_ids"] = self._recommendation_ids
         row["elapsed_ms"] = (time.monotonic() - started) * 1000
         row["active_ms"] = row["human_wait_ms"] = None
-        row["evidence_ids"] = sorted({r["id"] for r in refs})
+        row["evidence_ids"] = sorted({r["id"] for r in refs} | {f"{key}:automated-row.json"})
         self.evidence(key, "automated-row.json", row, refs)
-        row["evidence_ids"] = sorted({r["id"] for r in refs})
         self.budget.flush_settlement()
         return row, sorted(refs, key=lambda r: r["id"])
 

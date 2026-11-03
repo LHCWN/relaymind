@@ -1,5 +1,7 @@
 """RM16/RM37/RM44; AC28/AC36: bounded automated host runner over doubles."""
 
+import pytest
+
 from test_owner_run_260_scripts import run_host as legacy
 
 
@@ -157,7 +159,8 @@ def test_failed_proposal_retains_gate_attempt_and_durable_capture(tmp_path, monk
     final = json.loads(
         (run.evidence_root / "host-runs/t-recommendations/automated-row.json").read_text()
     )
-    assert final["attempts"] == row["attempts"]
+    assert final == row
+    assert "t-recommendations:automated-row.json" in final["evidence_ids"]
 
 
 def test_committed_inputs_refuse_worktree_edits(tmp_path):
@@ -196,7 +199,10 @@ def test_committed_inputs_refuse_worktree_edits(tmp_path):
         module.require_committed_inputs(commit, [path], root=tmp_path)
 
 
-def test_real_loopback_proposal_uses_reserved_gate_and_read_only_channel(tmp_path, monkeypatch):
+@pytest.mark.parametrize("fenced", [False, True])
+def test_real_loopback_proposal_uses_reserved_gate_and_read_only_channel(
+    tmp_path, monkeypatch, fenced
+):
     import json
     import threading
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -218,10 +224,11 @@ def test_real_loopback_proposal_uses_reserved_gate_and_read_only_channel(tmp_pat
             body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
             received.append((self.command, self.path, dict(self.headers), body))
             if self.path.endswith("chat/completions"):
+                content = '{"candidate_id":null,"content_hash":null}'
+                if fenced:
+                    content = "```json\n" + content + "\n```"
                 value = {
-                    "choices": [
-                        {"message": {"content": '{"candidate_id":null,"content_hash":null}'}}
-                    ],
+                    "choices": [{"message": {"content": content}}],
                     "usage": {"prompt_tokens": 4, "completion_tokens": 5},
                 }
             else:
@@ -485,3 +492,27 @@ def test_host_command_timestamp_is_distinct_from_earlier_row_marker(tmp_path, mo
     assert run.dispatch_evidence(task, "native", "t-native", refs) == "2026-11-02T10:00:09Z"
     assert path.read_bytes() == original
     assert sum(ref["id"] == "host-dispatch:t-native" for ref in refs) == 1
+
+
+def test_driver_accepts_one_unambiguous_json_fence():
+    """RM16/RM44: transport formatting never changes proposal fields."""
+    module = _automated()
+    raw = '{"candidate_id":null,"content_hash":null}'
+    expected = {"candidate_id": None, "content_hash": None}
+    for text in (raw, "  " + raw + "  ", "```json\n" + raw + "\n```", "```\n" + raw + "\n```"):
+        assert module.parse_driver_proposal(text) == expected
+
+
+def test_driver_rejects_ambiguous_prose_and_multiple_fences():
+    """RM12/RM16: never guess which object is the driver's proposal."""
+    import pytest
+
+    module = _automated()
+    raw = '{"candidate_id":null,"content_hash":null}'
+    for text in (
+        "choose this: " + raw,
+        "```json\n" + raw + "\n``` trailing",
+        "```json\n" + raw + "\n```\n```json\n" + raw + "\n```",
+    ):
+        with pytest.raises(ValueError):
+            module.parse_driver_proposal(text)

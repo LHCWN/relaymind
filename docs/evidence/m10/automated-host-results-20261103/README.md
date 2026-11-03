@@ -82,7 +82,7 @@ part of execution, so timing is not an isolated performance measurement.
 
 The public record contains hashes and references. Runtime responses, source
 originals, blind inputs and raw review captures remain in the restricted VPS
-assembly at `/home/just_dak/relaymind-automated-277/review-assembly-corrected/`. A clone
+assembly at `/home/vps-user/relaymind-automated-277/review-assembly-corrected/`. A clone
 alone cannot verify those originals. The private resolver preserves their
 exact bytes; the large pinned OpenClaw archive is retained separately with its
 verified distribution-origin record. Nothing is described as embedded binary

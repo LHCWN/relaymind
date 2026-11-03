@@ -56,13 +56,15 @@ recorded refusals and the documented home-path redaction.
 
 Two separate OpenCode2 sessions inspected the frozen claim and all ten bound
 subjects with `opencode-go/glm-5.3-flash`. Both approved without unresolved
-material findings. Their original raw transcripts and invocation metadata are
-retained in `review-a/` and `review-b/`. Each final JSON assessment was obtained
+material findings. Final raw transcripts and invocation metadata are retained
+in `review-a/` and `review-b/`; earlier transcripts are published as the
+redacted copies described below. Each final JSON assessment was obtained
 by resuming its own inspected context; these final calls are not additional
 independent reviews. Reviewer B needed a second final call because its first
-report contained Markdown fences. All intermediate bytes remain available.
+report contained Markdown fences. Original intermediate bytes remain private.
 The record binds the actual final prompts, input manifest and raw final outputs;
-recorder metadata links each final invocation to its predecessor.
+recorder metadata links each final invocation to its predecessor using the
+original hashes. The publication manifest separately binds redacted copies.
 
 The reviews retain these minor limitations: `authenticated_request_scope_unavailable`
 is the harness classification of the actual host scope error, not a native host
@@ -72,3 +74,13 @@ redaction transform cannot be independently replayed without it; and the older
 CI capture failed later at its account milestone, so only its complete loaded-use
 case bodies support this claim. None of these observations enables loaded use.
 The unchanged frozen claim explains their scope; this note does not amend it.
+
+Publication privacy correction (3 November): the earlier `review-a-prompt.txt`,
+`review-b-prompt.txt`, and `review-a/output.jsonl` / `review-b/output.jsonl` are
+now home-path-redacted public projections. Their original bytes are retained
+privately; original and published hashes are in
+[`../privacy-publication-20261103.json`](../privacy-publication-20261103.json).
+The final prompts and final outputs bound by the qualification record are
+unchanged. No findings, claims, reviewer identities or review times changed.
+A public clone cannot verify private original bytes. Previously published paths
+remain in historical commits; this correction does not rewrite Git history.

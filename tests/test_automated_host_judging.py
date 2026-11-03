@@ -283,3 +283,26 @@ def test_blinding_installs_anonymization_before_building_judge_items():
     legacy = SimpleNamespace(final_answer=lambda root, row: "sandboxes/h008-provider_only/x")
     m.configure_blinding(legacy)
     assert legacy.final_answer(None, {}) == "sandboxes/[RUN]/x"
+
+
+@pytest.mark.parametrize("missing", ["items", "map", "map-digest"])
+def test_blind_missing_output_argument_reports_input_error(tmp_path, monkeypatch, missing):
+    """RM16/RM44: reject incomplete CLI inputs before checking frozen artifacts."""
+    m = module()
+    args = [
+        "judge.py",
+        "--protocol",
+        str(m.HERE / "protocol.json"),
+        "--preregistration-commit",
+        "invalid",
+        "--blind-manifest",
+        str(tmp_path / "manifest.json"),
+        "blind",
+    ]
+    for name in ("items", "map", "map-digest"):
+        if name != missing:
+            args.extend(["--" + name, str(tmp_path / (name + ".json"))])
+    monkeypatch.setattr(m.sys, "argv", args)
+    with pytest.raises(ValueError, match="blinding_inputs"):
+        m.main()
+    assert list(tmp_path.iterdir()) == []

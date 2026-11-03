@@ -7,8 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 import sys
 
-ROOT = Path('/home/just_dak/projects/relaymind')
-RUN = Path('/home/just_dak/relaymind-automated-277/run')
+ROOT = Path('/home/vps-user/projects/relaymind')
+RUN = Path('/home/vps-user/relaymind-automated-277/run')
 sys.path.insert(0, str(ROOT/'src'))
 spec = importlib.util.spec_from_file_location('recovery_run', ROOT/'evaluation/assets/automated-host-277/run.py')
 module = importlib.util.module_from_spec(spec)

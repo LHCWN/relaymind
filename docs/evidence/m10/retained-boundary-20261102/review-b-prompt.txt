@@ -9,10 +9,10 @@ Return ONLY one JSON object with exactly these keys:
 There must be exactly one check each for capture_integrity, requirement_coverage, safety_boundaries, limitations, privacy. Every bound subject path must be cited at least once across checks/findings; cite only paths in review-input.json. Evidence lists must be unique and nonempty; text must be nonblank and at most 8192 UTF-8 bytes. Findings must have unique IDs. An unresolved material finding, failed check or incomplete evidence requires reject. Do not invent model/context IDs, times, hashes or human reviewers; the recorder binds the original output and actual invocation metadata separately. Do not edit files or execute model tasks.
 
 Invocation locations (read-only):
-Repository: /home/just_dak/projects/relaymind
-Qualification record: /home/just_dak/projects/relaymind/docs/evidence/m10/m10-negative-loaded-use-openclaw-2026.10.7.json
-Subject paths are relative to: /home/just_dak/projects/relaymind/docs/evidence/m10
-Installed host source: /home/just_dak/projects/relaymind/integrations/openclaw/node_modules/openclaw
+Repository: /home/vps-user/projects/relaymind
+Qualification record: /home/vps-user/projects/relaymind/docs/evidence/m10/m10-negative-loaded-use-openclaw-2026.10.7.json
+Subject paths are relative to: /home/vps-user/projects/relaymind/docs/evidence/m10
+Installed host source: /home/vps-user/projects/relaymind/integrations/openclaw/node_modules/openclaw
 Do not read review-a/output.jsonl, review-b/output.jsonl, or any other reviewer output.
 The exact review-input.json manifest is supplied below; verify subjects against these digests before judgment:
 {
