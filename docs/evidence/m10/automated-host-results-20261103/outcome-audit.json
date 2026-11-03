@@ -1,0 +1,22 @@
+{
+  "status": "outcome_conservation_verified",
+  "completion_verified": false,
+  "planned_rows": 300,
+  "journal": {
+    "started": 95,
+    "finished": 95,
+    "skipped": 205
+  },
+  "statuses": {
+    "failed": 80,
+    "completed": 9,
+    "cancelled": 6,
+    "not_run": 205
+  },
+  "successes": 5,
+  "execution_charged": 12948713,
+  "judging_charged": 52710,
+  "blind_completed_items": 9,
+  "disputes": 0,
+  "qualification_gate": "blocked"
+}

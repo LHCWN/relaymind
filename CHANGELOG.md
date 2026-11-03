@@ -8,6 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Completed the bounded automated host experiment for #277 with all 300 outcomes retained, corrected blind judging, recorded reviews and explicit failed/unrun results. The arm-identity anonymization fix preserves original judgments and cumulative budget accounting (RM16, RM44; AC36).
+
 - Spec 0.68 permits two recorded automated reviews, including OpenCode2, for host-operation qualification only; exact claim/capture bindings and original review outputs are verified, without human-review attribution or relaxed safety evidence (RM16, RM37, RM39; AC28, AC30, AC35).
 
 - Spec 0.67 defines a separately labelled automated host experiment for #277, with bounded recommendation proposals, frozen machine judging/review and durable evidence; production person authority and full M10 acceptance gates remain unchanged (RM16, RM35–RM44; AC26–AC36).

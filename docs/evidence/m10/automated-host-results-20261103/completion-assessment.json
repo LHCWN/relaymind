@@ -1,0 +1,85 @@
+{
+  "profile": "automated_host",
+  "assessed_at": "2026-11-03T08:51:32.294588Z",
+  "specification": "0.68 section 12.6.7",
+  "requirements": [
+    "RM16",
+    "RM35",
+    "RM36",
+    "RM37",
+    "RM40",
+    "RM41",
+    "RM42",
+    "RM43",
+    "RM44",
+    "AC26",
+    "AC27",
+    "AC28",
+    "AC31",
+    "AC32",
+    "AC33",
+    "AC34",
+    "AC35",
+    "AC36"
+  ],
+  "disposition": "completed_budget_limited_automated_experiment",
+  "claim_sha256": "0f5fc828d9d50c1dabd0f6d749de87f47b69d9f023fe5861ad5dbc183fc5cfb1",
+  "record_digest": "be010a22e9d1fa483828b1cf03c35ae5d5bb04d3b290f7e4be7a008f1a2260ee",
+  "binding_verification": {
+    "bindings_verified": true,
+    "completion_verified": false,
+    "planned_rows": 300,
+    "qualification": "provisional",
+    "record_digest": "be010a22e9d1fa483828b1cf03c35ae5d5bb04d3b290f7e4be7a008f1a2260ee"
+  },
+  "outcome_audit": {
+    "status": "outcome_conservation_verified",
+    "completion_verified": false,
+    "planned_rows": 300,
+    "journal": {
+      "started": 95,
+      "finished": 95,
+      "skipped": 205
+    },
+    "statuses": {
+      "failed": 80,
+      "completed": 9,
+      "cancelled": 6,
+      "not_run": 205
+    },
+    "successes": 5,
+    "execution_charged": 12948713,
+    "judging_charged": 52710,
+    "blind_completed_items": 9,
+    "disputes": 0,
+    "qualification_gate": "blocked"
+  },
+  "review_results": [
+    {
+      "id": "reviewer-a",
+      "context_id": "ses_e5f952c79ffeZavk2r08gwOILu",
+      "output_sha256": "592bd44f2515fc72792699f570f5d792593d7e1b48c6a6c9b652164b5051c620",
+      "finding": "No remaining material findings in the corrected claim."
+    },
+    {
+      "id": "reviewer-b",
+      "context_id": "ses_e5f952c77ffeR6I2XAVCMdSyF6",
+      "output_sha256": "4f59c138badfefdb6131759ec76e2a00a64a09d48e5c6044502ee223551863ab",
+      "finding": "No remaining material findings in the corrected claim."
+    }
+  ],
+  "finding_resolution": {
+    "id": "F1",
+    "initial_defect": "Three initial judge-visible answers exposed producing arms through sandbox run identities.",
+    "resolution": "Source 7d96b76 anonymizes harness keys; fresh blind manifest 8824fc3 was committed before fresh stateless requests. All four corrected requests were checked; zero run-key leaks. Original judgments and reviews retained. Both passes share the same 300,000-token cap; no execution replay; no verdict changes.",
+    "corrective_reviews": "Both contexts report no remaining material findings."
+  },
+  "completion_basis": [
+    "All 300 planned outcomes conserved; every started row ends once and all runtime evidence references resolve.",
+    "Every completed answer has two corrected blind judgments; zero disputes; report verdicts match.",
+    "Both actual corrective reviews are attached with distinct contexts, frozen model/prompt identities, outputs and usage; all bindings including both claim-input digests verify.",
+    "Execution budget remains 12,948,713/13,000,000 and cumulative judging 52,710/300,000; all failed/unrun/unknown outcomes and historical corrections remain disclosed."
+  ],
+  "qualification_scope": "Automated experiment completion only. Report qualification remains provisional; success/cost gates remain blocked; the legacy grade-host rejection is retained. No full M10, 300-asset catalog, person-driven selection or positive loaded skill/MCP qualification claim.",
+  "access": "Public metadata is digest-bound; original runtime and review bytes are restricted on the VPS. A clone alone cannot verify all private bindings."
+}

@@ -1,0 +1,89 @@
+{
+  "description": "Actual OpenCode2 counters for both initial and corrective review invocations. Fields are summed separately; cache/input/reasoning overlap semantics are not inferred. These are not a billing total or execution/judging consumption. Raw usage is retained with the bound review evidence.",
+  "invocations": [
+    {
+      "phase": "initial",
+      "reviewer_id": "reviewer-a",
+      "model": "opencode-go/glm-5.3-flash",
+      "context_ids": [
+        "ses_e5f952c79ffeZavk2r08gwOILu"
+      ],
+      "started_at": "2026-11-03T07:58:37.581753+00:00",
+      "completed_at": "2026-11-03T08:18:12.784476+00:00",
+      "reported_step_finish_events": 119,
+      "reported_counters": {
+        "input": 251236,
+        "output": 19732,
+        "reasoning": 23677,
+        "cache": {
+          "read": 11414208,
+          "write": 0
+        }
+      },
+      "usage_file_sha256": "ad750fdda5a775c2fd20c3cdfb558d1be5d6a09240d199b858baa4c9ecf75f29"
+    },
+    {
+      "phase": "corrected",
+      "reviewer_id": "reviewer-a",
+      "model": "opencode-go/glm-5.3-flash",
+      "context_ids": [
+        "ses_e5f952c79ffeZavk2r08gwOILu"
+      ],
+      "started_at": "2026-11-03T08:39:03.363864+00:00",
+      "completed_at": "2026-11-03T08:50:16.565325+00:00",
+      "reported_step_finish_events": 46,
+      "reported_counters": {
+        "input": 255234,
+        "output": 12535,
+        "reasoning": 12731,
+        "cache": {
+          "read": 9542848,
+          "write": 0
+        }
+      },
+      "usage_file_sha256": "397af8741fd0e1686a4f7c154fc8f527eeb53e194473f44f78c3b9c5826e56b7"
+    },
+    {
+      "phase": "initial",
+      "reviewer_id": "reviewer-b",
+      "model": "opencode-go/glm-5.3-flash",
+      "context_ids": [
+        "ses_e5f952c77ffeR6I2XAVCMdSyF6"
+      ],
+      "started_at": "2026-11-03T07:58:37.583079+00:00",
+      "completed_at": "2026-11-03T08:14:55.717777+00:00",
+      "reported_step_finish_events": 106,
+      "reported_counters": {
+        "input": 152151,
+        "output": 24664,
+        "reasoning": 16769,
+        "cache": {
+          "read": 6324544,
+          "write": 0
+        }
+      },
+      "usage_file_sha256": "71c656ee00accd3057df709a19ef8333d87565ba0c83459e19a7c928980b8413"
+    },
+    {
+      "phase": "corrected",
+      "reviewer_id": "reviewer-b",
+      "model": "opencode-go/glm-5.3-flash",
+      "context_ids": [
+        "ses_e5f952c77ffeR6I2XAVCMdSyF6"
+      ],
+      "started_at": "2026-11-03T08:39:03.357956+00:00",
+      "completed_at": "2026-11-03T08:49:04.872842+00:00",
+      "reported_step_finish_events": 44,
+      "reported_counters": {
+        "input": 163361,
+        "output": 15172,
+        "reasoning": 12071,
+        "cache": {
+          "read": 5166912,
+          "write": 0
+        }
+      },
+      "usage_file_sha256": "7e35c217fd99840aad158320962a519ddd8ed2f47d848a8d853c42c9354f3d70"
+    }
+  ]
+}

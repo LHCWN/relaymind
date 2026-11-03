@@ -1,0 +1,134 @@
+{
+  "schema_version": 1,
+  "claim_sha256": "0f5fc828d9d50c1dabd0f6d749de87f47b69d9f023fe5861ad5dbc183fc5cfb1",
+  "files": [
+    {
+      "path": "bundle/inputs.json",
+      "sha256": "2f7ca00537e1a8f7a1aa3b0c3d06683fbb3af58a66ae3312b28b6a8376c7b9ba",
+      "bytes": 649673
+    },
+    {
+      "path": "bundle/report.json",
+      "sha256": "f242c6f0d3701449d06cdc7ff480555f11b91970ff5343e02100ee6466b50159",
+      "bytes": 788178
+    },
+    {
+      "path": "frozen/freeze.json",
+      "sha256": "c759782bf3db48a4f5b9f19ca19c31ab649be13f1e8b1a62e81d390b89445f2a",
+      "bytes": 40527
+    },
+    {
+      "path": "frozen/protocol.json",
+      "sha256": "c3cb87608e335d282ee0fd8876b0749f43afbeb5130697e32dc727dfacf7361a",
+      "bytes": 1619
+    },
+    {
+      "path": "frozen/source_lock.json",
+      "sha256": "cc8d9b764b2abd136bd61c000fddad5f16fd78c3baeb3d1eb356086caea07894",
+      "bytes": 171324
+    },
+    {
+      "path": "frozen/source_tasks.json",
+      "sha256": "2c507f53b18ee3b5fcb75c451b723efa1d9c4ea59b39b7f7c29ea09b1fd1ea1e",
+      "bytes": 63333
+    },
+    {
+      "path": "frozen/tasks.json",
+      "sha256": "fd17ff3080f0a78d48974a5221c6b5f03c7925e7c4e134ca65002d83199da0c5",
+      "bytes": 63333
+    },
+    {
+      "path": "judging/blinding-manifest.json",
+      "sha256": "cdf9aca2bfc03a17f99b7628c48e4c5445d63940d0a1c1930fb0d0c8d392ad75",
+      "bytes": 366
+    },
+    {
+      "path": "judging/judgments.json",
+      "sha256": "80c8e0df2c517f035d7f0bc507e628e09208ca2c05a2a55a1456f8736a45ca3c",
+      "bytes": 6297
+    },
+    {
+      "path": "judging/ledger.json",
+      "sha256": "3b3b462aa0d742bad1719c5d829750daca9c029210cc79c542bdf4d472bac579",
+      "bytes": 1329
+    },
+    {
+      "path": "judging/map.json",
+      "sha256": "26eb7be2e0f7ee1aa2ee0634480fe466a498bc550f9efcf9f4ee413f57367736",
+      "bytes": 561
+    },
+    {
+      "path": "manifests/code.json",
+      "sha256": "ca0e65fd137d81f90d3b663f7cc25362f87c2bd18fce53bfc328b7cbf82f10af",
+      "bytes": 66106
+    },
+    {
+      "path": "manifests/evidence.json",
+      "sha256": "8b031d67c87e61323a43cec3b25b2750aebcf5c7ab12adacf63755091e881eef",
+      "bytes": 479660
+    },
+    {
+      "path": "manifests/judging-captures.json",
+      "sha256": "8e006898b77fb855bf0cd7a51917ba144cbc7b9039785f54c6f0d84e400e04c8",
+      "bytes": 16704
+    },
+    {
+      "path": "record.json",
+      "sha256": "89233ec8e619861287f6a50e9b4de65a15f3e1523385d5edfe82119ae3ffe391",
+      "bytes": 7966
+    },
+    {
+      "path": "review-inputs/224dcda222ac22c5-input.json",
+      "sha256": "2126282dcde1a83ed38f7064cc1447064f917aad50e2ab23bb39e2981d0acbe5",
+      "bytes": 103
+    },
+    {
+      "path": "review-inputs/224dcda222ac22c5-prompt.txt",
+      "sha256": "f4e506d8bbc6384b7b73cba825c84dc7ce0e6e49f56790554eb360506fee3ec5",
+      "bytes": 601
+    },
+    {
+      "path": "review-inputs/ae6eca04872013b2-input.json",
+      "sha256": "2126282dcde1a83ed38f7064cc1447064f917aad50e2ab23bb39e2981d0acbe5",
+      "bytes": 103
+    },
+    {
+      "path": "review-inputs/ae6eca04872013b2-prompt.txt",
+      "sha256": "88b68e518130bda56c844333545c321fff8d35302ef9e3322fd48e2de8152295",
+      "bytes": 621
+    },
+    {
+      "path": "README.md",
+      "sha256": "ec4250c72ff3d9165a77a9c65d3fafd6b319b4250f11b8a30647bbdf8e90fa31",
+      "bytes": 5691
+    },
+    {
+      "path": "outcome-audit.json",
+      "sha256": "abc311a3614b9ed105e5c2bde06a85ffc22e5754dfde512669b4832e122e15a4",
+      "bytes": 440
+    },
+    {
+      "path": "completion-assessment.json",
+      "sha256": "58d97ebe59e4350857da4bdd2d30f88d0de12571e0077029ee3dbc42fa86ad65",
+      "bytes": 3519
+    },
+    {
+      "path": "review-usage.json",
+      "sha256": "2bf5af0d699ac0bee13e744de5c73371fabec3c50edbfec5653dea9245ab3493",
+      "bytes": 2869
+    },
+    {
+      "path": "blinding-correction.json",
+      "sha256": "1e8af00df9cf20846cb0bee43656170f7fccbb5497fa595f534c495baca7c08b",
+      "bytes": 2310
+    }
+  ],
+  "restricted_originals": "Retained on the VPS in /home/just_dak/relaymind-automated-277/review-assembly-corrected; not included in this public metadata export. A clone alone cannot verify their bytes.",
+  "binding_verification": {
+    "bindings_verified": true,
+    "completion_verified": false,
+    "planned_rows": 300,
+    "qualification": "provisional",
+    "record_digest": "be010a22e9d1fa483828b1cf03c35ae5d5bb04d3b290f7e4be7a008f1a2260ee"
+  }
+}

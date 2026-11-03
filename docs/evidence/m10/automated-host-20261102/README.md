@@ -2,7 +2,9 @@
 
 RM16/RM40/RM44; AC31/AC36; specification 12.6.7. The original inputs and
 implementation were preregistered at `8f796b1` before the first paid request.
-The complete experiment and its final reviews remain pending.
+The bounded experiment and corrective reviews are complete. See the
+[final results and assessment](../automated-host-results-20261103/README.md);
+full qualification remains blocked.
 
 The [source correction](artifact-writer-correction.json) records an evidence
 writer failure after the first native row. Original captures survived.

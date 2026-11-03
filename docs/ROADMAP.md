@@ -1812,14 +1812,18 @@ to reproduce `verify.txt`; the bound README and evidence remain unchanged.
 
 ### Automated host experiment and retained-use qualification
 
-Spec 0.67 section 12.6.7 defines the automated replacement for #277. Its
-protocol and proposal validators, durable preregistration command, bounded
-three-arm runner and blind judging wrapper are implemented. No new 100-task
-report or acceptance result is claimed until execution and reviews finish.
-The original frozen inputs remain unchanged. Production manual
-selection remains available and the experiment grants no direct-action
-credential. The execution/review sequence is recorded in
-`docs/superpowers/plans/2026-11-02-m10-closure.md`.
+The automated replacement for #277 is complete under spec 0.68 section 12.6.7.
+The [results and completion assessment](evidence/m10/automated-host-results-20261103/README.md)
+conserve all 300 planned outcomes: 9 completed, 80 failed, 6 cancelled and 205
+unrun at the hard cap. Execution charged 12,948,713 of 13,000,000 conservative
+tokens. Corrected blind judging agreed on all nine completed answers (five
+successes); both judging passes used 52,710 of 300,000 tokens. The initial
+arm-identity leak, its fix and original judgments remain recorded. Two separate
+OpenCode 2 contexts verified the corrected claim with no remaining material
+findings; final bindings verify. Full qualification and success/cost gates remain
+blocked, and the development catalog remains development evidence. Production
+manual selection remains available; the experiment grants no direct-action
+credential or loaded managed skill/MCP use. No execution row was replayed.
 
 For #280, `test/host-loaded-use-qualification/` in the OpenClaw integration
 contains a qualification-only retained-boundary probe. The real VPS capture
