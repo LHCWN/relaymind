@@ -347,7 +347,7 @@ def main() -> int:
     required = {
         "blind": (selected.items, selected.map, selected.map_digest),
         "bind-blinding": (selected.items, selected.map_digest),
-        "apply": (selected.items, selected.map),
+        "apply": (selected.map,),
     }.get(selected.command, ())
     if any(path is None for path in required):
         raise ValueError("blinding_inputs")

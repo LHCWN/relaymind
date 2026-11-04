@@ -290,7 +290,7 @@ def test_blinding_installs_anonymization_before_building_judge_items():
     [
         ("blind", ("items", "map", "map-digest")),
         ("bind-blinding", ("items", "map-digest")),
-        ("apply", ("items", "map")),
+        ("apply", ("map",)),
     ],
 )
 @pytest.mark.parametrize("missing", ["items", "map", "map-digest"])
@@ -338,10 +338,86 @@ expected = Path(sys.argv[1]).resolve().parents[3] / 'scripts/automated_host_tran
 assert Path(transport.origin) == expected
 """
     result = subprocess.run(
-        [sys.executable, "-I", "-c", code, str(script)],
+        [sys.executable, "-E", "-c", code, str(script)],
         cwd=tmp_path,
         capture_output=True,
         text=True,
         timeout=30,
     )
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize("tamper_map", [False, True])
+def test_apply_wrapper_runs_legacy_cli_without_items(tmp_path, monkeypatch, tamper_map):
+    """RM16/RM44: apply accepts its real CLI and still checks the blinded map."""
+    import importlib.machinery
+    import json
+
+    from relaymind.canonical import canonical_digest
+    from relaymind.evaluation import asset_whole_task
+    from test_owner_run_260_scripts import _apply_fixture
+
+    m = module()
+    args = _apply_fixture(tmp_path)
+    items = tmp_path / "items.json"
+    items.write_text(
+        json.dumps({"format": "relaymind.owner_run_blind_items.v1", "items": [{"blind_id": "x1"}]})
+    )
+    digest = tmp_path / "digest.json"
+    digest.write_text(
+        json.dumps(
+            {
+                "format": "relaymind.owner_run_blind_map_digest.v1",
+                "map_canonical_sha256": canonical_digest(m.read(args.map)),
+                "items": 1,
+            }
+        )
+    )
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps(m.blinding_manifest(items, digest)))
+    if tamper_map:
+        mapping = m.read(args.map)
+        mapping["map"]["x1"]["task_id"] = "changed"
+        args.map.write_text(json.dumps(mapping))
+
+    # Only Git provenance and unrelated summary computation are doubles;
+    # wrapper, manifest binding, legacy parser and apply run unchanged.
+    checked = []
+    original_exec = importlib.machinery.SourceFileLoader.exec_module
+
+    def load(loader, loaded):
+        original_exec(loader, loaded)
+        if loaded.__name__ == "automated_277_run":
+            loaded.require_committed_inputs = lambda commit, paths: checked.append((commit, paths))
+
+    monkeypatch.setattr(importlib.machinery.SourceFileLoader, "exec_module", load)
+    monkeypatch.setattr(asset_whole_task, "host_summary", lambda *a: {"arms": []})
+    argv = [
+        "judge.py",
+        "--protocol",
+        str(m.HERE / "protocol.json"),
+        "--preregistration-commit",
+        "fixture-registration",
+        "--blind-manifest",
+        str(manifest),
+        "--blinding-commit",
+        "fixture-blinding",
+        "apply",
+    ]
+    for name, path in vars(args).items():
+        argv.extend(["--" + name, str(path)])
+    monkeypatch.setattr(m.sys, "argv", argv)
+    if tamper_map:
+        with pytest.raises(ValueError, match="blinding_map"):
+            m.main()
+        assert not args.evidence.exists()
+    else:
+        assert m.main() == 0
+        report = m.read(args.output)
+        assert report["rows"][0]["success"] is True
+        assert report["rows"][0]["evidence_ids"] == [
+            "judging:blind-map",
+            "judging:success-judgments",
+        ]
+        assert (args.evidence / "judging/map.json").read_bytes() == args.map.read_bytes()
+    assert [commit for commit, _ in checked] == ["fixture-registration", "fixture-blinding"]
