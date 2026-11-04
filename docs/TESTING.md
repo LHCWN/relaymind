@@ -1,28 +1,28 @@
-# Testing RelayMind (Milestones 1 to 5)
+# Testing RelayMind
 
-For current independent skill/tool setup, start with the
-[English](asset-selection.md) or [简体中文](asset-selection.zh-CN.md) guide and
-[privacy/recovery reference](asset-privacy-security.md). Historical issue sections
-below retain their original scope; later catalog/refresh work does not turn an
-earlier backend fixture into installed-host evidence.
+Use this guide to verify gateway behavior, OpenClaw integration and independent
+asset recommendations. Deterministic tests use model doubles; live measurements
+and qualification records have their own requirements. A fixture pass does not
+establish live quality or platform acceptance.
 
-How to verify the M1 to M5 deliverables, by hand on macOS and Windows
-and with the automated suites. M1 qualifies the local model runtime and
-the adapters; M2 adds the bounded local loop; M3 adds handoff,
-confirmation, restart recovery, and the error contract; M4 adds the
-gateway's public API and the demo UI; M5 adds the launcher, the parallel
-workflow, the caches, and the browser test of the page script (see
-[`ROADMAP.md`](ROADMAP.md)). M3 to M5 are covered by deterministic tests
-with model doubles only;
-[What is not covered yet](#what-is-not-covered-yet) lists the gaps. The
-gateway's public API (`/v1/chat/completions`, `/relay/v1/runs`) is
-started with `relaymind serve --config` (see
-[Starting the gateway](#starting-the-gateway)); the
-[README](../README.md#use) shows the requests to send it.
-The manual JSON steps below target the llama-server endpoint that the
-`LlamaCppAdapter` talks to.
-The phase 2 suites (M7 to M9, including the OpenClaw plugin and its
-evaluation) are listed after the M1 to M5 ones.
+Start with [development setup](../CONTRIBUTING.md#development-prerequisites).
+For operator setup, use the [gateway quickstart](../README.md),
+[OpenClaw guide](../integrations/openclaw/README.md), or asset recommendations
+([English](asset-selection.md), [简体中文](asset-selection.zh-CN.md)).
+For delivery status and recorded results, use the
+[documentation map](../README.md#documentation-and-contributing). Historical
+issue-specific notes below retain their original scope.
+
+## Find a verification workflow
+
+- [Automated checks](#automated-suites) and [CI platforms](#ci-timing-reports).
+- [Start the gateway](#starting-the-gateway) and [send manual runtime requests](#manual-json-testing-from-a-terminal).
+- [OpenClaw checks](../integrations/openclaw/README.md#checks).
+- [Catalog discovery](#independent-asset-catalog-discovery-192-rm34ac25),
+  [selector v2](#recommendation-selector-v2-193-rm35ac26), and
+  [recommendation lifecycle](#recommendation-json-lifecycle-194-rm36ac27).
+- [Customer recommendation workflows](#customer-recommendation-workflow-checks-207)
+  and [qualified source refresh](#qualified-public-source-refresh-spec-059-rm34rm38rm43).
 
 ## Automated suites
 
@@ -38,7 +38,7 @@ ruff format --check .
 The core `check` job runs `pytest -n auto --dist loadfile` (pytest-xdist, in
 the `dev` extra). Each worker runs whole test files, so tests in one file keep
 running in order in one process. Locally, `pytest -n 4 --dist loadfile` ran
-the full suite in about 3 minutes, against about 8 in one process. On Windows,
+an earlier suite in about 3 minutes, against about 8 in one process. On Windows,
 the single-process `check` test step took about 29 minutes. The Chromium shell
 download is cached per OS and Playwright version under
 `$RUNNER_TEMP/ms-playwright`; Linux still installs its system packages on every
@@ -1696,7 +1696,9 @@ replaced neither; nothing else changed. Windows has not run.
   the rows in `docs/EVIDENCE.md` and the run cited by `docs/RELEASE.md`,
   `docs/ROADMAP.md`, this file, `CHANGELOG.md`, and the OpenClaw README.
 
-### What is not covered yet
+### Coverage gaps in the M1–M9 records
+
+Check the [roadmap](ROADMAP.md) for current disposition before planning a new run.
 
 - The correctness corpus ran on Apple Silicon macOS only (#32). The
   latency benchmark ran on macOS (#33) and native x86-64 Windows
@@ -2096,7 +2098,7 @@ fixture tree is terminated; termination is never counted as a successful drain.
 These checks exercise discovery, integrity and publication. They do not qualify
 Matrix acquisition rights/language/cohort/refresh, a production host adapter,
 useful recommendation readiness, full-scale performance or live platform gates.
-The reviewed-spec PR stack is the implementation basis pending #187's merge.
+The current specification defines the implementation and qualification boundaries.
 
 An ordinary local source needs no managed RelayMind manifest. For example,
 `ordinary-skills/greeting/SKILL.md` may contain:
@@ -2191,15 +2193,13 @@ samples (25 records per full import batch), observed overlap and drain duration
 are stored as measurements; the 50 ms CPU batch target is not a preemption or
 performance success claim.
 
-Fixed caps are 1000 entries/packages or distinct records per source job;
-1000 combined import upserts/removals; 100 MiB staged bytes/job; 10 MiB/original;
-4 MiB import/optional manifest/frontmatter; 256 KiB body before/after
-normalization; 1 MiB read chunks; 60 seconds/job; YAML depth 16. Projections
-also enforce the exact field/repetition/offer limits in specification §14.5.
-The first exhausted limit fails staging without partial publication. There is
-no permitted remote adapter, automatic installation, MCP client, inference,
-recommendation endpoint or useful readiness claim in this catalog component.
-The separate pre-warmup serving order remains #196 work.
+The discovery tests exercise the resource and projection limits defined in
+[specification section 14.5](SPECIFICATION.md#145-m10-configuration-startup-and-source-lifecycle-spec-051).
+The first exhausted limit fails staging without partial publication. This
+component does not install assets, start MCP clients or grant host authority.
+The [qualified source refresh](#qualified-public-source-refresh-spec-059-rm34rm38rm43)
+and [index lifecycle](#lexical-startup-and-shared-index-lifecycle-196-rm38ac29)
+sections cover the separate remote and readiness paths.
 
 ## What manual checks do not replace
 
@@ -2243,8 +2243,9 @@ The published schemas are
 [`selection_result.v2.json`](../src/relaymind/selection/schemas/selection_result.v2.json)
 and [`recommendation_result.v1.json`](../src/relaymind/store/schemas/recommendation_result.v1.json).
 The internal selector factory is separate from managed `[selection]` v1.
-Recommendation lifecycle endpoints are supplied by #194; operational startup
-and measured update/rebuild/resource gates remain #196. Runtime binding is
+Recommendation lifecycle endpoints and lexical startup are implemented in the
+sections below. Measured update/rebuild/resource gates are tracked in the
+[roadmap](ROADMAP.md). Runtime snapshot binding is
 unavailable, and discovery availability remains unknown without qualified host
 evidence.
 
@@ -2308,8 +2309,9 @@ attempts are in its separate lifecycle store. The service rechecks current
 revision/admission and calls that same budget's `check()` inside its atomic ready
 transition; a returned selection object is not a durable ready commit. It calls
 `fence_terminal()` on terminal lifecycle commit and retains ownership of resistant
-work until bounded cleanup observes completion. Operational startup and
-performance qualification remain #196.
+work until bounded cleanup observes completion. See
+[lexical startup and index lifecycle](#lexical-startup-and-shared-index-lifecycle-196-rm38ac29)
+for startup behavior and the [roadmap](ROADMAP.md) for performance qualification.
 
 ## Recommendation JSON lifecycle (#194; RM36/AC27)
 
@@ -2416,9 +2418,11 @@ both the current application bearer and the separate
 `user_action_required`; it cannot register a channel. There is no public
 credential administration endpoint or model-callable action helper. The current
 backend trusts a registered adapter channel, not verified human identity or a
-compromised host. No production contract is qualified here, including OpenClaw;
-writing a qualification reference into a file does not enable one. Tests inject
-a deterministic qualification resolver explicitly, outside launch configuration.
+compromised host. The
+[native host guide](../integrations/openclaw/README.md#native-recommendations-and-explicit-actions)
+defines the supported production contract, personal mapping and role setup.
+Tests can inject a deterministic qualification resolver
+explicitly, outside launch configuration.
 
 `[user_actions].registrations_path` is optional and resolves relative to the
 launch configuration directory. An omitted path loads no registrations. Its
@@ -2427,8 +2431,8 @@ contains `schema_version:1`, `adapter_id`, `user_id`, `workspace_id`,
 `credential_sha256`, `enabled`, `host_identity`, `session_mapping`, and
 `qualified_contract_revision`. The last three are bounded references to an
 independently qualified contract and operator configuration. Disabled records
-can document an integration awaiting qualification. All enabled production
-records are refused until a genuine contract is supported.
+can document an integration awaiting qualification. Enabled records must match
+the supported production contract; unknown contracts are refused.
 
 Use a regular nonsymlink operator-owned file with owner-only Unix permissions
 (0600). Native Windows checks use actual process-user SID/owner/DACL evidence,
@@ -2499,7 +2503,8 @@ A configured path through an ancestor link
 (such as macOS /tmp) is resolved where it is configured; a link in the checked
 path is still refused. They exercise backend boundaries and do not qualify a real host/person,
 OpenClaw exact loading, interactive approvals, or native Windows privacy from a
-Linux run. HOST-ACTION-AUTHORITY and HOST-EXACT-SKILL-USE remain blocked.
+Linux run. Current host-operation qualification is maintained in the
+[roadmap](ROADMAP.md#automated-host-experiment-and-retained-use-qualification).
 
 ### Lexical startup and shared index lifecycle (#196; RM38/AC29)
 

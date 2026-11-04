@@ -1,0 +1,208 @@
+{
+  "kind": "supported_native_composition_search",
+  "host_version": "2026.10.7",
+  "scope": "Pinned native host/provider integration under spec0.68 sections1,7.6.1,12.6.6; excludes a new executor, host patch or upgrade",
+  "sources": [
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/dist/config-contracts-Db6WHFol.d.ts",
+      "sha256": "48c2f15bb8041a49dd7da5d34663cab7f73081b2ed03f807c09c01ab61851a3d",
+      "bytes": 2382298
+    },
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/dist/gateway-method-runtime-BN4bBk6Z.mjs",
+      "sha256": "33ce7ff1b8c0bd321ee2bbe94a62ed5c13dbc623157846a6fb7b9364c25e997a",
+      "bytes": 1342
+    },
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/dist/plugin-sdk/agent-harness-attempt-runtime.js",
+      "sha256": "52253cf6ecb0695895c222e8d5e326a8eda563e2aabd42f66183a2507eb79c52",
+      "bytes": 1902
+    },
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/dist/plugin-sdk/agent-harness-completion.js",
+      "sha256": "5d01d1e75816021c392613ccd37e49365596eb8d3d89eb249a33877156d2f788",
+      "bytes": 19952
+    },
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/dist/plugin-sdk/agent-harness-exec-review-runtime.js",
+      "sha256": "de33ff7d027b4b86356da62ec73e1c500413ad5569c3de6363b59538c587eb32",
+      "bytes": 2820
+    },
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/dist/plugin-sdk/agent-harness-registration.js",
+      "sha256": "5ae2e4741def29be35a5e4a12a033bdc7f632ffc878a51ac0bb53fa59cbada8e",
+      "bytes": 433
+    },
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/dist/plugin-sdk/agent-harness-runtime.js",
+      "sha256": "98d12f921f5b1724de6625b0143f153170726b650ab28a6c0b2f2444ad5c41ca",
+      "bytes": 17273
+    },
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/dist/plugin-sdk/agent-harness-session-runtime.js",
+      "sha256": "236602e72a47252a4c40e95a2b507eda51d83d15b6c75f33831d758118c4e2b8",
+      "bytes": 1183
+    },
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/dist/plugin-sdk/agent-harness-tool-runtime.js",
+      "sha256": "608f8f1f70f3279fc14a4c56f744ac84fb4e3edeb6f6fcf0806e73bdba37bf6e",
+      "bytes": 2283
+    },
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/dist/plugin-sdk/agent-harness.d.ts",
+      "sha256": "5bc48df0992011ae05b80b1abcc55cbdce81daee7b2ea7c0a5e6920556c4fa45",
+      "bytes": 2473
+    },
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/dist/plugin-sdk/agent-workspace-runtime.d.ts",
+      "sha256": "76e8a0e686601adbb376a132479e58dc15fb64fa98946e2ece81cec032f025cd",
+      "bytes": 18060
+    },
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/dist/plugin-sdk/skill-commands-runtime.d.ts",
+      "sha256": "4c48cec9d5b7d2c0d66d6a8fd976c7be5ab6c2bfaa0f294cf24c0e5cb84f0fba",
+      "bytes": 185
+    },
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/dist/request-authorization-DsdcZTZi.mjs",
+      "sha256": "c2fcb84fd7646a54542259ad83e8f4706bb0a06fbecd93fb91b4444fb012d8d5",
+      "bytes": 34473
+    },
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/dist/server-plugin-in-process-dispatch-CQ6TnlII.mjs",
+      "sha256": "a3ef0ea1a9000ce18ce643c3802ce3f870355522ed420db7bc3fca5ed84b678b",
+      "bytes": 33902
+    },
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/docs/plugins/sdk-agent-harness/registration.md",
+      "sha256": "6f0a26e6a286e14c94f94a9b89e01777131a5428b6d7df66ef9da996d5eccda8",
+      "bytes": 11914
+    },
+    {
+      "path": "integrations/openclaw/node_modules/openclaw/package.json",
+      "sha256": "362f8c0fda7b71a116e0ca2f812e896bfe9cfec41e64b6b66243f95703aaf7b8",
+      "bytes": 149337
+    }
+  ],
+  "public_harness_exports": {
+    "./plugin-sdk/agent-harness-completion": {
+      "default": "./dist/plugin-sdk/agent-harness-completion.js"
+    },
+    "./plugin-sdk/agent-harness": {
+      "types": "./dist/plugin-sdk/agent-harness.d.ts",
+      "default": "./dist/plugin-sdk/agent-harness.js"
+    },
+    "./plugin-sdk/agent-harness-attempt-runtime": {
+      "default": "./dist/plugin-sdk/agent-harness-attempt-runtime.js"
+    },
+    "./plugin-sdk/agent-harness-exec-review-runtime": {
+      "default": "./dist/plugin-sdk/agent-harness-exec-review-runtime.js"
+    },
+    "./plugin-sdk/agent-harness-registration": {
+      "default": "./dist/plugin-sdk/agent-harness-registration.js"
+    },
+    "./plugin-sdk/agent-harness-runtime": {
+      "types": "./dist/plugin-sdk/agent-harness-runtime.d.ts",
+      "default": "./dist/plugin-sdk/agent-harness-runtime.js"
+    },
+    "./plugin-sdk/agent-harness-session-runtime": {
+      "default": "./dist/plugin-sdk/agent-harness-session-runtime.js"
+    },
+    "./plugin-sdk/agent-harness-tool-runtime": {
+      "default": "./dist/plugin-sdk/agent-harness-tool-runtime.js"
+    }
+  },
+  "routes": [
+    {
+      "surface": "before_tool_call / tool-result middleware / prompt hooks",
+      "disposition": "covered_by_prior_inventory",
+      "basis": "Prior pinned hook/SDK search and actual removed-entry capture; callbacks expose no live library-entry capability. Retained borrow fixes authority currentness but does not add library state."
+    },
+    {
+      "surface": "retain() + provider onPayload + public gateway dispatch",
+      "disposition": "attempted_refused",
+      "basis": "New VPS capture: borrow found and current after RPC; skills.library.list throws authenticated_request_scope_unavailable; zero model HTTP requests."
+    },
+    {
+      "surface": "public runtime agent session readers",
+      "disposition": "not_a_library_currentness_api",
+      "basis": "Session entries/pins do not establish nonremoved current Skill Library entries; prior deletion capture retains pinned bytes."
+    },
+    {
+      "surface": "skill-commands-runtime / agent-workspace-runtime",
+      "disposition": "not_a_library_currentness_api",
+      "basis": "Exports workspace command lists/resource file readers; not personal Skill Library live entry/tombstone authority."
+    },
+    {
+      "surface": "SkillLibraryAuthoringCapability on custom harness attempt",
+      "disposition": "replacement_executor_out_of_scope",
+      "basis": "Capability exists. Public harness registration requires implementing runAttempt; no same-attempt builtin wrapper/delegation export found. New executor excluded by spec1; native baseline preserved by RM39/7.6.1."
+    },
+    {
+      "surface": "runtime.agent.runEmbeddedAgent",
+      "disposition": "new_run_not_same_attempt_delegation",
+      "basis": "Public RuntimeRunEmbeddedAgentParams excludes admittedRunContext and preparedRunAdmission; it admits another run, not a wrapper around the current builtin attempt."
+    },
+    {
+      "surface": "internal runtime imports / private library store reads / synthesized request scope",
+      "disposition": "unsupported_boundary",
+      "basis": "Not a supported public library access or delegation contract; structural identities and previous state cannot supply current authority under7.6.1."
+    }
+  ],
+  "limitations": [
+    "No arbitrary-replacement-harness impossibility claim",
+    "Reset control was refused, not passed",
+    "No revoked-while-waiting positive qualification",
+    "Earlier inventory correctly withdrew negative finding while retain candidate remained untested"
+  ],
+  "public_harness_symbol_inventory": {
+    "agent-harness-completion.js": [
+      "captureAgentHarnessCompletionCustody",
+      "createAgentHarnessCompletionEventSink",
+      "deliverAgentHarnessCompletion",
+      "isDurableAgentHarnessCompletionDelivery"
+    ],
+    "agent-harness-exec-review-runtime.js": [
+      "buildExecAutoReviewInputForShellCommand",
+      "reviewExecRequestWithConfiguredModel"
+    ],
+    "agent-harness-session-runtime.js": [
+      "captureNativeSessionGenerationAuthority",
+      "combineNativeSessionBindingAuthority",
+      "createNativeSessionBindingAuthority",
+      "createNativeSessionBindingLifecycle",
+      "createNativeSessionCommitFinalizer",
+      "createNativeSessionInitializationOwner",
+      "isNativeSessionDeletionUnresolved",
+      "prepareNativeSessionGenerationAuthority",
+      "reclaimNativeSessionGeneration",
+      "reclaimNativeSessionGenerationWithAuthority",
+      "resolveNativeSessionBinding",
+      "resolveNativeSessionBindingWithAuthority",
+      "wrapNativeSessionDeletionMutation"
+    ],
+    "agent-harness-tool-runtime.js": [
+      "acknowledgeInternalToolResult",
+      "collectAgentHarnessMessagingMediaUrls",
+      "collectMessagingMediaUrlsFromRecord",
+      "consumeToolExecutionNotStarted as consumeTrustedToolNoStartError",
+      "copyInternalToolResultState",
+      "createAgentHarnessToolExecutionBoundaryRegistry",
+      "createAgentHarnessToolExecutionRegistry",
+      "createAgentHarnessToolSurfaceRuntime",
+      "extractMessagingToolSourceReplyPayload",
+      "getCoreTtsToolResultMediaUrls",
+      "isAsyncStartedToolResult",
+      "mapAgentHarnessMessagingMediaValues",
+      "normalizeAcceptedSessionSpawnResult",
+      "normalizeAgentToolResultMiddlewareRuntimeIds",
+      "readAsyncStartedTaskIds",
+      "recordAgentHarnessMessagingDelivery",
+      "recordAgentHarnessToolResultMedia",
+      "recordAgentHarnessToolResultTelemetry",
+      "runAgentHarnessToolInvocation",
+      "runWithAsyncWorkResources",
+      "runWithToolExecutionValidation"
+    ]
+  }
+}

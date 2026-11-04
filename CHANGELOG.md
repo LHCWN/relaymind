@@ -6,7 +6,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Documentation
+
+- Reorganize the project overview around model use, skill/tool discovery and
+  OpenClaw setup. Consolidate the component map, link current status from
+  operator guides, correct stale qualification and platform claims, and
+  document maintenance conventions. Requirement semantics and historical
+  evidence remain unchanged. Register the editorial specification digest for
+  new evaluation inventories while retaining the original supported digests.
+
 ### Added
+
+- Completed the bounded automated host experiment for #277 with all 300 outcomes retained, corrected blind judging, recorded reviews and explicit failed/unrun results. The arm-identity anonymization fix preserves original judgments and cumulative budget accounting (RM16, RM44; AC36).
+
+- Spec 0.68 permits two recorded automated reviews, including OpenCode2, for host-operation qualification only; exact claim/capture bindings and original review outputs are verified, without human-review attribution or relaxed safety evidence (RM16, RM37, RM39; AC28, AC30, AC35).
+
+- Spec 0.67 defines a separately labelled automated host experiment for #277, with bounded recommendation proposals, frozen machine judging/review and durable evidence; production person authority and full M10 acceptance gates remain unchanged (RM16, RM35–RM44; AC26–AC36).
 
 - #260 host run, stopped and not graded (`docs/evidence/m10/owner-run-260/host/`;
   RM16, RM44; AC36): 14 of the 100 preregistered tasks ran on the MacBook
@@ -196,6 +211,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   settlement document records the correction.
 
 ### Fixed
+
+- Hardened automated-host control polling and provider-response failures. Future executions require explicit v2 control budgets and fresh preregistration; historical inputs and outcomes remain unchanged. Timeout paths retain the last recommendation state, and functional transport tests allow cold worker startup (RM03, RM05, RM16, RM44).
+
+- Addressed #277/#280 review findings: portable transport tests, clear blind-CLI input errors, consistent stored row evidence, fenced JSON proposals, private-file read bounds, and redacted public home paths with retained original bindings. Historical benchmark results and qualification claims are unchanged.
 
 - Spec 0.66 section 12.6.6 owner-run checks (review of #276; RM40, RM44; AC31,
   AC36): a `same_family` machine_dual record now needs two different template

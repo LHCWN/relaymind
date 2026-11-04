@@ -158,3 +158,37 @@ def test_an_existing_key_is_never_replaced(tmp_path):
     assert create_private_file_exclusive(path, b"n" * 32) is False
     assert path.read_bytes() == b"o" * 32
     assert [p.name for p in tmp_path.iterdir()] == ["store.erasure-key"]
+
+
+def test_explicit_artifact_bound_keeps_private_exclusive_publication(tmp_path):
+    """RM16/RM37: evaluation captures may exceed the credential default, explicitly."""
+    from relaymind.recommendations.limits import MAX_PRIVATE_FILE_BYTES
+    from relaymind.recommendations.private_files import (
+        PrivateFileError,
+        create_private_file_exclusive,
+    )
+
+    path = tmp_path / "capture"
+    payload = b"x" * (MAX_PRIVATE_FILE_BYTES + 1)
+    assert create_private_file_exclusive(path, payload, maximum=len(payload))
+    assert path.read_bytes() == payload
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    assert not create_private_file_exclusive(path, b"replacement", maximum=len(payload))
+    assert path.read_bytes() == payload
+    with pytest.raises(PrivateFileError, match="private file too large"):
+        create_private_file_exclusive(tmp_path / "oversize", payload, maximum=len(payload) - 1)
+    assert not (tmp_path / "oversize").exists()
+
+
+@pytest.mark.parametrize("maximum", [-1, True, False, 1.5, "10", None])
+@pytest.mark.parametrize("operation", ["open_private_file", "read_private_file"])
+def test_private_readers_reject_invalid_bounds_before_io(tmp_path, maximum, operation):
+    """RM12/RM37: readers and writers enforce the same finite integer boundary."""
+    from relaymind.recommendations import private_files
+
+    with pytest.raises(private_files.PrivateFileError, match="invalid private file bound"):
+        if operation == "open_private_file":
+            with private_files.open_private_file(tmp_path / "absent", maximum=maximum):
+                pytest.fail("invalid bound admitted")
+        else:
+            private_files.read_private_file(tmp_path / "absent", maximum=maximum)

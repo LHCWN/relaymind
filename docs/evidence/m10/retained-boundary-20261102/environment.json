@@ -1,0 +1,18 @@
+{
+  "observed_at": "2026-11-02T17:16:26Z",
+  "purpose": "current VPS identity collected for negative-record preparation; not retroactive capture timing",
+  "machine": {
+    "role": "linux_host",
+    "os": "Linux",
+    "os_build": "Ubuntu 26.04.1 LTS 7.0.0-38-generic",
+    "os_version": "Linux-7.0.0-38-generic-x86_64-with-glibc2.43",
+    "architecture": "x86_64",
+    "cpu_model": "Intel Xeon Processor (Skylake, IBRS)",
+    "ram_bytes": 11998482432,
+    "hostname_sha256": "bafcdd4933633f2d8c15bec38b13546e4d879cd8b65095a56e713b8336cedd01"
+  },
+  "node_version": "v24.22.1",
+  "release_sha256": "c97c900ba2fed332706d0b3e756b04d7e21190c70dbfdb67e82998c4343be54a",
+  "release_files_matched_to_current_build": 54,
+  "adapter_revision": "38a65c787be8ddfbed99527c4e3b2c167d4a308bd2b566d2cf18acac975f06b4"
+}

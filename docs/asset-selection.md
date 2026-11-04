@@ -185,13 +185,11 @@ missing MCP language combinations are explicit. The no-shared-Latin Chinese
 memory-leak request still missed its original English target. No translation,
 semantic-quality or independent-annotation pass follows from these diagnostics.
 No external customer dataset or human panel is needed to start using the tooling.
-Production semantic qualification and installed M10 host execution/approval/
-correction walkthroughs are separate pending work; see [status](ROADMAP.md#m10--multilingual-asset-recommendations-spec-066).
-
-Spec 0.65 (#240) requires the pinned native validation evidence and applicable
-schema/extraction evidence specified in section 12.6.5 to be supplied and
-verified. Until then, host, provider, sampling and budget configuration
-documents remain unverified and cannot establish formal acceptance.
+For available semantic backends, installed-host capabilities and remaining
+qualification gates, use the [current roadmap](ROADMAP.md#m10--multilingual-asset-recommendations-spec-066).
+The [whole-task reference](ASSET_BENCHMARK.md#whole-host-trials-adaptation-episodes-and-platform-exports-spec-060064065-section-1265)
+explains frozen inputs, native validation and qualification records. A successful
+command alone does not establish formal acceptance.
 
 ## Early trial and walkthroughs on the installed host
 

@@ -1,0 +1,77 @@
+{
+ "total_input": 39460,
+ "total_output": 13250,
+ "calls": 8,
+ "stages": {
+  "judge-a": {
+   "input": 19758,
+   "output": 6208,
+   "reasoning": 5058,
+   "calls": 4
+  },
+  "judge-b": {
+   "input": 19702,
+   "output": 7042,
+   "reasoning": 5583,
+   "calls": 4
+  }
+ },
+ "reservations": {
+  "000001": {
+   "stage": "judge-a",
+   "name": "judge-a-001",
+   "amount": 37599,
+   "state": "settled",
+   "charged": 9500
+  },
+  "000002": {
+   "stage": "judge-a",
+   "name": "judge-a-002",
+   "amount": 20707,
+   "state": "settled",
+   "charged": 3523
+  },
+  "000003": {
+   "stage": "judge-b",
+   "name": "judge-b-001",
+   "amount": 37545,
+   "state": "settled",
+   "charged": 9958
+  },
+  "000004": {
+   "stage": "judge-b",
+   "name": "judge-b-002",
+   "amount": 20653,
+   "state": "settled",
+   "charged": 3712
+  },
+  "000005": {
+   "stage": "judge-a",
+   "name": "judge-a-001",
+   "amount": 37703,
+   "state": "settled",
+   "charged": 9344
+  },
+  "000006": {
+   "stage": "judge-a",
+   "name": "judge-a-002",
+   "amount": 20565,
+   "state": "settled",
+   "charged": 3599
+  },
+  "000007": {
+   "stage": "judge-b",
+   "name": "judge-b-001",
+   "amount": 37649,
+   "state": "settled",
+   "charged": 9455
+  },
+  "000008": {
+   "stage": "judge-b",
+   "name": "judge-b-002",
+   "amount": 20511,
+   "state": "settled",
+   "charged": 3619
+  }
+ }
+}

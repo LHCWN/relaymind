@@ -1,0 +1,48 @@
+{
+  "finding": "F1",
+  "classification": "blinding defect requiring corrected judging, regardless of agreement between original judges",
+  "affected_items": [
+    {
+      "blind_id": "052ebe5b694b59f8",
+      "arm": "native",
+      "task_id": "h006",
+      "leaked_run_keys": [
+        "h006-native"
+      ]
+    },
+    {
+      "blind_id": "23471255c05d9e91",
+      "arm": "provider_only",
+      "task_id": "h009",
+      "leaked_run_keys": [
+        "h009-provider_only"
+      ]
+    },
+    {
+      "blind_id": "a00a81fdd8ea1f13",
+      "arm": "provider_only",
+      "task_id": "h008",
+      "leaked_run_keys": [
+        "h008-provider_only"
+      ]
+    }
+  ],
+  "original_items_sha256": "cea9cdeab1e0d19640fbb9a3d79fae49e722df8b5ce786b6ee86ac21901e651f",
+  "original_judging_charge": 26693,
+  "resolution_plan": "Preserve original judged artifacts, redact task-arm sandbox keys before blind-item generation, commit a fresh blind manifest, use fresh stateless judge requests and the same cumulative 300000-token ledger. No execution replay. Keep prompts/models/rubrics unchanged; disclose both sets of judgments.",
+  "status": "corrected_judging_applied",
+  "source_commit": "7d96b76a991c01cfd2ab1c2a7080731fb7c5cde2",
+  "blinding_commit": "8824fc352590ec8d15c5fb859ed46b3ce458fded",
+  "new_manifest": "evaluation/assets/automated-host-277/blinding/corrected-manifest.json",
+  "old_source_commit": "2af0cbb7d1c74c80e6d71bfa26fd0d1f0e2b3bdd",
+  "before_sha256": "bb833856101199c143a38261d85c26e4401d98d00f48e75b15d60ce6fa96f36c",
+  "after_sha256": "db6721bcd450003fba5011134ed28895c301768f783ee0f2e959b6a2096efcb4",
+  "corrected_items_sha256": "51af5e9a70ec49892650cbfbe976c1785b2fd16086a21375f13d2d737b296c1b",
+  "cumulative_judging_tokens": 52710,
+  "corrected_pass_tokens": 26017,
+  "corrected_disputes": 0,
+  "verdict_changes": [],
+  "execution_artifacts_byte_unchanged": true,
+  "initial_review_claim_sha256": "9a7f63f882c20506d0c6c8886cf2b9d1fcd5b973b0af272590bf977c7febdb3b",
+  "validation": "9831 tests passed (9796 parallel +35 separately serialized release tests),27 skipped; lint and format passed. Five regression cases failed before the fix and passed after it. A preceding default-temp parallel attempt hit OS disk quota; retained logs distinguish that environment failure from product failures."
+}

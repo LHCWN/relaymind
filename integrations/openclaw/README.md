@@ -1,5 +1,16 @@
 # RelayMind provider for OpenClaw
 
+This guide covers provider installation and the optional recommendation panel.
+Use the [roadmap](../../docs/ROADMAP.md) for delivery status and the
+[evidence record](../../docs/EVIDENCE.md#openclaw-plugin-platforms-145) for
+measured host coverage. Dated observations below apply to their recorded revisions.
+
+- [Install and configure the provider](#operator-guide-145).
+- [Configuration reference](#configuration) and [diagnostics](#diagnostics).
+- [Native recommendations and explicit actions](#native-recommendations-and-explicit-actions)
+  ([简体中文](README.zh-CN.md)).
+- [Developer checks](#checks) and [operator qualification runs](#operator-runs).
+
 Status: provider package (#136; RM08, RM12, RM19, RM26, RM33, spec section
 7.5) with text and host-owned tool round trips (#137) and cancellation, error
 mapping, retries, and run-ID correlation (#138), on top of the #135
@@ -178,8 +189,9 @@ npm run pack:release -- ../../release/openclaw
 the tarball's SHA-256, the pins, and the Node that built it. Two builds of
 one checkout are the same bytes, so a SHA-256 names a release.
 `.gitattributes` pins the package's text files to LF, so a Windows checkout
-packs the same bytes as Linux and macOS; that is pending a Windows runner
-export (an earlier Windows build packed CRLF and had a different digest).
+uses the same line endings on Linux, macOS and Windows. The reproducibility
+tests compare repeated builds from one checkout; cross-platform identity needs
+matching recorded artifacts. An earlier Windows build packed CRLF and differed.
 
 ### 4. Install, configure, enable
 
@@ -748,8 +760,8 @@ and that the plugin round-trips text and a host tool from the unpacked
 artifact (not the checkout) through the pinned transport. It also checks that
 CI runs every OpenClaw test module. `tests/test_openclaw_install_check.py`
 checks the install check against a stub host. CI's `openclaw-plugin` job runs
-all of it on ubuntu, macOS, and Windows runners, then the install check with
-the pinned host.
+the suite and the pinned-host install check on the platforms selected by the
+[CI event matrix](../../docs/TESTING.md#ci-timing-reports).
 
 To recapture the transport fixtures (they must not change on the same pins):
 
@@ -794,28 +806,8 @@ openclaw agent exec --config "$OPENCLAW_CONFIG_PATH" --json \
 
 ### Disable and remove
 
-```bash
-openclaw plugins disable relaymind
-# without a terminal, uninstall asks for confirmation and exits 1; --force skips it
-openclaw plugins uninstall relaymind --force
-```
-
-Uninstall removes the plugin's install record, directory, and settings, but
-the host keeps three things (macOS run, and the Linux VPS functional check):
-`plugins.entries.relaymind: {"enabled": false}` in the config, the auth
-profile `relaymind:manual`, and the gateway token in the host state database.
-Remove the credential and the entry explicitly:
-
-```bash
-openclaw models auth list                                  # shows relaymind:manual
-openclaw models auth logout relaymind:manual --yes          # removes the profile and the stored token
-openclaw config unset plugins.entries.relaymind
-```
-
-After these two commands no file under the isolated host home held the
-token (Linux VPS functional check). The host also leaves `config.json.bak*`
-files from each config change; they did not hold the token. The operator
-guide's step 11 gives the same removal.
+Follow [operator step 11](#11-disable-and-remove), including explicit credential
+and configuration cleanup after uninstall.
 
 ### Install check: the release artifact through a real host
 
@@ -1267,9 +1259,10 @@ The test-only [command probe](test/host-command-qualification/README.md) uses
 real authenticated `chat.send`, the provider and model doubles while preserving
 native skill/tool search. The [recorded qualification](../../docs/evidence/2026-10-29-openclaw-command-qualification/README.md)
 passes application/session command interception and native skill file loading.
-Verified person identity and command-to-library immutable revision attachment
-remain unqualified; real human allow/deny approval is `not_run`. These results
-do not add a production recommendation command or close M10 approval coverage.
+That dated capture did not qualify person identity or immutable library-revision
+attachment; real human allow/deny approval was `not_run`. It does not by itself
+establish production authority. The later supported direct actions and exact
+skill selection are described in [native recommendations](#native-recommendations-and-explicit-actions).
 
 ### MCP provenance and exposure qualification (#190)
 
@@ -1278,9 +1271,9 @@ host-owned stdio servers and the existing provider with model doubles.
 The [recorded qualification](../../docs/evidence/2026-10-29-openclaw-mcp-qualification/README.md)
 proves duplicate-name isolation, actual calls and public same-instance normalized
 schema/provenance capture. A disconnected server retains its schema while calls
-fail. Current session/turn/availability revision binding remains unsupported by
-the qualified composition; MCP use and interactive approval acceptance remain
-open pending the #187 integration contract.
+fail. That capture did not establish current session/turn/availability revision
+binding. For the current MCP-use and interactive-approval disposition, see the
+[roadmap](../../docs/ROADMAP.md#m10--multilingual-asset-recommendations-spec-066).
 
 ## Native recommendations and explicit actions
 
@@ -1291,8 +1284,9 @@ AC28/AC30). The reviewed pinned2026.10.7 `direct_actions` profile enables
 personal discovery recommendations, explicit choice, feedback and scoped privacy
 through the ordinary installed entry. It requires the registered personal
 mapping and restrictive role configuration below; configuration cannot create a
-qualification entry. Exact skill selection/loaded use, runtime snapshots and
-MCP execution remain unavailable. The recorded functional proof uses authored
+qualification entry. The shipped registry separately enables exact native
+skill selection. Loaded instruction use, runtime snapshots and MCP execution
+remain unavailable. The recorded functional proof uses authored
 sandbox data, not human/model quality or full-platform acceptance.
 
 Build/install with the existing `npm run pack:release -- /absolute/release-dir`
@@ -1373,8 +1367,10 @@ A lost response may follow a committed action. **Retry last request** keeps the
 original request and idempotency key; it never silently retries or claims
 rollback. Resolve stale versions with a fresh read.
 
-**The following skill bridge remains a follow-up; the direct-actions profile
-does not enable it.** For skills, import/create the exact native revision in **Plugins → Skills**.
+Exact native skill selection requires its own `exact_skill_selection` entry
+in the shipped qualification registry; the `direct_actions` entry alone is
+insufficient. Selection records the next-turn preference, not observed loaded
+instruction use. For skills, import/create the exact native revision in **Plugins → Skills**.
 The operator adds an exact `skills` association:
 
 ```json

@@ -4,11 +4,10 @@ RM16, RM39; AC30, AC35. The negative record for mcp_use on the pinned OpenClaw
 2026.10.7 host must load with the packaged checker: closed shape, linux_host
 machine identity, disabled operation, and every bound capture and inventory
 byte. Until the pull request review is written into it the record is pending and
-lists no known host limitation. No negative skill_loaded_use record is
-committed: the host source shows a native delegation (a retained session access
-borrow) that a provider check might use as the section 7.6.1 fence, so
-`stop_point_absent` is not established. The shipped adapter registry never
-lists either operation.
+lists no known host limitation. The original loaded-use withdrawal remains
+immutable. A separate spec 0.68 negative claim binds the later retained-borrow
+capture and supported-native-scope search; only verified actual review may
+promote it. The shipped adapter registry never lists either operation.
 """
 
 import collections
@@ -286,21 +285,50 @@ def test_inventory_route_omissions_are_limited_to_the_documented_older_reads():
     }
 
 
-def test_no_negative_skill_loaded_use_record_is_committed():
-    """Spec 12.6.6: stop_point_absent is not established on 2026.10.7 (#255 review)."""
-    for path in EVIDENCE.glob("m10-*.json"):
-        document = json.loads(path.read_text())
-        operation = document.get("operation") or {}
-        assert not (
-            document.get("outcome") == "negative"
-            and operation.get("name") == "skill_loaded_use"
-            and operation.get("finding") == "stop_point_absent"
-        ), path.name
+def test_loaded_use_negative_record_binds_new_evidence_and_requires_review():
+    """RM16/RM39 AC30: spec 0.68 admits a new claim, never promotes a pending one."""
+    # The earlier withdrawal remains correct and immutable; new evidence does
+    # not rewrite the original search's finding.
+    assert _inventory()["skill_loaded_use"]["finding"] == "not_established"
+    path = EVIDENCE / "m10-negative-loaded-use-openclaw-2026.10.7.json"
+    record = load_record(path)
+    operation = record.document["operation"]
+    assert (record.scope, record.outcome) == ("host_operation", "negative")
+    assert operation == {
+        "name": "skill_loaded_use",
+        "host": "openclaw",
+        "host_version": "2026.10.7",
+        "finding": "stop_point_absent",
+        "disabled": True,
+    }
+    subjects = {subject["path"] for subject in record.document["subjects"]}
+    assert {
+        "openclaw-host-use-search-20261101-vps.json",
+        "retained-boundary-20261102/capture.json",
+        "retained-boundary-20261102/closure-inventory.json",
+        "retained-boundary-20261102/scoped-negative.md",
+    } <= subjects
+    assert record.approved
+    # load_record verified actual raw outputs and all subject bindings.
+    assert record.machine_review_verified
+    assert record.document["review"]["reviewer_logins"] == []
+    assert record.document["review"]["approved_at"] is None
+    assert known_host_limitations([record]) == [
+        dict(
+            operation="skill_loaded_use",
+            host="openclaw",
+            host_version="2026.10.7",
+            finding="stop_point_absent",
+            record_id=record.record_id,
+        )
+    ]
 
 
 @pytest.mark.parametrize("outcome", ["positive", "negative"])
-def test_loaded_use_record_guard_allows_only_the_positive_record(tmp_path, monkeypatch, outcome):
-    """RM39; AC30: a positive loaded-use qualification is permitted by section 12.6.6."""
+def test_loaded_use_record_guard_rejects_unverified_record_shapes(tmp_path, outcome):
+    """RM16/RM39 AC30: an outcome/finding label alone never qualifies a record."""
+    from relaymind.evaluation.asset_whole_task import WholeTaskRejected
+
     document = dict(
         outcome=outcome,
         operation=dict(
@@ -308,13 +336,28 @@ def test_loaded_use_record_guard_allows_only_the_positive_record(tmp_path, monke
             finding="qualified" if outcome == "positive" else "stop_point_absent",
         ),
     )
-    (tmp_path / "m10-loaded-use.json").write_text(json.dumps(document))
-    monkeypatch.setattr(sys.modules[__name__], "EVIDENCE", tmp_path)
-    if outcome == "positive":
-        test_no_negative_skill_loaded_use_record_is_committed()
-    else:
-        with pytest.raises(AssertionError):
-            test_no_negative_skill_loaded_use_record_is_committed()
+    path = tmp_path / "m10-loaded-use.json"
+    path.write_text(json.dumps(document))
+    with pytest.raises(WholeTaskRejected, match="invalid_qualification_record"):
+        load_record(path)
+
+
+def test_pending_loaded_use_claim_never_lists_a_known_host_limitation(tmp_path):
+    """RM16/RM39 AC30: removing review from a valid evidence copy leaves it pending."""
+    document = json.loads(
+        (EVIDENCE / "m10-negative-loaded-use-openclaw-2026.10.7.json").read_text()
+    )
+    document.pop("machine_review", None)
+    document["review"].update(pull_request=None, reviewer_logins=[], approved_at=None)
+    for subject in document["subjects"]:
+        destination = tmp_path / subject["path"]
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(EVIDENCE / subject["path"], destination)
+    path = tmp_path / "pending.json"
+    path.write_text(json.dumps(document))
+    record = load_record(path)
+    assert not record.approved
+    assert known_host_limitations([record]) == []
 
 
 def test_mcp_record_binds_the_corrected_discovery_capture():
@@ -759,3 +802,37 @@ def test_capture_privacy_rejects_plaintext_json_hostnames(key, value):
 def test_capture_privacy_accepts_hashed_json_hostnames(key):
     """RM16/RM37: published hostname fields carry only a SHA-256 digest."""
     _assert_capture_privacy(json.dumps({"env": [{key: "sha256:" + "aB" * 32}]}))
+
+
+def test_published_277_280_artifacts_do_not_expose_local_home_accounts():
+    """RM12/RM16: public projections omit private local account identifiers."""
+    # Check the disclosed account without republishing its spelling.
+    private_account_hash = "bb19eb4959ae48378da13536f15877d3ac873303acc799a189cfe0f2aa38ad3d"
+    for directory in (
+        "automated-host-20261102",
+        "automated-host-results-20261103",
+        "retained-boundary-20261102",
+    ):
+        assert (EVIDENCE / directory).is_dir()
+        for path in (EVIDENCE / directory).rglob("*"):
+            if path.is_file():
+                payload = path.read_bytes()
+                assert all(
+                    hashlib.sha256(token).hexdigest() != private_account_hash
+                    for token in set(re.findall(rb"[A-Za-z0-9_-]+", payload))
+                ), path
+                homes = re.findall(rb"/(?:home|Users)/[A-Za-z0-9_.-]+", payload)
+                assert all(home == b"/home/vps-user" for home in homes), path
+
+
+def test_privacy_publication_binds_each_redacted_copy():
+    """RM12/RM16: published projections are not labelled as original captures."""
+    manifest = json.loads((EVIDENCE / "privacy-publication-20261103.json").read_bytes())
+    assert manifest["policy"] == "local_account_redaction"
+    assert len({row["path"] for row in manifest["files"]}) == len(manifest["files"])
+    for row in manifest["files"]:
+        payload = (EVIDENCE / row["path"]).read_bytes()
+        assert hashlib.sha256(payload).hexdigest() == row["published_sha256"]
+        assert len(payload) == row["published_bytes"]
+        assert row["original_sha256"] != row["published_sha256"]
+        assert row["original_bytes"] > 0

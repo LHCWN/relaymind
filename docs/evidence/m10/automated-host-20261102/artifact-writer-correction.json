@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "kind": "execution_artifact_writer_correction",
+  "recorded_at": "2026-11-02T18:06:00.406702+00:00",
+  "original_preregistration_commit": "8f796b1b788457237e40125fe28be51b39bfc44d",
+  "source_files": [
+    {
+      "path": "evaluation/assets/automated-host-277/run.py",
+      "before_sha256": "ddb7f347275decc23f96a6ed6ee50aca8535d46a2314e0ca561ea3a4549a2d3a",
+      "after_sha256": "d27b50cfb840b22d2430f75b337ac58f936904a5b4f3730295e13897ac17b0af"
+    },
+    {
+      "path": "evaluation/assets/automated-host-277/judge.py",
+      "before_sha256": "394c3dbb411d1d48a6beaaeb4c5668900a5f6dacdfe91302c7bcb68d6c6b75f7",
+      "after_sha256": "728d0d9cc40359e7e85375bcd854896d03d21c3026e5e0881514210efe71b39c"
+    },
+    {
+      "path": "evaluation/assets/automated-host-277/bundle.py",
+      "before_sha256": "6ad92d058fb327b573a99f7795b327e69a1c2ad777c0d1be124c959d65be8b71",
+      "after_sha256": "14cbe090df51fa76f2b48ea1be8859e1287ad6f32bf0e12dd756ddce30caf098"
+    },
+    {
+      "path": "scripts/automated_host_transport.py",
+      "before_sha256": "3ceebc1d05df24f52db40bb74c3e3c7249add620fef53f299549bb99841d2632",
+      "after_sha256": "a90e52213872c31cef344cf5c793b77817102a55fcbbca1be514ecb76617d6d9"
+    },
+    {
+      "path": "src/relaymind/recommendations/private_files.py",
+      "before_sha256": "a2b3038f20a7d3632291a22dfba866a01b3cc6dc17430a1ae82af6f4a183b3c6",
+      "after_sha256": "1afbff7b91ff33c11a0fed065e40f821f396ea778cbda3f09e4c0d0cc985f763"
+    },
+    {
+      "path": "src/relaymind/recommendations/_windows_private_files.py",
+      "before_sha256": "56432119b9c11da5e132277b3c7e85c203c4947d8aa7a56a2f40f7ee77ce8cab",
+      "after_sha256": "b782702ea494a26a6a9bd7aa35427305180b4a5ea583cc847b839c2066d03b8a"
+    },
+    {
+      "path": "src/relaymind/evaluation/asset_automated_record.py",
+      "before_sha256": "0862bf57c614d5c0bbb784e3e9cd7ebf039c84e461ca200b053f8d673229f0b2",
+      "after_sha256": "0fe220c9d91cf4d850d90aa9a0d17bfc227137581cc24883917412f603039515"
+    },
+    {
+      "path": "evaluation/assets/owner-run-260/run_host.py",
+      "before_sha256": "297193c5dbe94f888c87905f2f023e42dead69e7f44355fb4448dbafb511be69",
+      "after_sha256": "72e4d242c9f0af066734373b59a70f3ec277eeba73afa186e33abe2df6528fcc"
+    }
+  ],
+  "frozen_protocol_tasks_configurations_prompts": "unchanged exact bytes",
+  "reason": "The first row completed with a host failure, then aggregate gated-call evidence exceeded the credential writer 1 MiB default. Original per-call captures and host result were already durable.",
+  "changes": [
+    "Evaluation artifacts now request an explicit 16 MiB private-write bound; the default credential bound remains 1 MiB.",
+    "Final-record helper requires the earliest observed whole-row host-dispatch evidence for every executed row and rejects malformed timestamp types.",
+    "Whole-row dispatch evidence is emitted before a recommendation proposal, including failed proposals. Actual host-command start is recorded separately; request order and behavior are unchanged."
+  ],
+  "unchanged": [
+    "model and prompts",
+    "native host permissions",
+    "per-generation and host time limits",
+    "token caps and reservations",
+    "request dispatch and response handling",
+    "task order and judging criteria"
+  ],
+  "recovered_row": {
+    "task_id": "h001",
+    "arm": "native",
+    "status": "failed",
+    "upstream_attempts": 4,
+    "reported_tokens": 24438,
+    "unknown_usage_attempts": 2,
+    "retained_token_reservation": 250000,
+    "replayed_requests": 0,
+    "recovery_capture": {
+      "path": null,
+      "access": "restricted",
+      "sha256": "c13b510230ce458dd3b6d93f55ca76aee5de4adb15e338a4209a5b95852adaa2",
+      "bytes": 8601
+    },
+    "recovery_method": {
+      "path": null,
+      "sha256": "8e59b2b416ae951d4d80c2ad8bf1f1e321ebe797cc51ae14cc8a485d05194bea",
+      "bytes": 5528,
+      "access": "restricted"
+    },
+    "published_recovery_method": {
+      "path": "recover-first-row.py",
+      "sha256": "1591903380c043fa516e527354a40e0e817ab734d5d6dfd4dc734e1265936d21",
+      "bytes": 5528,
+      "redaction_manifest": "../privacy-publication-20261103.json"
+    }
+  },
+  "resume_policy": "Commit this source correction before further inference; preserve the same protocol, journal and ledger. Keep row 1 finished and its full original reservation. The next dispatch is the next planned row, never a replay. Record both source revisions and the correction as a limitation of the experiment."
+}

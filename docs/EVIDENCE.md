@@ -13,16 +13,16 @@ Recorded runs of the live model tests and timing probes. A milestone closes
 when its deterministic tests pass and its live checks appear here
 ([`ROADMAP.md`](ROADMAP.md)). Entries are what actually ran, on the machine
 named, with the pinned artifact and runtime; nothing here is a benchmark
-result in the sense of spec section 12.3 except the corpus and latency
-entries (#32, #33, #110), which follow the section 12.2 experiment and
-keep platform results separate.
+claim beyond the scope stated in its entry. The corpus and latency entries
+follow section 12.2; the M9 and M10 entries follow their separately identified
+evaluation profiles. Keep platform results and qualification tiers separate.
 
 Rules for an entry: name the machine (OS version, CPU, GPU or backend, RAM),
 the llama.cpp build, the manifest, the exact command, and the result,
 including failures. Numbers from a single pass are listed as single-pass
 observations, never as p50 or p95. Raw exports go in `docs/evidence/`.
 
-Status (2026-10-23): the entries below cover M1 and M2, the AC08 local
+Historical coverage through 2026-10-23: the entries below cover M1 and M2, the AC08 local
 swap (#90), the first live runs of the M3 to M5 acceptance
 scenarios through `relaymind serve --config` with a live external
 endpoint (#88, #104), the first correctness corpus and latency
@@ -32,6 +32,16 @@ and the first launcher start and latency benchmark on
 x86-64 Windows (#110, AC15), all on Apple Silicon macOS except the M1
 Windows smoke test and the #110 Windows runs. See [`ROADMAP.md`](ROADMAP.md)
 for what is carried forward.
+
+## Reading this record
+
+Entries below are chronological records, not current setup instructions.
+Use [Testing](TESTING.md) for commands and [Roadmap](ROADMAP.md) for remaining gates.
+Recent entry points:
+
+- [M9 OpenClaw evaluation](#m9-openclaw-evaluation-139-spec-050).
+- [Retained loaded-use boundary](#2026-11-02--retained-loaded-use-fence-on-the-pinned-vps).
+- [Bounded automated host experiment](#2026-11-03--completed-bounded-automated-host-experiment-277).
 
 ## 2026-10-20 — M1 live smoke test, Apple Silicon macOS
 
@@ -3430,8 +3440,10 @@ here.
 Not shown: these runner rows are not a user's machine. The macOS
 user-machine row is now recorded in the section above
 (`docs/evidence/2026-10-29-openclaw-mac-qualification/`, at `6fc0954`);
-Windows on a user's machine, native and WSL2, stays `not_run` (no Windows
-machine). Neither do these runs cover the stale-token
+Windows on a user's machine, native and WSL2, was `not_run` for this M9
+record. Later native Windows lifecycle evidence is tracked separately in the
+[roadmap](ROADMAP.md#m10--multilingual-asset-recommendations-spec-066) and does not
+change this run's scope. Neither do these runs cover the stale-token
 reconnect, the interrupt, the tool policy scenarios, a host update or
 rollback, or any live model.
 
@@ -3624,3 +3636,52 @@ revision binding remains unsupported by the qualified composition and requires
 a supported host integration decision in #187 before later MCP use. Human
 allow/deny approval, live-model task quality and supported-platform acceptance
 are not_run. Spec 0.50 RM08/RM09/RM12/RM16/RM33 and AC24 remain normative.
+
+
+## 2026-11-02 — Retained loaded-use fence on the pinned VPS
+
+RM16/RM37/RM39; AC28/AC30; spec 0.68 sections 7.6.1 and 12.6.6.
+The [capture and invocation record](evidence/m10/retained-boundary-20261102/README.md)
+records the actual Linux x86-64 VPS, pinned OpenClaw 2026.10.7, qualification
+command and deterministic receiving endpoint. The retained borrow reaches the
+provider and its currentness check survives RPC completion. Fresh public
+library dispatch at that boundary refuses; positive, stale and deleted cases
+send zero model requests. Reset is refused and waiting revocation remains
+unrun. These are diagnostic observations, not positive loaded-use qualification
+or model-quality measurements.
+
+The [scoped negative record](evidence/m10/m10-negative-loaded-use-openclaw-2026.10.7.json)
+binds the captures, supported SDK search, normative scope and two actual
+OpenCode 2 review contexts. Both approve without material findings, and the
+record verifier validates their original outputs and bindings. This establishes
+a reviewed limitation of the pinned supported native composition, not universal
+impossibility for custom executors or later hosts. Loaded use remains disabled.
+The original withdrawn claim and all failed or unrun controls remain unchanged.
+
+
+## 2026-11-03 — Completed bounded automated host experiment (#277)
+
+RM16, RM35–RM37, RM40–RM44; AC26–AC28, AC31–AC36; spec 0.68 section 12.6.7.
+The [report and completion assessment](evidence/m10/automated-host-results-20261103/README.md)
+retain all 300 planned task/arm outcomes: 9 completed, 80 failed, 6 cancelled
+and 205 unrun at the unchanged 13,000,000-token cap. Conservative execution
+charge is 12,948,713; 181 attempts retain unknown usage. This is a completed
+bounded experiment, not full task coverage or passing M10 qualification.
+
+Final review found producing-arm identifiers in three initial judge-visible
+sandbox paths. The correction anonymizes those harness IDs, commits a fresh
+blind manifest and obtains fresh stateless judgments with the original frozen
+models, prompts and rubrics. Both passes and all original evidence are retained;
+execution is unchanged. The corrected judges agree on all nine completed
+answers, with five successes and no verdict changes. Cumulative judging used
+52,710 of its separate 300,000-token cap.
+
+Two separate OpenCode 2 contexts report no remaining material findings in the
+corrected claim. Their actual inputs, outputs, usage and identities are bound
+in the final record. File bindings and outcome conservation verify; the separate
+assessment evaluates completion under section 12.6.7. The helper alone does not
+certify completion. The legacy host grader's inventory rejection, blocked
+success/cost gates, development catalog and shared-VPS timing limits remain
+explicit. Runtime and raw review originals stay restricted on the VPS; public
+metadata binds their hashes and does not claim a clone includes those bytes.
+Production manual selection and direct-action authority remain unchanged.

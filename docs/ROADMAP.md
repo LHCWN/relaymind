@@ -13,6 +13,14 @@ answer to customer feedback, with shorter waiting time as the objective
 [`design/2026-10-23-performance-first-routing.md`](design/2026-10-23-performance-first-routing.md)
 for the reasoning).
 
+## Reading the roadmap
+
+Milestone sections retain delivery history. Their dated results describe the
+recorded revision; they are not promises about every later build. For current
+M10 disposition, start with [automated evaluation and retained-use qualification](#automated-host-experiment-and-retained-use-qualification)
+and the [M10 section](#m10--multilingual-asset-recommendations-spec-066).
+The normative definitions are in [the specification](SPECIFICATION.md).
+
 ## M1 — Adapter and protocol qualification
 
 Pin the local model artifact and runtime, and prove both adapters work.
@@ -1042,6 +1050,10 @@ listed here so the current order can be traced to its reason.
 
 ## M10 — Multilingual asset recommendations (spec 0.66)
 
+The following paragraphs record the 0.66 delivery history, so a pending record
+below means that named record, not a later replacement. See
+[the current disposition](#automated-host-experiment-and-retained-use-qualification).
+
 Spec 0.66 (#251) adds the owner-run acceptance profile (section 12.6.6): the
 owner runs every trial as operator on the owner's Apple M1 8 GiB MacBook
 (target macOS), Windows PC (named native x86-64 target) and Ubuntu VPS (Linux
@@ -1110,12 +1122,12 @@ at ed21e007 completed loaded-use observation with the reset case
 The older CI and VPS2 MCP captures show an empty `tools.effective` list only because the old
 probe read `payload.tools` instead of the host's `groups[].tools`; a third VPS
 run at bba0cf1 with the #249 fix lists both colliding tools and is still
-`blocked`, and the MCP record binds it. The MCP finding is unchanged. #259, #260 and #261 remain open and
-need the real runs, captures, labels and reviews. Host configuration semantics
-(#250/#240) still keep host reports below `qualified`. Spec-only decisions
-awaiting implementation: the rank 4–10 choice receipt returning the offered
-record, the MCP ledger location/mode/retention and erasure on reset, blind
-success judging, and episode corrections through the native feedback RPC.
+`blocked`, and the MCP record binds it. The MCP finding is unchanged. This was the checkpoint before the #259, #260
+and #261 runs; their recorded outcomes appear later in this section. Those
+issues and the #229/#250 verifier work are delivered, but issue closure does
+not establish qualified acceptance. Use the result-specific qualification and
+unverified-input reasons below, and the [current automated experiment disposition](#automated-host-experiment-and-retained-use-qualification),
+when assessing remaining work.
 
 
 #207 customer documentation now has [English](asset-selection.md) and
@@ -1133,8 +1145,10 @@ manifest. Loaded skill use, MCP use and host MCP approval are recorded as
 `blocked`. The en-US and zh-CN walkthroughs were recorded on 1 November 2026
 (`docs/evidence/m10/walkthroughs-20261101-vps/`), both complete at
 `functional_fixture` tier. They do not satisfy the qualified-host walkthrough
-of #238. Loaded skill use remains unqualified after #267; it is not an
-approved host limitation. MCP use and MCP approval also remain blocked.
+of #238. At the #267 checkpoint, loaded skill use was not yet an approved
+host limitation. The later [#280 scoped record](#automated-host-experiment-and-retained-use-qualification)
+records the supported composition's limitation with loaded use disabled. MCP
+use and MCP approval retain their separate qualification boundaries.
 
 #270 (RM12/RM39; AC30) localizes all recommendation-detail labels for `en-US`
 and `zh-CN`, displays ordinary characters through text-only DOM rendering,
@@ -1624,11 +1638,11 @@ non-target platform or any unverified input: provisional), rejects a
 non-fixture label over fixture inputs, and never lets an unqualified tier pass
 a gate. `plan-host` now records the preregistered input/freeze digests and
 `plan-episodes` verifies frozen episodes and writes their probe plan
-(#236/#237 preregistration). The specification still defines no reviewed S3
-qualification record and enables no native configuration verifier, so no
-report can be assessed qualified; that, genuine inputs and the host-validator
-parsing (#250) remain open. The [0.65 rationale](design/2026-11-01-spec-0-65-skill-use-mcp-host-config.md)
-records the decisions and remaining qualification work.
+(#236/#237 preregistration). This was the spec 0.65 checkpoint. Spec 0.66 subsequently added reviewed
+qualification records and #250 implemented native host preflight. Genuine
+inputs and all remaining evidence checks are still required; verifier support
+alone does not make a report qualified. The [0.65 rationale](design/2026-11-01-spec-0-65-skill-use-mcp-host-config.md)
+preserves the decisions at that stage.
 
 #198/#202/#204/#205/#206 evaluation contract checkpoint (spec 0.60): closed
 adaptation episode, whole-task and platform exports authorize the independent
@@ -1645,11 +1659,9 @@ check the off/on adaptation ablation, and recompute every dispatched probe's
 offer. `asset_episode_driver.py` runs episodes through the real
 recommendation lifecycle on the locked corpus projection (evaluation-only, so
 never qualified). Native host preflight is implemented by #250; source-bound
-configuration
-validation/extraction and a qualified-evidence verifier remain open
-(#229/#240); spec 0.65 defines
-the native validation evidence required, so qualified acceptance
-grades blocked, never pass. No new measured gate is claimed; genuine episodes,
+configuration validation/extraction and qualification records now have verifier
+support. The required evidence must still be supplied and verified; missing or
+unqualified inputs keep acceptance blocked. No new measured gate is claimed; genuine episodes,
 paired host tasks and platform runs still need real corpora, hosts and
 hardware. Read-only native RPC and genuine MCP qualification probes do not
 enable runtime snapshots or further host operations. The separate spec0.62
@@ -1809,3 +1821,32 @@ reports reject with `inventory_membership`. The README's claim that a later
 commit always produces `unsupported_generator` is too narrow. Use its
 procedure with the recorded run commit `2f4ddecc3da0efd632df89ed0d63f3cc1d72c00f`
 to reproduce `verify.txt`; the bound README and evidence remain unchanged.
+
+### Automated host experiment and retained-use qualification
+
+The automated replacement for #277 is complete under spec 0.68 section 12.6.7.
+The [results and completion assessment](evidence/m10/automated-host-results-20261103/README.md)
+conserve all 300 planned outcomes: 9 completed, 80 failed, 6 cancelled and 205
+unrun at the hard cap. Execution charged 12,948,713 of 13,000,000 conservative
+tokens. Corrected blind judging agreed on all nine completed answers (five
+successes); both judging passes used 52,710 of 300,000 tokens. The initial
+arm-identity leak, its fix and original judgments remain recorded. Two separate
+OpenCode 2 contexts verified the corrected claim with no remaining material
+findings; final bindings verify. Full qualification and success/cost gates remain
+blocked, and the development catalog remains development evidence. Production
+manual selection remains available; the experiment grants no direct-action
+credential or loaded managed skill/MCP use. No execution row was replayed.
+
+For #280, `test/host-loaded-use-qualification/` in the OpenClaw integration
+contains a qualification-only retained-boundary probe. The real VPS capture
+in `docs/evidence/m10/retained-boundary-20261102/` observes a borrow surviving
+native RPC completion and reaching the provider. Public library dispatch there
+refuses with `authenticated_request_scope_unavailable`; no model request is
+sent. Reset remains `control_refused`. The new scoped negative record
+`m10-negative-loaded-use-openclaw-2026.10.7.json` binds the captures, supported
+SDK inventory and two actual OpenCode 2 reviews. Its verifier confirms the
+reviewed host limitation for the pinned supported native composition. This
+is not a universal impossibility claim for replacement executors or future
+host versions. Loaded use remains disabled; no positive registry entry is
+added. Unrun revocation controls and refused reset remain requirements for any
+future positive qualification. The original withdrawn claim is unchanged.

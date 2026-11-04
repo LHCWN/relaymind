@@ -36,6 +36,18 @@ installation in a shared environment:
 export PYTHONPATH="$PWD/src${PYTHONPATH:+:$PYTHONPATH}"
 ```
 
+## Find the right workflow
+
+- [Selector protocol](#the-skilltool-v2-boundary).
+- [Run and compare selectors](#built-in-team-a-and-team-b-on-the-same-fixture).
+- [Interpret results](#reading-the-result).
+- [Index preparation and costs](#index-readiness-and-setup-cost).
+- [Whole-task reports and qualification](#whole-host-trials-adaptation-episodes-and-platform-exports-spec-060064065-section-1265).
+- [Freeze and run host tasks or episodes](#episode-and-host-task-run-kit-236-237).
+- [Capture platform behavior](#operations-and-platform-run-kit-242).
+- [Run an early installed-skill trial](#early-installed-skill-trial-kit-234).
+- [Record an installed-host walkthrough](#bilingual-packaged-walkthrough-recorder-238).
+
 ## The skill/tool v2 boundary
 
 A team supplies a loopback HTTP server accepting `POST /select`. Configure its
@@ -675,9 +687,13 @@ must be the resolved inputs. Every Time field must be a real UTC instant
 (`invalid_record_time`). Under spec 12.6.6 an approved `negative` record with
 scope `host_operation` closes the `skill_loaded_use` or `mcp_use` gate with the
 operation disabled; `known_host_limitations` returns those records for the
-roadmap, docs and reports to list. A pending record lifts nothing. No approved
-negative record exists yet, so none is listed. The module is
+roadmap, docs and reports to list. A pending record lifts nothing. See the
+[current host-operation disposition](ROADMAP.md#automated-host-experiment-and-retained-use-qualification)
+for reviewed records and their exact scope. The verifier is
 `relaymind.evaluation.asset_qualification_record`.
+
+Recorded automated review is defined by "Automated host-operation review" in
+[specification section 12.6.6](SPECIFICATION.md#1266-owner-run-acceptance-profile-spec-066-rm16rm38rm44-ac29ac37).
 
 **Native configuration validation (spec 0.65; #240).** Host, provider, sampling
 and budget configuration documents stay unverified and cannot establish qualified
@@ -1007,8 +1023,10 @@ That includes a manifest whose environment lock is not a JSON object
 (`environment_lock_invalid`).
 
 The AC29 and AC37 numbers that count come only from the Apple M1 8 GiB macOS
-and native x86-64 Windows machines; those runs remain open in #241, #235 and
-#234.
+and native x86-64 Windows machines under the applicable qualification profile.
+Recorded owner-machine runs and their remaining gates are tracked in the
+[roadmap](ROADMAP.md#m10--multilingual-asset-recommendations-spec-066); a captured
+run is not automatically a passing acceptance result.
 
 ### Platform runs on GitHub-hosted runners (#241, #235)
 
@@ -1373,13 +1391,11 @@ python scripts/asset_whole_task.py trial --inputs /abs/frozen/inputs.json \
   --qualification provisional --interactive -- openclaw
 ```
 
-**Still open in #234 (now #259):** the owner's machine session, the frozen trial
-inputs (tasks, freeze, corpus, configurations and inventories), and genuine
-row observations from native host records. Spec 0.66 section 12.6.6 names the
-capture source (the host's persisted session record of provider-reported usage);
-until it is captured, the kit takes observations as operator evidence. Native
-host configuration validation (#240) remains open; the qualified-evidence
-record and its check are in place (#251).
+Each new trial needs its own frozen inputs and genuine native host observations.
+Spec section 12.6.6 defines the capture source and qualification-record rules;
+operator-provided observations alone do not establish qualification. See the
+[recorded trials and remaining gates](ROADMAP.md#m10--multilingual-asset-recommendations-spec-066)
+for delivery status.
 
 ## Bilingual packaged walkthrough recorder (#238)
 

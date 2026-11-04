@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "policy": "local_account_redaction",
+  "description": "Only the local account identifier is replaced with vps-user, including home paths and owner/group fields in command output. These are public projections, not original invocation bytes. Original files are retained privately; a public clone cannot verify the transformation. Final qualification-bound review artifacts are unchanged. Historical commits may still contain the previously published identifiers.",
+  "files": [
+    {
+      "path": "automated-host-20261102/recover-first-row.py",
+      "original_sha256": "8e59b2b416ae951d4d80c2ad8bf1f1e321ebe797cc51ae14cc8a485d05194bea",
+      "original_bytes": 5528,
+      "published_sha256": "1591903380c043fa516e527354a40e0e817ab734d5d6dfd4dc734e1265936d21",
+      "published_bytes": 5528
+    },
+    {
+      "path": "automated-host-results-20261103/publication.json",
+      "original_sha256": "a5170b5caf83ab87555a3557e7c4329234ab8876ff1cb58fe42c5b7c130ba037",
+      "original_bytes": 4393,
+      "published_sha256": "fc6a0efff9aae2da4e3130b309ad2b9e87ac27bf6e30b9814e1cfe5f5c93e756",
+      "published_bytes": 4393
+    },
+    {
+      "path": "automated-host-results-20261103/README.md",
+      "original_sha256": "ec4250c72ff3d9165a77a9c65d3fafd6b319b4250f11b8a30647bbdf8e90fa31",
+      "original_bytes": 5691,
+      "published_sha256": "2a34ef01a4c4a9f888e63912720f7d8c3e73e2a1c45e509c10d2dd390f432c15",
+      "published_bytes": 5691
+    },
+    {
+      "path": "retained-boundary-20261102/review-a-prompt.txt",
+      "original_sha256": "5c5d38792ff376d467edbbafb922c6e5b2d364f10896c134f5d39cb9a6f0fe1a",
+      "original_bytes": 5302,
+      "published_sha256": "168721cf21bbf1f8ec5b49dbcfdc52760e5da490168281974554802cde08f482",
+      "published_bytes": 5302
+    },
+    {
+      "path": "retained-boundary-20261102/review-b-prompt.txt",
+      "original_sha256": "c0201f819d735b962a4d1c16dff3b54dc01656f89402d20e94111949f5309a9b",
+      "original_bytes": 5514,
+      "published_sha256": "43bae4b23a44562ff1ae004e82f5f42dbc1843095a650cdcf229642b48c4f775",
+      "published_bytes": 5514
+    },
+    {
+      "path": "retained-boundary-20261102/review-a/output.jsonl",
+      "original_sha256": "a4947995e05be0d7f193a3a73b3240584f1f50dd0bdd04beb968a977ac187555",
+      "original_bytes": 508387,
+      "published_sha256": "262de5c19cf6a99a42f42d1ab3e29facf1763d844f651f2d231a42476a9f4c71",
+      "published_bytes": 508387
+    },
+    {
+      "path": "retained-boundary-20261102/review-b/output.jsonl",
+      "original_sha256": "6070f35c12673e5a6cf4f664399312ad315c626df8dadb159b2bce3a8a63e959",
+      "original_bytes": 481624,
+      "published_sha256": "693e9dd28534a0aa9a66bfe9e75f6c68a309f8a4b7a1a128eee1f8f68742cebb",
+      "published_bytes": 481624
+    }
+  ]
+}
