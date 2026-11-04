@@ -286,24 +286,22 @@ def test_blinding_installs_anonymization_before_building_judge_items():
     assert legacy.final_answer(None, {}) == "sandboxes/[RUN]/x"
 
 
+REQUIRED_BLINDING_ARGUMENTS = {
+    "blind": ("items", "map", "map-digest"),
+    "bind-blinding": ("items", "map-digest"),
+    "apply": ("map",),
+}
+
+
 @pytest.mark.parametrize(
-    "command,required",
-    [
-        ("blind", ("items", "map", "map-digest")),
-        ("bind-blinding", ("items", "map-digest")),
-        ("apply", ("map",)),
-    ],
+    "command,missing",
+    [(command, name) for command, names in REQUIRED_BLINDING_ARGUMENTS.items() for name in names],
 )
-@pytest.mark.parametrize("missing", ["items", "map", "map-digest"])
-def test_blind_missing_output_argument_reports_input_error(
-    tmp_path, monkeypatch, missing, command, required
-):
+def test_blind_missing_output_argument_reports_input_error(tmp_path, monkeypatch, command, missing):
     """RM16/RM44: reject incomplete CLI inputs before checking frozen artifacts."""
-    if missing not in required:
-        pytest.skip("argument is not required by this command")
     m = module()
     args = _wrapper_argv(m, "invalid", tmp_path / "manifest.json", command)
-    for name in required:
+    for name in REQUIRED_BLINDING_ARGUMENTS[command]:
         if name != missing:
             args.extend(["--" + name, str(tmp_path / (name + ".json"))])
     monkeypatch.setattr(m.sys, "argv", args)

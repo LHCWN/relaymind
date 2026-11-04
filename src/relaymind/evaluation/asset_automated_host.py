@@ -9,6 +9,10 @@ import math
 import re
 from collections.abc import Mapping, Sequence
 
+from relaymind.canonical import canonical_digest
+from relaymind.evaluation.asset_host_runner import host_preregistration
+from relaymind.evaluation.asset_whole_task import validate_whole_task
+
 _HASH = re.compile(r"[0-9a-f]{64}\Z")
 
 
@@ -42,6 +46,11 @@ def _positive(value):
         raise AutomatedHostRejected("limit")
 
 
+def _zero_temperature(entry):
+    if type(entry["temperature"]) not in (int, float) or entry["temperature"] != 0:
+        raise AutomatedHostRejected("temperature")
+
+
 def validate_protocol(value: Mapping) -> dict:
     """Validate the closed AutomatedHostProtocolV1 and return a detached copy."""
     _closed(
@@ -63,8 +72,7 @@ def validate_protocol(value: Mapping) -> dict:
     _id(driver["model"])
     _hash(driver["prompt_sha256"])
     _positive(driver["max_calls"])
-    if type(driver["temperature"]) not in (int, float) or driver["temperature"] != 0:
-        raise AutomatedHostRejected("temperature")
+    _zero_temperature(driver)
     seen = {"driver"}
     for key in ("judges", "reviewers"):
         machines = value[key]
@@ -80,8 +88,7 @@ def validate_protocol(value: Mapping) -> dict:
             if machine["id"] in seen:
                 raise AutomatedHostRejected("duplicate_identity")
             seen.add(machine["id"])
-            if type(machine["temperature"]) not in (int, float) or machine["temperature"] != 0:
-                raise AutomatedHostRejected("temperature")
+            _zero_temperature(machine)
     seconds = value["per_generation_seconds"]
     if type(seconds) not in (int, float) or not math.isfinite(seconds) or seconds <= 0:
         raise AutomatedHostRejected("deadline")
@@ -129,10 +136,6 @@ def bind_inputs(
     This checks identity, not authenticity, original catalog availability or
     acceptance qualification. The lock's self-digest excludes its digest field.
     """
-    from relaymind.canonical import canonical_digest
-    from relaymind.evaluation.asset_host_runner import host_preregistration
-    from relaymind.evaluation.asset_whole_task import validate_whole_task
-
     protocol = validate_protocol(protocol)
     for key, value in (
         ("source_tasks_digest", source_tasks),

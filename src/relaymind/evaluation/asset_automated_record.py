@@ -19,11 +19,14 @@ from relaymind.evaluation.asset_automated_host import (
     _id,
     bind_inputs,
 )
-from relaymind.evaluation.asset_corpus_io import DOCUMENT_BYTES, parse_json, read_local
-from relaymind.evaluation.asset_qualification_record import _read_bound, _time, first_host_dispatch
+from relaymind.evaluation.asset_benchmark_io import read_json_path
+from relaymind.evaluation.asset_corpus_io import DOCUMENT_BYTES, parse_json
+from relaymind.evaluation.asset_qualification_record import first_host_dispatch
+from relaymind.evaluation.asset_record_io import read_bound, record_time
 from relaymind.evaluation.asset_whole_task import grade_host_report
 
 FILE_BYTES = 16 * 1024 * 1024
+_BOUND_INPUTS = ("protocol", "source_tasks", "source_lock", "tasks", "freeze")
 
 
 def _reject() -> None:
@@ -33,7 +36,7 @@ def _reject() -> None:
 def _timestamp(value):
     if not isinstance(value, str):
         _reject()
-    return _time(value)
+    return record_time(value)
 
 
 def _file(root: Path, ref: Mapping) -> bytes:
@@ -41,7 +44,7 @@ def _file(root: Path, ref: Mapping) -> bytes:
     _hash(ref["sha256"])
     if type(ref["bytes"]) is not int or not 0 <= ref["bytes"] <= FILE_BYTES:
         _reject()
-    return _read_bound(root, ref, FILE_BYTES)
+    return read_bound(root, ref, FILE_BYTES)
 
 
 def _manifest(root: Path, value: Mapping, *, identified: bool = False) -> list:
@@ -62,6 +65,10 @@ def _manifest(root: Path, value: Mapping, *, identified: bool = False) -> list:
     return rows
 
 
+def _projected(rows: list) -> dict:
+    return {r["id"]: (r["sha256"], r["bytes"]) for r in rows}
+
+
 def load_automated_record(path: Path) -> dict:
     """Verify declared bindings; return no approval or completion decision.
 
@@ -76,8 +83,8 @@ def load_automated_record(path: Path) -> dict:
     claim_sha256:canonical_digest(record without reviews)}. Actual output text is
     retained and checked for presence; its verdict is deliberately not inferred.
     """
-    root, name = Path(path).absolute().parent, Path(path).name
-    record = parse_json(read_local(root, name, DOCUMENT_BYTES))
+    root = Path(path).absolute().parent
+    record, _ = read_json_path(path, DOCUMENT_BYTES)
     _closed(
         record,
         "schema_version profile protocol source_tasks source_lock tasks freeze report "
@@ -89,29 +96,14 @@ def load_automated_record(path: Path) -> dict:
     if record["profile"] != "automated_host":
         _reject()
     keys = (
-        "protocol",
-        "source_tasks",
-        "source_lock",
-        "tasks",
-        "freeze",
+        *_BOUND_INPUTS,
         "report",
         "input_manifest",
         "evidence_manifest",
         "code_manifest",
     )
     values = {key: parse_json(_file(root, record[key])) for key in keys}
-    protocol = bind_inputs(
-        **{
-            key: values[key]
-            for key in (
-                "protocol",
-                "source_tasks",
-                "source_lock",
-                "tasks",
-                "freeze",
-            )
-        }
-    )
+    protocol = bind_inputs(*(values[key] for key in _BOUND_INPUTS))
     report = values["report"]
     grade_host_report(report, values["tasks"], values["freeze"])
     input_ref = report["input_manifest"]
@@ -121,11 +113,7 @@ def load_automated_record(path: Path) -> dict:
     ):
         _reject()
     evidence = _manifest(root, values["evidence_manifest"], identified=True)
-
-    def projected(rows):
-        return {r["id"]: (r["sha256"], r["bytes"]) for r in rows}
-
-    if projected(evidence) != projected(report["evidence"]):
+    if _projected(evidence) != _projected(report["evidence"]):
         _reject()
     if not _manifest(root, values["code_manifest"]):
         _reject()
@@ -201,7 +189,7 @@ def load_automated_record(path: Path) -> dict:
         ):
             _reject()
         if (
-            not _timestamp(dispatch["at"])
+            not dispatch_time
             <= _timestamp(review["started_at"])
             <= _timestamp(review["completed_at"])
         ):

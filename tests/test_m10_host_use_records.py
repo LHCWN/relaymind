@@ -806,9 +806,8 @@ def test_capture_privacy_accepts_hashed_json_hostnames(key):
 
 def test_published_277_280_artifacts_do_not_expose_local_home_accounts():
     """RM12/RM16: public projections omit private local account identifiers."""
-    import hashlib
-    import re
-
+    # Check the disclosed account without republishing its spelling.
+    private_account_hash = "bb19eb4959ae48378da13536f15877d3ac873303acc799a189cfe0f2aa38ad3d"
     for directory in (
         "automated-host-20261102",
         "automated-host-results-20261103",
@@ -817,22 +816,17 @@ def test_published_277_280_artifacts_do_not_expose_local_home_accounts():
         assert (EVIDENCE / directory).is_dir()
         for path in (EVIDENCE / directory).rglob("*"):
             if path.is_file():
-                # Check the disclosed account without republishing its spelling.
-                private_account_hash = (
-                    "bb19eb4959ae48378da13536f15877d3ac873303acc799a189cfe0f2aa38ad3d"
-                )
+                payload = path.read_bytes()
                 assert all(
                     hashlib.sha256(token).hexdigest() != private_account_hash
-                    for token in re.findall(rb"[A-Za-z0-9_-]+", path.read_bytes())
+                    for token in set(re.findall(rb"[A-Za-z0-9_-]+", payload))
                 ), path
-                homes = re.findall(rb"/(?:home|Users)/[A-Za-z0-9_.-]+", path.read_bytes())
+                homes = re.findall(rb"/(?:home|Users)/[A-Za-z0-9_.-]+", payload)
                 assert all(home == b"/home/vps-user" for home in homes), path
 
 
 def test_privacy_publication_binds_each_redacted_copy():
     """RM12/RM16: published projections are not labelled as original captures."""
-    import hashlib
-
     manifest = json.loads((EVIDENCE / "privacy-publication-20261103.json").read_bytes())
     assert manifest["policy"] == "local_account_redaction"
     assert len({row["path"] for row in manifest["files"]}) == len(manifest["files"])

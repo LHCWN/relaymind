@@ -1,16 +1,21 @@
 """RM16/RM35/RM37/RM44; AC26/AC28/AC36: automated evaluation boundary."""
 
 import copy
+import json
+from pathlib import Path
 
 import pytest
 
+from relaymind.canonical import canonical_digest
 from relaymind.evaluation.asset_automated_host import (
     AutomatedHostRejected,
     select_proposal,
     validate_protocol,
 )
+from whole_task_helpers import freeze_doc, tasks_doc
 
 H = "a" * 64
+LOCK = Path(__file__).parents[1] / "evaluation/assets/owner-run-260/lock.json"
 
 
 def protocol():
@@ -32,6 +37,25 @@ def protocol():
         per_generation_seconds=90,
         row_token_limit=250000,
         total_token_limit=13000000,
+    )
+
+
+def frozen_inputs():
+    """The real source lock with a one-task freeze and task wrapper bound to it."""
+    lock = json.loads(LOCK.read_text())
+    freeze = freeze_doc(task_ids=("t001",))
+    freeze["corpus_lock_digest"] = canonical_digest(lock)
+    return lock, freeze, tasks_doc(freeze, lanes=("en_to_en",))
+
+
+def bound_protocol(lock, freeze, source_tasks, tasks=None):
+    """A protocol whose input digests match exactly these documents."""
+    return dict(
+        protocol(),
+        source_tasks_digest=canonical_digest(source_tasks),
+        source_lock_digest=canonical_digest(lock),
+        freeze_digest=canonical_digest(freeze),
+        tasks_digest=canonical_digest(source_tasks if tasks is None else tasks),
     )
 
 

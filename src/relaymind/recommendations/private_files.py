@@ -71,13 +71,18 @@ def _parent(path: Path):
         yield absolute, parent, absolute.name, pinned
 
 
+def require_bound(maximum: int) -> None:
+    """Refuse a size bound that is not a non-negative integer."""
+    if type(maximum) is not int or maximum < 0:
+        raise PrivateFileError("invalid private file bound")
+
+
 @contextmanager
 def open_private_file(
     path: Path, *, maximum: int = MAX_PRIVATE_FILE_BYTES
 ) -> Iterator[PrivateFileLease]:
     """Hold checked final/parent descriptors through caller work and verification."""
-    if type(maximum) is not int or maximum < 0:
-        raise PrivateFileError("invalid private file bound")
+    require_bound(maximum)
     if os.name == "nt":
         from relaymind.recommendations._windows_private_files import open_windows_private_file
 
@@ -164,8 +169,7 @@ def create_private_file_exclusive(
     the final entry exclusively with its protected DACL before writing; a crash
     can leave a partial private file, so consumers must verify its complete bytes.
     """
-    if type(maximum) is not int or maximum < 0:
-        raise PrivateFileError("invalid private file bound")
+    require_bound(maximum)
     if len(data) > maximum:
         raise PrivateFileError("private file too large")
     if os.name == "nt":

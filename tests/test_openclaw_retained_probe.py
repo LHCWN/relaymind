@@ -1,22 +1,32 @@
 """RM16/RM39 AC30: diagnostic harness setup must not claim qualification."""
 
+import hashlib
 import importlib.util
+import json
+import re
 from pathlib import Path
 
 import pytest
 
+QUALIFY = (
+    Path(__file__).parents[1]
+    / "integrations/openclaw/test/host-loaded-use-qualification/qualify.py"
+)
 
-def test_retained_diagnostic_reuses_patched_person_module():
+
+@pytest.fixture
+def module():
+    # Function scoped: qualify.py patches the person module when it is imported.
+    spec = importlib.util.spec_from_file_location("retained_diagnostic", QUALIFY)
+    result = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(result)
+    return result
+
+
+def test_retained_diagnostic_reuses_patched_person_module(module):
     """AC30: the browser actually admits the diagnostic RPC on its real socket."""
-    path = (
-        Path(__file__).parents[1]
-        / "integrations/openclaw/test/host-loaded-use-qualification/qualify.py"
-    )
-    spec = importlib.util.spec_from_file_location("retained_diagnostic", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
     assert module.ordinary.BASE.person_module() is module.person
-    plugin = path.parent.parent / "host-person-qualification"
+    plugin = QUALIFY.parent.parent / "host-person-qualification"
     extension = type("Observation", (), {"observation": object()})()
     script = module.person.socket_observer_script(plugin, extension)
     # Both the fixed browser allowlist and its supplied additional-method list.
@@ -24,15 +34,10 @@ def test_retained_diagnostic_reuses_patched_person_module():
     assert "installNativeSocketObserver(window," in script
 
 
-def test_retained_provider_does_not_copy_unbound_action_configuration(tmp_path, monkeypatch):
+def test_retained_provider_does_not_copy_unbound_action_configuration(
+    module, tmp_path, monkeypatch
+):
     """RM39: diagnostic provider is independent of later person binding setup."""
-    path = (
-        Path(__file__).parents[1]
-        / "integrations/openclaw/test/host-loaded-use-qualification/qualify.py"
-    )
-    spec = importlib.util.spec_from_file_location("retained_diagnostic_config", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
     monkeypatch.setattr(module.Base, "configure", lambda *args: None)
     extension = object.__new__(module.RetainedComposition)
     extension.application_token = "fixture-token"
@@ -49,10 +54,6 @@ def test_retained_provider_does_not_copy_unbound_action_configuration(tmp_path, 
 
 def test_retained_vps_diagnostic_binds_capture_without_qualifying_use():
     """RM16/RM39 AC30: actual failed library boundary is not a qualified fence."""
-    import hashlib
-    import json
-    import re
-
     root = Path(__file__).parents[1]
     evidence = root / "docs/evidence/m10/retained-boundary-20261102"
     summary = json.loads((evidence / "summary.json").read_text())
@@ -101,15 +102,8 @@ def test_retained_vps_diagnostic_binds_capture_without_qualifying_use():
 
 
 @pytest.mark.parametrize("failed", [False, True])
-def test_retained_event_collection_ignores_blank_lines(tmp_path, monkeypatch, failed):
+def test_retained_event_collection_ignores_blank_lines(module, tmp_path, monkeypatch, failed):
     """RM16/RM39: blank JSONL lines neither discard events nor mask host errors."""
-    path = (
-        Path(__file__).parents[1]
-        / "integrations/openclaw/test/host-loaded-use-qualification/qualify.py"
-    )
-    spec = importlib.util.spec_from_file_location("retained_blank_lines", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
     probe = object.__new__(module.RetainedComposition)
     probe.retained_file = tmp_path / "events.jsonl"
     probe.retained_file.write_text('\n {"phase":"observed"}\n  \n\n')

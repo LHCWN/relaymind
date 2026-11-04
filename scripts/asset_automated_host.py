@@ -11,14 +11,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from relaymind.canonical import canonical_digest, canonical_json  # noqa: E402
+from relaymind.canonical import canonical_digest  # noqa: E402
 from relaymind.evaluation.asset_automated_host import bind_inputs  # noqa: E402
-from relaymind.evaluation.asset_corpus_io import (  # noqa: E402
-    DOCUMENT_BYTES,
-    document,
-    parse_json,
-    read_local,
-)
+from relaymind.evaluation.asset_benchmark_io import json_bytes, read_json_path  # noqa: E402
+from relaymind.evaluation.asset_corpus_io import DOCUMENT_BYTES, document  # noqa: E402
 from relaymind.evaluation.asset_host_runner import host_preregistration  # noqa: E402
 from relaymind.recommendations.private_files import create_private_file_exclusive  # noqa: E402
 
@@ -38,7 +34,7 @@ def main() -> int:
             inputs[key] = (
                 document(path.parent, path.name, "lock")
                 if key == "source_lock"
-                else parse_json(read_local(path.parent, path.name, DOCUMENT_BYTES))
+                else read_json_path(path, DOCUMENT_BYTES)[0]
             )
         protocol = bind_inputs(**inputs)
         record = dict(
@@ -56,8 +52,7 @@ def main() -> int:
                 "no_execution_or_review_evidence",
             ],
         )
-        payload = (canonical_json(record) + "\n").encode("utf-8")
-        if not create_private_file_exclusive(args.output.absolute(), payload):
+        if not create_private_file_exclusive(args.output.absolute(), json_bytes(record)):
             raise ValueError("output_exists")
     except (ValueError, OSError) as error:
         # Inputs and private paths never appear in the command's error text.

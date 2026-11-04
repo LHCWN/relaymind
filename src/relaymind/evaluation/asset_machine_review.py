@@ -4,13 +4,13 @@ These checks verify recorded provenance and actual critique bytes. They cannot
 cryptographically authenticate a service, separate context, or sound judgment.
 """
 
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
 
 from relaymind.canonical import canonical_digest
 from relaymind.evaluation.asset_benchmark_io import validate_closed_document
 from relaymind.evaluation.asset_corpus_io import parse_json
+from relaymind.evaluation.asset_record_io import read_bound, record_time
 from relaymind.evaluation.asset_whole_task import WholeTaskRejected
 
 ARTIFACT_BYTES = 256 * 1024
@@ -24,22 +24,26 @@ def _reject() -> None:
     raise WholeTaskRejected("machine_review_invalid")
 
 
+def _opencode_text(payload: bytes) -> bytes:
+    parts = []
+    for line in payload.splitlines():
+        if not line.strip():
+            continue
+        event = parse_json(line)
+        if not isinstance(event, dict) or event.get("type") == "error":
+            _reject()
+        if event.get("type") == "text":
+            part = event.get("part")
+            if not isinstance(part, dict) or not isinstance(part.get("text"), str):
+                _reject()
+            parts.append(part["text"])
+    return "".join(parts).encode("utf-8")
+
+
 def _assessment(payload: bytes, format_name: str, schema: Mapping) -> Mapping:
     try:
         if format_name == "opencode_jsonl":
-            parts = []
-            for line in payload.splitlines():
-                if not line.strip():
-                    continue
-                event = parse_json(line)
-                if not isinstance(event, dict) or event.get("type") == "error":
-                    _reject()
-                if event.get("type") == "text":
-                    part = event.get("part")
-                    if not isinstance(part, dict) or not isinstance(part.get("text"), str):
-                        _reject()
-                    parts.append(part["text"])
-            payload = "".join(parts).encode("utf-8")
+            payload = _opencode_text(payload)
         assessment = parse_json(payload)
         validate_closed_document(
             {"$ref": "#/$defs/MachineReviewAssessment", "$defs": schema["$defs"]},
@@ -47,17 +51,11 @@ def _assessment(payload: bytes, format_name: str, schema: Mapping) -> Mapping:
             "machine_review_invalid",
         )
         return assessment
-    except (ValueError, UnicodeError) as exc:
+    except ValueError as exc:
         raise WholeTaskRejected("machine_review_invalid") from exc
 
 
-def verify_machine_review(
-    record: Mapping,
-    root: Path,
-    schema: Mapping,
-    read_bound: Callable[[Path, Mapping, int], bytes],
-    time: Callable[[str], Any],
-) -> bool:
+def verify_machine_review(record: Mapping, root: Path, schema: Mapping) -> bool:
     """Return approval only after both actual outputs and every binding verify."""
     profile = record.get("machine_review")
     if profile is None:
@@ -83,7 +81,8 @@ def verify_machine_review(
     output_hashes: set[str] = set()
     approved = True
     for row in reviews:
-        if not time(record["recorded_at"]) <= time(row["started_at"]) <= time(row["completed_at"]):
+        started = record_time(row["started_at"])
+        if not record_time(record["recorded_at"]) <= started <= record_time(row["completed_at"]):
             _reject()
         payloads = {}
         for role in ("prompt", "input", "output"):

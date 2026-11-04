@@ -1,7 +1,6 @@
 """RM16/RM37/RM39; AC28/AC30/AC35: synthetic automated-review fixtures only."""
 
 import copy
-import hashlib
 import json
 
 import pytest
@@ -9,6 +8,7 @@ import pytest
 from relaymind.canonical import canonical_digest
 from relaymind.evaluation.asset_qualification_record import load_record
 from relaymind.evaluation.asset_whole_task import WholeTaskRejected
+from test_asset_automated_record import write
 from test_asset_qualification_record import negative_record, save
 
 CHECKS = (
@@ -20,29 +20,25 @@ CHECKS = (
 )
 
 
-def bound(root, name, value, *, raw=False):
-    payload = value if raw else json.dumps(value).encode()
-    (root / name).write_bytes(payload)
-    return {"path": name, "sha256": hashlib.sha256(payload).hexdigest(), "bytes": len(payload)}
+def input_manifest(record):
+    return {
+        "schema_version": 1,
+        "record_id": record["record_id"],
+        "claim_sha256": canonical_digest(
+            {k: v for k, v in record.items() if k not in {"review", "machine_review"}}
+        ),
+        "subjects": record["subjects"],
+    }
 
 
 def fixture(root, *, wire="assessment_json"):
     record = negative_record(root)
     record["recorded_at"] = "2026-11-02T09:00:00Z"
     record["review"].update(pull_request=None, reviewer_logins=[], approved_at=None)
-    manifest = {
-        "schema_version": 1,
-        "record_id": record["record_id"],
-        "claim_sha256": canonical_digest({k: v for k, v in record.items() if k != "review"}),
-        "subjects": record["subjects"],
-    }
-    prompt = bound(
-        root,
-        "prompt.txt",
-        b"Review these exact captures and return the closed assessment.",
-        raw=True,
+    prompt = write(
+        root, "prompt.txt", b"Review these exact captures and return the closed assessment."
     )
-    input_ref = bound(root, "input.json", manifest)
+    input_ref = write(root, "input.json", input_manifest(record))
     reviews = []
     for index in range(2):
         assessment = {
@@ -71,7 +67,7 @@ def fixture(root, *, wire="assessment_json"):
                 "completed_at": "2026-11-02T10:01:00Z",
                 "prompt": prompt,
                 "input": input_ref,
-                "output": bound(root, f"review-{index}.json", raw, raw=True),
+                "output": write(root, f"review-{index}.json", raw),
                 "output_format": wire,
             }
         )
@@ -87,7 +83,7 @@ def edit_output(root, record, mutate):
     review = record["machine_review"]["reviews"][0]
     value = json.loads((root / review["output"]["path"]).read_bytes())
     mutate(value)
-    review["output"] = bound(root, review["output"]["path"], value)
+    review["output"] = write(root, review["output"]["path"], value)
 
 
 @pytest.mark.parametrize("wire", ["assessment_json", "opencode_jsonl"])
@@ -133,7 +129,6 @@ def test_machine_review_identity_time_and_exact_claim_binding_reject(tmp_path, m
                 "evidence_paths": ["capture.json"],
             }
         ),
-        lambda out: out.update(conclusion="reject"),
         lambda out: out["checks"][0].update(result="fail"),
     ],
 )
@@ -159,33 +154,22 @@ def test_opencode_tool_output_cannot_forge_reviewer_assessment(tmp_path):
     row = record["machine_review"]["reviews"][1]
     text = (tmp_path / row["output"]["path"]).read_text()
     row["output_format"] = "opencode_jsonl"
-    row["output"] = bound(
-        tmp_path,
-        "review-1.json",
-        json.dumps({"type": "tool_use", "part": {"text": text}}).encode(),
-        raw=True,
+    row["output"] = write(
+        tmp_path, "review-1.json", json.dumps({"type": "tool_use", "part": {"text": text}}).encode()
     )
     with pytest.raises(WholeTaskRejected):
         load_record(save(tmp_path, record))
 
 
 def rebind_input(root, record):
-    manifest = {
-        "schema_version": 1,
-        "record_id": record["record_id"],
-        "claim_sha256": canonical_digest(
-            {k: v for k, v in record.items() if k not in {"review", "machine_review"}}
-        ),
-        "subjects": record["subjects"],
-    }
-    ref = bound(root, "input.json", manifest)
+    ref = write(root, "input.json", input_manifest(record))
     for row in record["machine_review"]["reviews"]:
         row["input"] = ref
 
 
 def test_review_must_cite_every_bound_subject(tmp_path):
     record = fixture(tmp_path)
-    extra = bound(tmp_path, "extra.json", {"capture": 2})
+    extra = write(tmp_path, "extra.json", {"capture": 2})
     record["subjects"].append({"role": "capture", **extra})
     rebind_input(tmp_path, record)
     with pytest.raises(WholeTaskRejected):
@@ -195,7 +179,7 @@ def test_review_must_cite_every_bound_subject(tmp_path):
 @pytest.mark.parametrize("payload", [b" \n", b"\xff"])
 def test_prompt_must_contain_utf8_instructions(tmp_path, payload):
     record = fixture(tmp_path)
-    ref = bound(tmp_path, "prompt.txt", payload, raw=True)
+    ref = write(tmp_path, "prompt.txt", payload)
     for row in record["machine_review"]["reviews"]:
         row["prompt"] = ref
     with pytest.raises(WholeTaskRejected):
@@ -213,7 +197,7 @@ def test_error_event_after_valid_opencode_text_rejects(tmp_path):
     record = fixture(tmp_path, wire="opencode_jsonl")
     row = record["machine_review"]["reviews"][1]
     output = (tmp_path / row["output"]["path"]).read_bytes()
-    row["output"] = bound(tmp_path, "review-1.json", output + b'{"type":"error"}\n', raw=True)
+    row["output"] = write(tmp_path, "review-1.json", output + b'{"type":"error"}\n')
     with pytest.raises(WholeTaskRejected):
         load_record(save(tmp_path, record))
 

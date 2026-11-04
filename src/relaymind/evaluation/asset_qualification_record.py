@@ -26,13 +26,9 @@ names. Git history and pull request review, or the recorded machine invocation
 provenance and raw outputs, provide the corresponding audit trail.
 """
 
-import hashlib
-import re
 from collections import Counter
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -42,10 +38,11 @@ from relaymind.evaluation.asset_benchmark_io import (
     read_json_path,
     validate_closed_document,
 )
-from relaymind.evaluation.asset_corpus_io import DOCUMENT_BYTES, parse_json, read_local
+from relaymind.evaluation.asset_corpus_io import DOCUMENT_BYTES, parse_json
 from relaymind.evaluation.asset_judgments import DRAFTED, METHODS
 from relaymind.evaluation.asset_machine_review import verify_machine_review
 from relaymind.evaluation.asset_qualification import CustodianReview
+from relaymind.evaluation.asset_record_io import read_bound, record_time
 from relaymind.evaluation.asset_whole_task import WholeTaskRejected
 from relaymind.schema_util import load_packaged_schema
 
@@ -77,28 +74,6 @@ _INPUT_ROLES = ("freeze", "tasks", "episodes", "labels")
 _HOST_SCOPES = {"early_trial": "host_trial", "acceptance": "host_acceptance"}
 # Labelling profiles that record their annotators and Cohen's kappa agreement.
 _AGREEMENT_PROFILES = frozenset({"owner_machine", MACHINE_DUAL_PROFILE})
-
-
-_TIME = re.compile(r"(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?Z")
-
-
-def _time(value: str) -> tuple[datetime, Decimal]:
-    """A spec Time (UTC RFC 3339 with Z) as a comparable instant.
-
-    The schema checks only the shape; an impossible date or clock value
-    (month 13, 30 February, hour 24, minute 60 or a leap second) rejects with
-    the closed reason ``invalid_record_time``. Fractional seconds of any
-    length are kept exactly.
-    """
-    match = _TIME.fullmatch(value)
-    try:
-        if match is None:
-            raise ValueError(value)
-        *parts, fraction = match.groups()
-        instant = datetime(*(int(part) for part in parts), tzinfo=UTC)
-    except ValueError:
-        raise WholeTaskRejected("invalid_record_time") from None
-    return instant, Decimal("0." + (fraction or "0"))
 
 
 def _reject(reason: str):
@@ -160,7 +135,7 @@ def _check_rules(record: Mapping) -> None:
         record["review"]["approved_at"],
     ):
         if value is not None:
-            _time(value)
+            record_time(value)
     # The corpus review belongs to a record whose report resolves a corpus
     # (host, adaptation and platform scopes); others carry none.
     if scope not in REPORT_SCOPES and record["corpus_review"] is not None:
@@ -176,7 +151,7 @@ def _check_rules(record: Mapping) -> None:
     if prereg is not None:
         if started is None:
             _reject("preregistration_missing")
-        if _time(prereg["committed_at"]) > _time(started):
+        if record_time(prereg["committed_at"]) > record_time(started):
             _reject("preregistration_late")
     # Machine identity.
     machine = record["machine"]
@@ -432,17 +407,6 @@ class QualificationRecord:
                 _reject("prompt_authorship_mismatch")
 
 
-def _read_bound(root: Path, ref: Mapping, limit: int) -> bytes:
-    """The bytes of one bound file, checked against its size and SHA-256."""
-    try:
-        payload = read_local(root, ref["path"], limit)
-    except (OSError, ValueError) as exc:
-        raise WholeTaskRejected("record_subject_unavailable") from exc
-    if len(payload) != ref["bytes"] or hashlib.sha256(payload).hexdigest() != ref["sha256"]:
-        _reject("record_digest_mismatch")
-    return payload
-
-
 def _check_report_dispatch(record: Mapping, payload: bytes, root: Path) -> None:
     """A preregistered host report's bound dispatch evidence corroborates it."""
     try:
@@ -456,9 +420,9 @@ def _check_report_dispatch(record: Mapping, payload: bytes, root: Path) -> None:
     first = first_host_dispatch(report, root)
     if first is None:
         _reject("preregistration_missing")
-    if _time(record["preregistration"]["committed_at"]) > _time(first):
+    if record_time(record["preregistration"]["committed_at"]) > record_time(first):
         _reject("preregistration_late")
-    if _time(record["runs_started_at"]) > _time(first):
+    if record_time(record["runs_started_at"]) > record_time(first):
         _reject("record_input_mismatch")
 
 
@@ -483,7 +447,7 @@ def first_host_dispatch(report: Mapping, root: Path | None = None) -> str | None
             if len(refs) != 1 or root is None:
                 return None
             ref = refs[0]
-            payload = _read_bound(root, ref, DOCUMENT_BYTES)
+            payload = read_bound(root, ref, DOCUMENT_BYTES)
             try:
                 capture = parse_json(payload)
             except ValueError as exc:
@@ -498,16 +462,16 @@ def first_host_dispatch(report: Mapping, root: Path | None = None) -> str | None
                 or ref.get("provenance") != "observed"
             ):
                 _reject("record_input_mismatch")
-            dispatch = _time(capture["started_at"])
+            dispatch = record_time(capture["started_at"])
             # A capture after a known attempt cannot describe its dispatch.
             for attempt in row["attempts"]:
                 for key in ("started_at", "ended_at"):
-                    if attempt.get(key) is not None and dispatch > _time(attempt[key]):
+                    if attempt.get(key) is not None and dispatch > record_time(attempt[key]):
                         _reject("record_input_mismatch")
             times.append(capture["started_at"])
         else:
             return None
-    return min(times, key=_time) if times else None
+    return min(times, key=record_time) if times else None
 
 
 def load_record(path: Path) -> QualificationRecord:
@@ -523,7 +487,7 @@ def load_record(path: Path) -> QualificationRecord:
     _check_rules(record)
     canonical = {}
     for subject in record["subjects"]:
-        payload = _read_bound(path.parent, subject, REPORT_BYTES)
+        payload = read_bound(path.parent, subject, REPORT_BYTES)
         if (
             subject["role"] == "report"
             and record["scope"] in _HOST_SCOPES.values()
@@ -535,7 +499,7 @@ def load_record(path: Path) -> QualificationRecord:
                 canonical[subject["role"]] = canonical_digest(parse_json(payload))
             except ValueError as exc:
                 raise WholeTaskRejected("record_input_mismatch") from exc
-    machine_verified = verify_machine_review(record, path.parent, _SCHEMA, _read_bound, _time)
+    machine_verified = verify_machine_review(record, path.parent, _SCHEMA)
     return QualificationRecord(record, path, canonical, machine_verified)
 
 

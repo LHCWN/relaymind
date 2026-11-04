@@ -2,14 +2,13 @@
 
 import hashlib
 import json
-from pathlib import Path
 
 import pytest
 
 from relaymind.canonical import canonical_digest
 from relaymind.evaluation.asset_automated_record import load_automated_record
-from test_asset_automated_host import protocol
-from whole_task_helpers import freeze_doc, ordered_rows, report_for, row, tasks_doc
+from test_asset_automated_host import bound_protocol, frozen_inputs
+from whole_task_helpers import ordered_rows, report_for, row
 
 
 def write(root, name, value):
@@ -19,19 +18,8 @@ def write(root, name, value):
 
 
 def fixture(root):
-    lock = json.loads(
-        (Path(__file__).parents[1] / "evaluation/assets/owner-run-260/lock.json").read_text()
-    )
-    freeze = freeze_doc(task_ids=("t001",))
-    freeze["corpus_lock_digest"] = canonical_digest(lock)
-    tasks = tasks_doc(freeze, lanes=("en_to_en",))
-    p = protocol()
-    p.update(
-        source_tasks_digest=canonical_digest(tasks),
-        source_lock_digest=canonical_digest(lock),
-        tasks_digest=canonical_digest(tasks),
-        freeze_digest=canonical_digest(freeze),
-    )
+    lock, freeze, tasks = frozen_inputs()
+    p = bound_protocol(lock, freeze, tasks)
     prompt = write(root, "review-prompt.txt", b"Inspect actual bound evidence; report findings.")
     for reviewer in p["reviewers"]:
         reviewer["prompt_sha256"] = prompt["sha256"]
@@ -95,7 +83,6 @@ def fixture(root):
         reviews=[],
     )
     record["judging"]["captures"] = write(root, "captures.json", {"files": []})
-    claim = canonical_digest({k: v for k, v in record.items() if k != "reviews"})
     for n, reviewer in enumerate(p["reviewers"]):
         record["reviews"].append(
             dict(
@@ -105,9 +92,6 @@ def fixture(root):
                 started_at="2026-11-02T11:00:00Z",
                 completed_at="2026-11-02T11:01:00Z",
                 prompt=prompt,
-                input=write(
-                    root, f"review-input-{n}.json", {"schema_version": 1, "claim_sha256": claim}
-                ),
                 output=write(
                     root, f"review-output-{n}.txt", b"Material issues remain. Do not approve."
                 ),
@@ -116,7 +100,7 @@ def fixture(root):
                 ),
             )
         )
-    write(root, "record.json", record)
+    rebind_review_inputs(root, record)
     return record
 
 
@@ -139,6 +123,7 @@ def test_bindings_are_not_completion_or_approval(tmp_path):
         "duplicate_context",
         "changed_claim",
         "dropped_row",
+        "escaped_review_path",
     ],
 )
 def test_inconsistent_record_rejects(tmp_path, mutation):
@@ -161,14 +146,8 @@ def test_inconsistent_record_rejects(tmp_path, mutation):
         report = json.loads((tmp_path / "report.json").read_bytes())
         report["rows"].pop()
         record["report"] = write(tmp_path, "report.json", report)
-    write(tmp_path, "record.json", record)
-    with pytest.raises(ValueError):
-        load_automated_record(tmp_path / "record.json")
-
-
-def test_review_artifact_path_cannot_escape_root(tmp_path):
-    record = fixture(tmp_path)
-    record["reviews"][0]["output"]["path"] = "../outside"
+    if mutation == "escaped_review_path":
+        record["reviews"][0]["output"]["path"] = "../outside"
     write(tmp_path, "record.json", record)
     with pytest.raises(ValueError):
         load_automated_record(tmp_path / "record.json")

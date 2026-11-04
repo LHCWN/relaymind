@@ -3,15 +3,22 @@
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_runtime_originals_use_private_resolver_and_public_report_has_no_path(tmp_path):
+@pytest.fixture
+def module():
     path = ROOT / "evaluation/assets/automated-host-277/bundle.py"
     spec = importlib.util.spec_from_file_location("automated_bundle", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    cls = module.private_runtime_bundle(module.legacy.Bundle, {"raw-call"})
+    result = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(result)
+    return result
+
+
+def test_runtime_originals_use_private_resolver_and_public_report_has_no_path(module, tmp_path):
+    cls = module.private_runtime_bundle({"raw-call"})
     bundle = cls(tmp_path / "public", tmp_path / "private")
     bundle.file(
         "raw-call",
@@ -31,14 +38,8 @@ def test_runtime_originals_use_private_resolver_and_public_report_has_no_path(tm
     assert bundle.resolver[0]["path"] == "raw/call.json"
 
 
-def test_bundle_refuses_overlapping_roots_before_writing(tmp_path):
-    import pytest
-
-    path = ROOT / "evaluation/assets/automated-host-277/bundle.py"
-    spec = importlib.util.spec_from_file_location("automated_bundle", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    cls = module.private_runtime_bundle(module.legacy.Bundle, {"raw"})
+def test_bundle_refuses_overlapping_roots_before_writing(module, tmp_path):
+    cls = module.private_runtime_bundle({"raw"})
     for out, private in (
         (tmp_path / "same", tmp_path / "same"),
         (tmp_path / "out", tmp_path / "out/private"),
@@ -50,13 +51,9 @@ def test_bundle_refuses_overlapping_roots_before_writing(tmp_path):
         assert not private.exists()
 
 
-def test_large_runtime_original_is_copied_privately_without_truncation(tmp_path):
+def test_large_runtime_original_is_copied_privately_without_truncation(module, tmp_path):
     """RM12/RM16: transport-sized captures survive private evidence bundling."""
-    path = ROOT / "evaluation/assets/automated-host-277/bundle.py"
-    spec = importlib.util.spec_from_file_location("automated_large_bundle", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    cls = module.private_runtime_bundle(module.legacy.Bundle, {"raw-call"})
+    cls = module.private_runtime_bundle({"raw-call"})
     bundle = cls(tmp_path / "public", tmp_path / "private")
     payload = b"x" * (1024 * 1024 + 123)
     bundle.file(

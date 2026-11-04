@@ -20,7 +20,11 @@ from relaymind.assets._windows_source_io import (
     _WindowsFile,
 )
 from relaymind.recommendations.limits import MAX_PRIVATE_FILE_BYTES
-from relaymind.recommendations.private_files import PrivateFileError, PrivateFileLease
+from relaymind.recommendations.private_files import (
+    PrivateFileError,
+    PrivateFileLease,
+    require_bound,
+)
 
 _PTR = C.c_void_p
 _U32 = C.c_uint32
@@ -310,8 +314,7 @@ def open_windows_private_file(
     path: Path, *, maximum: int = MAX_PRIVATE_FILE_BYTES
 ) -> Iterator[PrivateFileLease]:
     """Own read/parent handles until exit; every verification checks current path."""
-    if type(maximum) is not int or maximum < 0:
-        raise PrivateFileError("invalid private file bound")
+    require_bound(maximum)
     try:
         with _parent(path) as (tree, name, user):
             api = tree.api
@@ -359,8 +362,7 @@ def create_windows_private_file(
     path: Path, data: bytes, *, maximum: int = MAX_PRIVATE_FILE_BYTES
 ) -> bool:
     """Supply owner/protected DACL at FILE_CREATE, before any private bytes exist."""
-    if type(maximum) is not int or maximum < 0:
-        raise PrivateFileError("invalid private file bound")
+    require_bound(maximum)
     if len(data) > maximum:
         raise PrivateFileError("private file too large")
     try:

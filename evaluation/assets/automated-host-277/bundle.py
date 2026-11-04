@@ -15,13 +15,14 @@ _spec = importlib.util.spec_from_file_location(
 legacy = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(legacy)
 
+from relaymind.evaluation.asset_automated_record import FILE_BYTES  # noqa: E402
 from relaymind.recommendations.private_files import create_private_file_exclusive  # noqa: E402
 
 
-def private_runtime_bundle(base, identities: set[str]):
+def private_runtime_bundle(identities: set[str]):
     """Keep raw runtime evidence private while preserving exact hash bindings."""
 
-    class PrivateBundle(base):
+    class PrivateBundle(legacy.Bundle):
         def __init__(self, out, private):
             out, private = Path(out).resolve(), Path(private).resolve()
             if out.is_relative_to(private) or private.is_relative_to(out):
@@ -32,7 +33,7 @@ def private_runtime_bundle(base, identities: set[str]):
             legacy.relative_path(relative)
             target = self.private / relative
             target.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
-            if not create_private_file_exclusive(target, payload, maximum=16 * 1024 * 1024):
+            if not create_private_file_exclusive(target, payload, maximum=FILE_BYTES):
                 raise ValueError("private_evidence_exists")
 
         def file(self, evidence_id, kind, access, payload, *, publish, relative=None):
@@ -56,7 +57,7 @@ def main() -> None:
     parser.add_argument("--report", type=Path, required=True)
     args, _ = parser.parse_known_args()
     report = legacy.read(args.report)
-    legacy.Bundle = private_runtime_bundle(legacy.Bundle, {r["id"] for r in report["evidence"]})
+    legacy.Bundle = private_runtime_bundle({r["id"] for r in report["evidence"]})
     legacy.main()
 
 
