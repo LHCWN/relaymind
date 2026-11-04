@@ -78,5 +78,8 @@ observed recommendation view. Model limits and reservations are unchanged.
 
 The runner passes only actual offered metadata as untrusted context. It does
 not load skill instructions, invoke an MCP tool, or change production manual
-selection. Missing or failed evidence stays missing or failed. The execution
-status remains unmeasured until a complete report and reviews are recorded.
+selection. Missing or failed evidence stays missing or failed. The
+[recorded bounded experiment](../../../docs/evidence/m10/automated-host-results-20261103/README.md)
+contains the completed report and reviews, including failed and unrun rows.
+A future execution needs its own preregistration and evidence; it cannot inherit
+that result.

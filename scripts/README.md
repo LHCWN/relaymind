@@ -1,5 +1,15 @@
 # Scripts
 
+## Find the right workflow
+
+- [Script reference](#current).
+- [Placement and streaming experiments](#m8-placement-and-streaming-matrix-134).
+- [Recover a finalized experiment cell](#recovering-a-finalized-cell-with-a-separate-controller).
+- [Compare recorded runs](#m8-offline-comparison-report).
+- [Check unsuitable-model detection](#unsuitable-detection-on-recorded-evidence-170).
+- [Probe qualified sources](#qualified-source-probes-203-rm34rm38rm43).
+- [Preregister an automated host experiment](#automated-host-preregistration-277).
+
 ## Current
 
 - `source_asset_benchmark.py` — acquire pinned originals, build offline inputs,
@@ -397,8 +407,8 @@
   Offline regrading preserves the source configuration and rejects new
   configuration flags. Older exports without a configuration remain labeled
   as not recorded. This runner change supplies no new live measurements or
-  default decisions. Timing-sample import, placement and workflow options,
-  the full metrics expansion, and the measured comparison matrix remain in #128.
+  default decisions. Timing import, placement, metrics and the comparison
+  matrix are documented in the [M8 matrix workflow](#m8-placement-and-streaming-matrix-134).
 
 - `run_corpus.py --regrade-draft-pass` — the offline draft-pass
   counterfactual (#115; RM31, spec 0.31). It grades the stored traces of

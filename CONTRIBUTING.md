@@ -10,10 +10,18 @@ Thanks for your interest in contributing to **RelayMind**.
 Clone and install:
 
 ```bash
-git clone <repo-url> && cd relaymind
-python3 -m venv .venv && source .venv/bin/activate
+git clone https://github.com/LHCWN/relaymind.git
+cd relaymind
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e ".[dev]"
 ```
+
+On Windows PowerShell, use `python -m venv .venv` and
+`.\.venv\Scripts\Activate.ps1` instead of the POSIX activation command.
+For browser tests, run `playwright install chromium`. OpenClaw tests also
+need the pinned Node environment and package setup in the
+[integration guide](integrations/openclaw/README.md).
 
 ## Commands
 
@@ -36,7 +44,7 @@ This project uses Spec-Driven Development and Test-Driven Development.
 
 - The spec ([`docs/SPECIFICATION.md`](docs/SPECIFICATION.md)) is the single
   source of truth. Every task and test references its requirement IDs
-  (RM01–RM32, AC01–AC23).
+  from the current specification; retired IDs must not be reused.
 - Behavior changes need a spec revision **before** code changes.
   Implementation-only refactoring does not.
 - Write a failing test first, then implement until it passes.
@@ -67,6 +75,35 @@ repository map.
 - All CI checks must pass (`pytest`, `ruff check`, `ruff format --check`).
 - If the change touches API behavior, tool ownership, approvals, platforms,
   or evaluation definitions, link the spec revision that allows it.
+
+## Documentation changes
+
+Keep documentation in version control and review it with the implementation.
+Use the [documentation map](README.md#documentation-and-contributing) to choose
+one canonical home for each fact. Other pages should link to it, using a short
+summary only when readers need context.
+
+- Separate quickstarts, task guides, reference contracts and design explanations.
+  Follow the reader's task rather than the order in which issues were implemented.
+- State prerequisites before commands. Mark shell/platform differences, use
+  copyable examples and describe the expected result.
+- Keep configuration limits and authority rules in the specification, current
+  delivery status in the roadmap, and measured claims in dated evidence.
+- Preserve existing link anchors when shortening a page. Verify relative links,
+  referenced files and documented command options after editing.
+- Update English and Chinese guides together when supported behavior changes;
+  link shared reference details instead of maintaining two copies of contracts.
+- Never rewrite frozen prompts, runtime skill instructions, captured output,
+  licenses or hash-bound originals as editorial cleanup. Add a current pointer
+  outside the preserved record when historical context needs clarification.
+- Use plain language, descriptive headings and link text, numbered procedures,
+  and explicit dates for historical claims. Avoid unsupported scale, quality or
+  performance promises.
+
+These conventions use the reader-oriented organization of
+[Diátaxis](https://diataxis.fr/) and the
+[Google developer documentation style guide](https://developers.google.com/style/highlights).
+They supplement the existing specification change-control rules in [AGENTS.md](AGENTS.md).
 
 ## Reporting issues
 

@@ -13,16 +13,16 @@ Recorded runs of the live model tests and timing probes. A milestone closes
 when its deterministic tests pass and its live checks appear here
 ([`ROADMAP.md`](ROADMAP.md)). Entries are what actually ran, on the machine
 named, with the pinned artifact and runtime; nothing here is a benchmark
-result in the sense of spec section 12.3 except the corpus and latency
-entries (#32, #33, #110), which follow the section 12.2 experiment and
-keep platform results separate.
+claim beyond the scope stated in its entry. The corpus and latency entries
+follow section 12.2; the M9 and M10 entries follow their separately identified
+evaluation profiles. Keep platform results and qualification tiers separate.
 
 Rules for an entry: name the machine (OS version, CPU, GPU or backend, RAM),
 the llama.cpp build, the manifest, the exact command, and the result,
 including failures. Numbers from a single pass are listed as single-pass
 observations, never as p50 or p95. Raw exports go in `docs/evidence/`.
 
-Status (2026-10-23): the entries below cover M1 and M2, the AC08 local
+Historical coverage through 2026-10-23: the entries below cover M1 and M2, the AC08 local
 swap (#90), the first live runs of the M3 to M5 acceptance
 scenarios through `relaymind serve --config` with a live external
 endpoint (#88, #104), the first correctness corpus and latency
@@ -32,6 +32,16 @@ and the first launcher start and latency benchmark on
 x86-64 Windows (#110, AC15), all on Apple Silicon macOS except the M1
 Windows smoke test and the #110 Windows runs. See [`ROADMAP.md`](ROADMAP.md)
 for what is carried forward.
+
+## Reading this record
+
+Entries below are chronological records, not current setup instructions.
+Use [Testing](TESTING.md) for commands and [Roadmap](ROADMAP.md) for remaining gates.
+Recent entry points:
+
+- [M9 OpenClaw evaluation](#m9-openclaw-evaluation-139-spec-050).
+- [Retained loaded-use boundary](#2026-11-02--retained-loaded-use-fence-on-the-pinned-vps).
+- [Bounded automated host experiment](#2026-11-03--completed-bounded-automated-host-experiment-277).
 
 ## 2026-10-20 — M1 live smoke test, Apple Silicon macOS
 
@@ -3430,8 +3440,10 @@ here.
 Not shown: these runner rows are not a user's machine. The macOS
 user-machine row is now recorded in the section above
 (`docs/evidence/2026-10-29-openclaw-mac-qualification/`, at `6fc0954`);
-Windows on a user's machine, native and WSL2, stays `not_run` (no Windows
-machine). Neither do these runs cover the stale-token
+Windows on a user's machine, native and WSL2, was `not_run` for this M9
+record. Later native Windows lifecycle evidence is tracked separately in the
+[roadmap](ROADMAP.md#m10--multilingual-asset-recommendations-spec-066) and does not
+change this run's scope. Neither do these runs cover the stale-token
 reconnect, the interrupt, the tool policy scenarios, a host update or
 rollback, or any live model.
 

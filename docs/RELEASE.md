@@ -6,21 +6,16 @@ measured live, and which targets are unmet or not measured. A passing
 model-double test is never a live result, and a live result on one
 machine is never a result for another (section 12.1).
 
-Historical measurement baseline as of 2026-10-23, including the supplied Windows exports at
-`d18745d` (#110). Nothing here is a production reliability claim
+This is a historical release record, beginning with the 2026-10-23 baseline
+and including the dated M7–M9 additions below. For current implementation and
+acceptance status, use [ROADMAP.md](ROADMAP.md); for original measurements,
+use [EVIDENCE.md](EVIDENCE.md). Nothing here is a production reliability claim
 (section 12.3).
 
 ## Implemented behavior
 
-- M10 customer navigation updated 2026-10-31: [English](asset-selection.md),
-  [简体中文](asset-selection.zh-CN.md), [source-backed run/compare](SOURCE_BENCHMARK.md),
-  [formal JSON/Markdown comparison](ASSET_BENCHMARK.md) and
-  [privacy/recovery](asset-privacy-security.md). Catalog discovery, v2 lexical/HTTP
-  recommendations and the installed qualified GitHub refresh profile have their
-  current scope in [ROADMAP](ROADMAP.md#m10--multilingual-asset-recommendations-spec-066).
-  The exact Linux CPU embedding bundle is registered; other native model and
-  platform qualifications, the installed M10 skill/MCP/approval/correction
-  walkthrough and whole-task/platform gates are separate pending deliverables.
+- Current M10 setup and delivery status are maintained in the
+  [asset selection guide](asset-selection.md) and [roadmap](ROADMAP.md#m10--multilingual-asset-recommendations-spec-066).
 
 - M1 to M5, as listed in [`ROADMAP.md`](ROADMAP.md): the llama.cpp and
   external Chat Completions adapters, the bounded local skill-and-tool
@@ -59,8 +54,9 @@ Historical measurement baseline as of 2026-10-23, including the supplied Windows
 - `pytest` (model doubles, no live model): 3066 passed, 12 deselected
   (the `live` tests), on Apple Silicon macOS, Python 3.14.7, at the head
   of the #109 branch. `ruff check .` and `ruff format --check .` pass.
-- CI runs the same suite on the three platforms of the workflow; the CI
-  result is on the pull request, not recorded here.
+- These counts describe the named historical revisions. Current CI results
+  are attached to each commit. The [CI matrix](TESTING.md#ci-timing-reports)
+  runs macOS only on pushes to master and defines the PR platform subsets.
 
 ## Measured live results
 
@@ -202,15 +198,14 @@ dirty) ran the frozen tasks through the real host with the external model
 | Linux x86_64 VPS, Ubuntu 26.04.1 (not a target platform of section 1) | 2026.10.7 (157d8c2), the package's devDependency | v24.22.1, in `>=24.22.1 <25` | artifact packed with `npm run pack:release` at `393a6bf`, then the install check passed all 15 recorded steps (version, the log and Gateway port isolation, install, configure, enable, inspect, token, discovery, a text and a host tool round trip, disable, uninstall, removal of the config entry and the credential; `docs/evidence/2026-10-28-openclaw-vps-functional-145/`): a Linux VPS functional check (not a supported-platform qualification) over doubles |
 | GitHub Actions `ubuntu-latest`, `macos-latest`, `windows-latest` runners (not a user's machine) | 2026.10.7, the devDependency | v24.22.1, in `>=24.22.1 <25` | CI run 40652444733 at PR #182's merge commit `78fc94d`: the install check passed all 15 recorded steps on Linux 6.17.0-1022-azure x86_64, Darwin 25.6.0 arm64, and native Windows 2025Server AMD64 (`docs/evidence/2026-10-28-openclaw-install-check-github-runners/`): a GitHub-hosted runner functional check over doubles (not a user-machine qualification). Later runs are on their pull requests |
 
-Support gaps: no qualification of this revision on Windows exists, and
-none is planned now (no Windows machine is available). Windows on a user's
-machine (native, which the pinned host documents, and WSL2 if used) has
-never run the host; the native `windows-latest` runner ran the install
-check, which is not a user-machine qualification. Each stays a gap until
-an export is recorded in [`EVIDENCE.md`](EVIDENCE.md#openclaw-plugin-platforms-145), with the OS
-build, the host version, the Node version against the host's range, and
-whether Windows was native or WSL2. The operator commands are in
-`integrations/openclaw/README.md` ("Install check").
+Support gaps for the recorded M9 revision: user-machine Windows qualification
+(native or WSL2) and M9 live evaluation were not run. The native
+`windows-latest` install check is not a user-machine qualification. Later
+[native Windows lifecycle evidence](evidence/m10/windows-platform-run-2026-11-01/README.md)
+has its own M10 scope and does not retroactively qualify the M9 measurements.
+Current platform status is maintained in the [roadmap](ROADMAP.md); operator
+commands are in the [OpenClaw install-check guide](../integrations/openclaw/README.md#install-check-the-release-artifact-through-a-real-host).
+
 
 ### M9 OpenClaw evaluation (#139; RM16, RM25, RM26, RM33; AC24; spec 0.50 section 12.5)
 

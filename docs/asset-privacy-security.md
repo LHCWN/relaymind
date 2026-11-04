@@ -57,12 +57,13 @@ reset additionally require a separate `X-RelayMind-User-Action-Token` bound to a
 operator registration. The bearer cannot enroll that channel; no public
 registration or model-callable action helper exists.
 
-The current recommendation backend refuses enabled production action
-registrations: no qualified person/session/host action contract is activated.
-Writing a contract reference into a JSON file is insufficient. Do not treat the
-benchmark `choose` CLI as enrollment or backend feedback. Its stdout receipt is
-separate from the report and executes nothing. The later installed skill/MCP,
-allow/deny and correction walkthrough must use its delivered host contract.
+Production action registrations must match the reviewed
+`openclaw-native-2026.10.7.v1` contract. Follow the
+[native host setup](../integrations/openclaw/README.md#native-recommendations-and-explicit-actions)
+for personal mapping, restrictive roles and supported operations. Configuration
+cannot create qualification for an arbitrary host or operation. The benchmark
+`choose` CLI is not enrollment or backend feedback: its stdout receipt is
+separate from the report and executes nothing.
 
 [Backend operator details](TESTING.md#backend-direct-actions-and-feedback-privacy-195-rm37ac28)
 describe the existing protected registration format and deterministic-test seam.
@@ -88,8 +89,8 @@ Backend feedback delete/reset does not undo a host side effect, unload a copied
 conversation or erase an independently retained parent request. Reset retains
 chosen/cancelled lifecycle state. Erased feedback aliases cannot recover erased
 payloads through idempotency replay. Inspect the current state/feedback revision
-before a qualified client issues a mutation; this guide supplies no enabled
-production credential recipe.
+before a qualified client issues a mutation. Credential setup is maintained in
+the linked native host guide.
 
 For a normal restart, stop the gateway cleanly, retain the same protected store
 and key, start the same configuration, use the newly printed bearer and GET the
@@ -104,10 +105,6 @@ actual misses, primary timeouts, service floors and unknown costs. The
 [versioned public-source record](evidence/2026-10-30-github-skill-source/README.md)
 separates acquisition from the actual two scheduled product jobs and fixture
 failure/recovery tests. None establishes a whole-market or platform/resource pass.
-The production semantic qualification registry contains only the two exact
-reviewed Linux CPU identities for the pinned multilingual bundle; other
-artifacts, runtimes and devices remain unqualified. The native benchmark
-comparison records that exact scope. The M10 installed host/approval/correction
-walkthrough, independent quality
-and whole-task evaluation, and operational macOS/native Windows gates remain
-specific separate deliverables in [ROADMAP](ROADMAP.md#m10--multilingual-asset-recommendations-spec-066).
+For supported semantic identities, host operations and remaining quality or
+platform gates, use the [roadmap](ROADMAP.md#m10--multilingual-asset-recommendations-spec-066).
+This privacy guide does not maintain a second qualification-status list.

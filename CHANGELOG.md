@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Documentation
+
+- Reorganize the project overview around model use, skill/tool discovery and
+  OpenClaw setup. Consolidate the component map, link current status from
+  operator guides, correct stale qualification and platform claims, and
+  document maintenance conventions. Requirement semantics and historical
+  evidence remain unchanged. Register the editorial specification digest for
+  new evaluation inventories while retaining the original supported digests.
+
 ### Added
 
 - Completed the bounded automated host experiment for #277 with all 300 outcomes retained, corrected blind judging, recorded reviews and explicit failed/unrun results. The arm-identity anonymization fix preserves original judgments and cumulative budget accounting (RM16, RM44; AC36).

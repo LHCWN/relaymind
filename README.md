@@ -1,45 +1,70 @@
 # RelayMind
 
-RelayMind helps a PC with limited resources get the most out of an
-external language model. Simple tasks run on a small local model when
-your machine can do them quickly; everything else goes to the external
-model with as few calls as possible. Work already done is kept when a
-task switches over, nothing destructive runs without your
-confirmation, and every decision is shown in a trace.
+**Get more from your models. Find the right skills and tools for the task.**
 
-It speaks the OpenAI Chat Completions API, so any OpenAI client can use
-it.
+RelayMind is a local model gateway and skill/tool recommendation service. It
+helps you work with a growing asset library: discover relevant capabilities,
+compare candidates, and choose what to use. It also routes managed tasks between
+local and external models, keeping completed work when a task needs to move.
 
-## Skill and tool recommendations
+## Why use RelayMind?
 
-Bring your own local skills or metadata-imported tools, connect a v2 HTTP
-selector, and compare it against the same offered catalog:
-[English setup](docs/asset-selection.md) · [简体中文指南](docs/asset-selection.zh-CN.md).
-The [source-backed benchmark](docs/SOURCE_BENCHMARK.md) provides a development
-dataset; it is not a prerequisite for your own library. Recommendations and
-explicit choice receipts grant no host execution or mutation approval.
+- **Find useful capabilities in your library.** Search skills and MCP tool
+  metadata with English, Simplified Chinese or mixed-language requests. Bring
+  local skills, import tool metadata, or use a qualified source profile.
+- **Keep control when the match is uncertain.** Low-confidence recommendations
+  ask you to choose. You can select a candidate, decline every option, or cancel.
+  Recommendations never install packages, execute tools or approve changes.
+- **Use local compute when it helps.** Run bounded work locally when the model
+  is suitable; hand off to your configured external model when needed. An
+  external-only setup also works.
+- **Avoid losing work between models.** Carry completed tool results and the
+  remaining budget into a handoff. Optional prefetch and multiple read-only
+  calls can reduce model round trips.
+- **See what happened.** Inspect selection, routing, tool outcomes, timing and
+  reported usage. Unknown costs stay unknown; predictions are labeled.
 
-## What it does
+These are two distinct interfaces: recommendations help you choose assets;
+the managed gateway executes its configured demo skills under gateway rules.
+A recommended asset does not automatically become an executable gateway skill.
+See the [interface guide](docs/asset-selection.md#choose-the-right-interface).
 
-- **Skills and tools.** A skill is a small instruction package that
-  names the tools it may use. The gateway checks every tool call before
-  it runs and never guesses an identifier such as a service name.
-- **Local first, external when needed.** When the local model cannot
-  finish, the request, the tool results so far, and the remaining
-  budget go to the external model. Nothing is redone or invented.
-- **Confirmation before changes.** An action that changes something
-  waits for a one-time approval of that exact call.
-- **A trace of every run.** Which model answered, which skill and tools
-  were used, each call's timing, and why work was handed over.
+## Choose your starting point
 
-This version ships demo skills and tools that work on a sandbox
-(two fake services and a few fake databases).
+| You want to… | Start here |
+| --- | --- |
+| Find skills and tools in your own library | [Recommendation setup](docs/asset-selection.md) · [简体中文](docs/asset-selection.zh-CN.md) |
+| Use RelayMind from OpenClaw | [OpenClaw setup](integrations/openclaw/README.md#operator-guide-145) |
+| Connect an OpenAI-compatible client | [Gateway quickstart below](#install) |
+| Plug in your own recommendation algorithm | [Selector v2 guide](docs/ASSET_BENCHMARK.md#the-skilltool-v2-boundary) |
+| Compare selectors on the same catalog | [Source-backed benchmark](docs/SOURCE_BENCHMARK.md) |
 
-The launcher and latency benchmark have recorded runs on macOS and
-native x86-64 Windows (AC15, #110). The 500 ms first model action
-hypothesis was missed on both machines (p95 508 ms and 3610 ms). See
-[`docs/EVIDENCE.md`](docs/EVIDENCE.md) for the exports and limitations,
-and [`docs/RELEASE.md`](docs/RELEASE.md) for the acceptance status.
+## Works with OpenClaw
+
+The included provider plugin supports **OpenClaw 2026.10.7**. Select
+`relaymind/relaymind-client-tools` to use the gateway for inference. OpenClaw
+keeps ownership of sessions, tool execution, permissions and approvals.
+
+The optional recommendation panel supports discovery, explicit choices,
+feedback and qualified native skill selection. Selection is distinct from
+observed instruction use; loaded skill use and MCP execution have separate
+gates. See the panel guide in [English](integrations/openclaw/README.md#native-recommendations-and-explicit-actions)
+or [简体中文](integrations/openclaw/README.zh-CN.md).
+
+The [installation guide](integrations/openclaw/README.md#operator-guide-145)
+owns the pinned Node requirements, packaging, token setup and configuration.
+
+## Scope and evidence
+
+RelayMind is a single-user prototype with explicit catalog, context and execution
+limits. Its [recorded development benchmarks](docs/SOURCE_BENCHMARK.md#recorded-development-results)
+show the tested catalog sizes, misses and limitations. They do not establish
+unlimited scale or guarantee better answers, lower cost or lower latency.
+
+The gateway ships sandbox demo skills and tools. Its Chat Completions endpoint
+implements the [documented OpenAI-compatible subset](docs/SPECIFICATION.md#7-public-api-contract).
+Use the [roadmap](docs/ROADMAP.md) for current implementation and qualification
+status, and the [evidence record](docs/EVIDENCE.md) for measured results.
 
 ## Install
 
@@ -47,10 +72,15 @@ You need Python 3.12 or newer on macOS (Apple Silicon) or Windows
 (x86-64). No WSL or Docker.
 
 ```bash
-git clone <repo-url> && cd relaymind
-python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+git clone https://github.com/LHCWN/relaymind.git
+cd relaymind
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e .
 ```
+
+On Windows PowerShell, create the environment with `python -m venv .venv`
+and activate it with `.\.venv\Scripts\Activate.ps1`.
 
 Then install the local runtime (llama.cpp) and download the model
 (Qwen3-0.6B, about 0.6 GB) as described in
@@ -66,9 +96,16 @@ the demo skills. To add an external model, fill in the
 `[external_model]` table (base URL, model name, context limit) and put
 the API key in an environment variable, never in the file:
 
+macOS / Linux:
+
 ```bash
-export RELAYMIND_EXTERNAL_API_KEY=...        # macOS
-$env:RELAYMIND_EXTERNAL_API_KEY = "..."      # Windows PowerShell
+export RELAYMIND_EXTERNAL_API_KEY="your-provider-key"
+```
+
+Windows PowerShell:
+
+```powershell
+$env:RELAYMIND_EXTERNAL_API_KEY = "your-provider-key"
 ```
 
 The limits that bound each run (time, model generations, tool calls)
@@ -205,39 +242,31 @@ curl -s http://127.0.0.1:8080/v1/chat/completions \
   declares (when your request names the service) before the model starts.
   Both are off by default; see `relaymind.example.toml` and
   `skills/README.md`.
-- **Warm-up at startup.** Before it prints the address, the gateway sends
-  two short requests to the local model so the first real request does not
-  pay for loading it. They are not runs. Set `warmup = false` in a
-  `[placement]` table to turn it off, or `warmup_seconds` to change the
-  30 second limit; a model that does not answer in time is one printed line,
-  not a startup error.
-- **From OpenClaw.** The provider plugin in `integrations/openclaw/`
-  (OpenClaw 2026.10.7 only) lets OpenClaw use the gateway's
-  `relaymind-client-tools` model; OpenClaw runs its own tools and
-  approvals. It is tested over model doubles and qualified on macOS
-  (`docs/evidence/2026-10-29-openclaw-mac-qualification/`). The live
-  measurement ran once on the same Mac with an external model: 144 of 144
-  attempts succeeded, with 0 local turns
-  (`docs/evidence/2026-10-29-openclaw-eval-apple-m1/`). Windows has not
-  run yet. OpenClaw requests
-  (9.4k to 10.6k tokens) do not fit the 8192-token local context, so in
-  `auto` they go to the external model. See
-  [`integrations/openclaw/README.md`](integrations/openclaw/README.md).
+- **Warm-up at startup.** The gateway prepares the local model before using it.
+  With recommendations enabled, lexical service can become available while
+  model warm-up continues; local inference readiness stays fenced until it
+  finishes. Configure warm-up and detection in `[placement]`; see the
+  [launcher reference](docs/SPECIFICATION.md#141-operator-launcher).
+
 
 ## Coming next
 
 What is planned is in [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
-## Contributing
+## Documentation and contributing
 
-Read [`AGENTS.md`](AGENTS.md) first: the specification
-([`docs/SPECIFICATION.md`](docs/SPECIFICATION.md)) is the source of
-truth, and tests come before code.
+| Need | Source |
+| --- | --- |
+| Required behavior and acceptance criteria | [Specification](docs/SPECIFICATION.md) |
+| Current implementation and remaining gates | [Roadmap](docs/ROADMAP.md) |
+| Measured results and their limitations | [Evidence](docs/EVIDENCE.md) |
+| Code layout and ownership | [Architecture](docs/ARCHITECTURE.md) |
+| Development setup and checks | [Contributing](CONTRIBUTING.md), [contributor rules](AGENTS.md) |
+| Manual and automated verification | [Testing](docs/TESTING.md) |
 
-```bash
-pip install -e ".[dev]" && playwright install chromium
-pytest && ruff check . && ruff format --check .
-```
+The specification defines requirements; the roadmap records delivery status;
+evidence records what actually ran. Dated release and design records preserve
+historical context and do not override those sources.
 
 ## License
 

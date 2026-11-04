@@ -191,6 +191,8 @@ _GENERATOR_ANCHORS = {
     ),
     "docs/SPECIFICATION.md": frozenset(
         {
+            # 0.68 editorial reconciliation: evidence links and implemented-operation pointers.
+            ("0eaf1b7a94bcc34b9df9ae2444a5b18fd414eb9f05667fcefc6d595e566b7549", 639476),
             # 0.68 adds separately labeled automated host-operation review.
             ("0871c50ebd66b29712f444f4293c511ffcca38533975f13566bf245934552310", 639218),
             # 0.67 automated host benchmark; person-driven gates remain separate.

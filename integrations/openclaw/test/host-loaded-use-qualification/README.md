@@ -1,5 +1,10 @@
 # Retained-borrow boundary probe (#280)
 
+The [recorded VPS capture](../../../../docs/evidence/m10/retained-boundary-20261102/README.md)
+and [current scoped disposition](../../../../docs/ROADMAP.md#automated-host-experiment-and-retained-use-qualification)
+describe what this probe established. The requirements below for a future
+positive qualification remain separate; loaded use is not enabled.
+
 RM16, RM37, RM39; AC28, AC30; specification 7.6.1.
 
 This is qualification scaffolding, excluded from the release package. It does

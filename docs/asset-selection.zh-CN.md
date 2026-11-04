@@ -179,91 +179,24 @@ en→en、zh→zh、zh→en、en→zh、混合查询、相近替代项、干扰�
 原始正文语言和描述语言分别记录，缺失的 MCP 语言组合明确列出。
 不共享拉丁标识的中文内存泄漏请求仍未命中英文原始目标；这些诊断不证明翻译能力、
 语义质量或独立人工标注达标。开始使用工具不要求客户提供外部数据集或人工评审组。
-生产语义模型资格验证，以及已安装宿主的 M10 执行、审批、纠正演练仍是单独的工作；
-参见[当前状态](ROADMAP.md#m10--multilingual-asset-recommendations-spec-066)。
+可用的语义后端、已安装宿主能力与剩余资格门槛统一记录在
+[当前路线图](ROADMAP.md#m10--multilingual-asset-recommendations-spec-066)。
 
 ## 整任务试验、适配回合与平台导出
 
-规范 0.60/0.64/0.65 第 12.6.5 节的离线工具服务于 #198（早期已安装技能试验）、#202（适配回合）、
-#204（宿主 MCP 使用行）、#205（成对整任务）和 #206（平台生命周期）。它们校验冻结输入、
-确定性地规划执行、通过真实推荐生命周期驱动适配回合，并重新评分导出的报告。工具不运行宿主、
-不授予审批，也不执行任何工具：宿主试验的执行器由调用方提供，只有宿主执行工具。
-本节是摘要；各项检查的规范性完整说明以英文版 [ASSET_BENCHMARK.md](ASSET_BENCHMARK.md#whole-host-trials-adaptation-episodes-and-platform-exports-spec-060064065-section-1265) 为准。
-所有汇总都从经过验证的行重新计算，存储的汇总与之不符时报告被拒绝。`plan-host` 先依据 `HostFreezeV1` 校验
-`AssetHostTasksV1`，并按 `{seed,task_id,arm}` 的 SHA-256 排列各组；评分命令的输出文件总是记录 `status`、`gate`
-和固定的安全 `reason`，`plan-host` 与 `plan-episodes` 只写出计划，被拒绝时不写文件并把原因输出到标准错误。引用的配置为严格 JSON 或 TOML
-（不超过 4 MiB）；尚不支持关联锁（related locks），遇到时阻塞。重置证据必须是规范化（canonical）JSON 原始字节，
-非规范字节或重复键会被拒绝。
-规范 0.65（#240）要求提供并验证第 12.6.5 节规定的固定版本原生校验证据及适用的 schema／提取证据；
-在此之前，宿主、提供方、采样和预算配置文档保持未验证状态，不能据此通过正式验收。
-评分结果还记录 `qualification`（#240）：报告声明的标签 `claimed`、根据已解析输入评估的等级 `assessed`
-（`fixture`、`provisional` 或 `qualified`；平台报告的 `qualified` 即 `measured`）及固定的安全原因 `reasons`。
-夹具语料或夹具来源的证据使等级为 `fixture`；在夹具输入上声明 `provisional`、`qualified` 或 `measured`
-会被拒绝（`qualification_contradiction`）。规范尚未定义经审查的 S3 资格记录，也未启用原生配置校验器，
-因此始终列出 `qualified_evidence_review`，目前没有报告能被评估为 `qualified`。
+这些工具校验冻结输入、规划宿主试验、驱动适配回合，并重新评分导出的报告。
+宿主执行器由调用方提供；推荐服务不会因一次选择而获得工具执行或审批权限。
 
-| 命令 | 作用 |
+| 目标 | 完整操作参考 |
 | --- | --- |
-| `python scripts/asset_whole_task.py plan-host --tasks T --freeze F --output P` | 按冻结的任务顺序写出三组（native、provider_only、recommendations）执行计划，并记录预注册的 `input_digest` 与 `freeze_digest` |
-| `python scripts/asset_whole_task.py plan-episodes --episodes E --freeze F --output P` | 依据 `EpisodeFreezeV1` 校验 `AssetEpisodesV1`，写出 `input_digest`、`config_digest`，以及每个回合按时间顺序的三次纠正、按 `(kind,case_id)` 排序并从一编号的成对探测和重置探测 |
-| `python scripts/asset_whole_task.py grade-host --report R --inputs M [--resolver X] --output O` | 解析配套输入清单，校验并重新评分宿主报告 |
-| `python scripts/asset_whole_task.py grade-platform --report R --inputs M [--resolver X] --output O` | 校验平台报告的十一个生命周期步骤 |
-| `python scripts/asset_whole_task.py grade-adaptation --report R --inputs M [--resolver X] --output O` | 校验并重新评分适配报告；探测标签来自清单中经过验证的语料 |
+| 规划与评分宿主、适配及平台报告 | [整任务参考](ASSET_BENCHMARK.md#whole-host-trials-adaptation-episodes-and-platform-exports-spec-060064065-section-1265) |
+| 冻结标签、预注册和恢复执行 | [回合与任务工具](ASSET_BENCHMARK.md#episode-and-host-task-run-kit-236-237) |
+| 采集平台生命周期 | [平台运行工具](ASSET_BENCHMARK.md#operations-and-platform-run-kit-242) |
+| 查看已完成工作与剩余资格门槛 | [当前路线图](ROADMAP.md#m10--multilingual-asset-recommendations-spec-066) |
 
-退出码：`0` 通过或不适用于验收（夹具平台报告、未达资格的适配报告）；`1` 已知门槛失败；
-`2` 报告或输入被拒绝（摘要、身份、顺序、绑定或算术矛盾）；`3` 阻塞（缺少必需的文档、配置、
-语料文档、运行器/协议清单中文件的原文（由 `--resolver` 提供）或证据）。阻塞永远不会被报告为通过。评分结果还会列出 `unverified`：
-宿主与平台报告为 `configuration_semantics` 和 `qualified_evidence_review`；适配报告为
-`qualified_evidence_review`，若两个对照组未引用冻结的 14.5.2 适配配置，还包括 `adaptation_config_semantics`
-（被引用时会与其余引用闭包一同解析和验证）。关闭组与开启组的有效配置除适配开关外必须完全一致
-（含选择器类型、名称、版本与地址），语料原文必须全部可用。
-
-**输入。** 清单必须包含唯一的 `environment_lock`、`runner_inventory`、`protocol_inventory`，
-报告指向的根输入及其冻结文档，冻结文档列出的每个配置（`referenced_config:<摘要>`），
-以及冻结语料的 `lock:`、`catalog:`、`cases:`、`labels:` 文档和证据。语料只在私有临时目录中
-重建，并由现有发布校验器验证。宿主任务绑定到用例的车道、任务族和目录资产的确切字节；
-适配回合绑定到已存在的用例，目录中存在的纠正目标必须字节一致，不在池中的目标被保留而不会被替换。
-
-**重置证据（规范 0.64）。** 证据登记项 `reset:<回合 ID>` 保存封闭的 JSON 文档
-`{schema_version:1,episode_id,baseline,after}`。缺少该文档的重置声明不会被计入通过，
-在没有更早的结构矛盾或已知门槛失败时，评分结果为阻塞。
-
-**适配回合驱动。** `relaymind.evaluation.asset_episode_driver` 在进程内对真实推荐服务运行每个冻结回合：
-每个对照组使用一次性存储，关闭组运行禁用基线；开启组记录重置基线，通过产品反馈存储依次提交三次纠正，
-运行成对探测，经真实生命周期重置反馈后重复重置探测，并导出报告和重置证据。每次调用使用独立的幂等声明；
-重置原像只来自就绪结果，重置探测失败时重置结果为未知。纠正被拒或异常只结束当前回合：已完成的工作被保留，
-其余条目以固定原因标为 `not_run`，后续回合继续运行。中断（调用方的中断检查或任务被取消）
-在每次探测和纠正之前检查，并结束整个运行：当前回合记为 `cancelled`，之后计划的每个回合都以原因
-`interrupted` 标为 `not_run`。评分器根据经验证的语料和
-对照组配置重新计算每个探测的请求与候选目录摘要。驱动使用的评估专用操作登记不是个人或宿主证据，
-因此不能产生 `qualified` 报告。
-
-**回合与宿主任务运行工具（#236、#237）。** `scripts/asset_whole_task.py` 还提供以下命令。它们不提供真实的人员、标签、
-宿主或纠正；写出的运行只会是 `fixture` 或 `provisional`，没有 `qualified` 选项。最终评分仍由 `grade-host`
-与 `grade-adaptation` 一条命令完成。完整说明见英文版
-[ASSET_BENCHMARK.md](ASSET_BENCHMARK.md#episode-and-host-task-run-kit-236-237)。
-
-| 命令 | 作用 |
-| --- | --- |
-| `label-template` | 为一名标注者导出盲标模板：只含每个用例的提示内容，绑定用例与目录摘要；不含标签、其他判断或算法输出。标注者必须是已声明的 `annotator` 且不是 `tuner` |
-| `label-worksheet` | 校验交回的模板（每个用例恰好两名不同标注者），为裁决者写出含两份原始判断和一致性的工作表 |
-| `label-freeze` | 由原始判断和已完成的裁决组装并校验 `AssetLabelsV1`；原始判断不可改动，一致性重新计算 |
-| `preregister-host` / `preregister-episodes` | 校验冻结输入并记录输入、冻结与计划摘要及验收资格原因（如少于 100 个任务或回合、语料不是已冻结的验收版本、探针不在 `held_out` 划分） |
-| `run-host … -- 程序 参数…` | 通过操作员提供的宿主执行程序按冻结计划执行，进度写入可恢复的日志；退出码 `0` 表示每个计划行都有结果，`3` 表示被中断；可选的 `--executor-timeout 秒数` 是测试框架上限而非任务预算，超时的程序被终止，该行记为 `failed`（`executor_error`） |
-| `capture-costs` | 把 RelayMind 追踪事件中的外部模型调用转为 `HostAttempt`（提供方报告的计数，缺失计数保持为 null） |
-
-运行日志不是证据，但含有行与重置证据，因此仅所有者可读写（`0600`，新建目录为 `0700`）。日志头绑定预注册的摘要以及运行身份
-（环境、制品、输入清单与资格标签）的摘要，输入或身份改变后不能续跑（`journal_binding`）。
-`preregister-host` 要求五个必需车道各至少一个任务（`missing_required_lanes`）。外部调用保留各自结果：
-`cancelled` 仍为取消，网关自身时限为 `timeout`；网关侧中止或传输错误（`provider_unreachable`）只有在收到令牌或至少一个已知用量计数时才计为一次调用。第二次 SIGINT/SIGTERM 会立即停止并终止执行程序的进程组，已开始的行在续跑时记为 `cancelled`。已完成的行不会重新执行；崩溃时已开始但未记录的行
-导出为 `cancelled`（原因 `interrupted_unrecorded`），没有尝试记录，因此该组成本覆盖未知，门槛为阻塞。
-执行程序返回无效行、非零退出或无法使用的输出时，该行记为 `failed`（`executor_invalid_row` 或 `executor_error`），
-宿主输出不会被修补。原生组直接调用提供方，其用量必须来自宿主本身，本工具不负责采集。盲标只是流程：
-每名标注者只拿到自己的模板，人员、能力与独立性仍需保管人审查。
-
-**当前限制。** 尚无经过评审的资格证据校验器，因此资格验收报告只会评为阻塞，不会通过；
-实测平台报告在绑定工作负载评分器并在真实 Apple Silicon macOS 与原生 Windows 上评审前同样阻塞。
-真实回合、成对宿主任务和平台运行需要真实独立语料、宿主与硬件；夹具运行不构成任何测量结果。
+命令、退出码、输入字段和证据要求统一维护在上述参考中。评估须区分夹具、临时结果和
+经验证的资格；成功运行命令不等于通过正式验收。资格规则以[规范](SPECIFICATION.md)
+为准，不以指南中的摘要代替。
 
 ## 已安装宿主上的早期试验与双语演示
 
@@ -280,7 +213,7 @@ en→en、zh→zh、zh→en、en→zh、混合查询、相近替代项、干扰�
 没有观测的行导出为 `not_run`（`observation_missing`）。`--interactive` 会先询问，输入 `skip` 得到
 `operator_skipped`。`provisional` 需要预检和安装都通过；工具自身从不产生 `qualified`，只有经评审批准的规范 0.66 第 12.6.6 节资格记录（`--qualification-record`）才能解除评审原因。早期试验至多评为阻塞，
 不能通过验收；`grade.json` 中各组的令牌与调用合计只是临时（provisional）基线成本。
-所有者机器上的会话、冻结的试验输入，以及从原生宿主记录得到的真实观测仍待提供。完整说明见英文版
+已有记录及其限制见[路线图](ROADMAP.md#m10--multilingual-asset-recommendations-spec-066)。完整说明见英文版
 [试验工具](ASSET_BENCHMARK.md#early-installed-skill-trial-kit-234)。
 
 **双语演示录制（#238）。** `integrations/openclaw/test/host-walkthrough/record.py record`

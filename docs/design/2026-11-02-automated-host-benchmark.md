@@ -1,9 +1,9 @@
 # Automated whole-task benchmark for #277
 
-Status: specification 0.68 retains the automated experiment defined in 0.67.
-Protocol/proposal validation, the bounded executor, durable preregistration,
-blind judging and private evidence bundling are implemented. The live experiment
-and its final review record remain pending.
+Historical design for the automated experiment introduced in spec 0.67 and
+retained in 0.68. The sections below preserve the design and implementation
+sequence; they are not a current task list. For the completed bounded run and
+remaining acceptance gates, see the [roadmap](../ROADMAP.md#automated-host-experiment-and-retained-use-qualification).
 
 Requirements: RM16, RM35–RM37, RM40–RM44; AC26–AC28, AC31–AC36.
 

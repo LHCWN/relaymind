@@ -32,6 +32,14 @@ identify source records, not independently adjudicated semantic families. The
 remains available separately. These development reports are internal diagnostics,
 not `AssetBenchmarkReportV1` or formal acceptance evidence.
 
+## Find the right workflow
+
+- [Acquire the development catalog](#acquire-and-reproduce-the-data).
+- [Connect a selector](#connect-an-external-selector-and-declare-readiness).
+- [Run comparable cases](#run-identical-cases-and-compare).
+- [Read measured results](#recorded-development-results).
+- [Make an explicit choice](#let-the-user-choose-when-confidence-is-low).
+
 ## Acquire and reproduce the data
 
 From the repository root, use Python 3.12+ with the project installed, or select
