@@ -1,6 +1,7 @@
 """RM16/RM44; AC36: judging uses frozen model and prompt identities."""
 
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,42 @@ def module():
     result = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(result)
     return result
+
+
+def _write_blinding_inputs(tmp_path, *, blind_ids=(), map_sha="a" * 64):
+    items = tmp_path / "items.json"
+    digest = tmp_path / "map-digest.json"
+    items.write_text(
+        json.dumps(
+            {
+                "format": "relaymind.owner_run_blind_items.v1",
+                "items": [{"blind_id": blind_id} for blind_id in blind_ids],
+            }
+        )
+    )
+    digest.write_text(
+        json.dumps(
+            {
+                "format": "relaymind.owner_run_blind_map_digest.v1",
+                "map_canonical_sha256": map_sha,
+                "items": len(blind_ids),
+            }
+        )
+    )
+    return items, digest
+
+
+def _wrapper_argv(m, commit, manifest, *command):
+    return [
+        "judge.py",
+        "--protocol",
+        str(m.HERE / "protocol.json"),
+        "--preregistration-commit",
+        commit,
+        "--blind-manifest",
+        str(manifest),
+        *command,
+    ]
 
 
 def test_judging_selects_frozen_model_without_changing_old_defaults():
@@ -88,25 +125,8 @@ def test_blind_and_apply_keep_original_rubric_directory():
 
 
 def test_blinding_manifest_binds_items_without_revealing_map(tmp_path):
-    import json
-
     m = module()
-    items = tmp_path / "items.json"
-    digest = tmp_path / "map-digest.json"
-    items.write_text(
-        json.dumps(
-            {"format": "relaymind.owner_run_blind_items.v1", "items": [{"blind_id": "blind"}]}
-        )
-    )
-    digest.write_text(
-        json.dumps(
-            {
-                "format": "relaymind.owner_run_blind_map_digest.v1",
-                "map_canonical_sha256": "a" * 64,
-                "items": 1,
-            }
-        )
-    )
+    items, digest = _write_blinding_inputs(tmp_path, blind_ids=("blind",))
     manifest = m.blinding_manifest(items, digest)
     m.validate_blinding(manifest, items)
     assert manifest["map_canonical_sha256"] == "a" * 64
@@ -117,8 +137,6 @@ def test_blinding_manifest_binds_items_without_revealing_map(tmp_path):
 
 
 def test_judging_recovers_completed_capture_without_second_dispatch(tmp_path, monkeypatch):
-    import json
-
     from test_owner_run_260_scripts import run_host
 
     m = module()
@@ -179,22 +197,9 @@ def test_judging_refuses_replay_after_incomplete_dispatch(tmp_path, monkeypatch)
 
 
 def test_paid_judging_requires_committed_blinding_before_ledger(tmp_path):
-    import json
-
     m = module()
-    items = tmp_path / "items.json"
-    digest = tmp_path / "map-digest.json"
+    items, digest = _write_blinding_inputs(tmp_path)
     manifest = tmp_path / "manifest.json"
-    items.write_text(json.dumps({"format": "relaymind.owner_run_blind_items.v1", "items": []}))
-    digest.write_text(
-        json.dumps(
-            {
-                "format": "relaymind.owner_run_blind_map_digest.v1",
-                "map_canonical_sha256": "a" * 64,
-                "items": 0,
-            }
-        )
-    )
     manifest.write_text(json.dumps(m.blinding_manifest(items, digest)))
     checked = []
     with pytest.raises(ValueError, match="blinding_commit_required"):
@@ -226,14 +231,10 @@ def test_adjudication_forwards_b_without_abbreviating_wrapper_options(tmp_path, 
     monkeypatch.setattr(
         m.sys,
         "argv",
-        [
-            str(m.HERE / "judge.py"),
-            "--protocol",
-            str(m.HERE / "protocol.json"),
-            "--preregistration-commit",
+        _wrapper_argv(
+            m,
             "invalid",
-            "--blind-manifest",
-            str(tmp_path / "manifest.json"),
+            tmp_path / "manifest.json",
             "adjudicate",
             "--items",
             str(tmp_path / "items.json"),
@@ -247,7 +248,7 @@ def test_adjudication_forwards_b_without_abbreviating_wrapper_options(tmp_path, 
             "300000",
             "--batch",
             "6",
-        ],
+        ),
     )
     # Reaching the source guard proves both wrapper parsers accepted the exact
     # subcommand options. Invalid provenance prevents every paid invocation.
@@ -301,16 +302,7 @@ def test_blind_missing_output_argument_reports_input_error(
     if missing not in required:
         pytest.skip("argument is not required by this command")
     m = module()
-    args = [
-        "judge.py",
-        "--protocol",
-        str(m.HERE / "protocol.json"),
-        "--preregistration-commit",
-        "invalid",
-        "--blind-manifest",
-        str(tmp_path / "manifest.json"),
-        command,
-    ]
+    args = _wrapper_argv(m, "invalid", tmp_path / "manifest.json", command)
     for name in required:
         if name != missing:
             args.extend(["--" + name, str(tmp_path / (name + ".json"))])
@@ -351,7 +343,6 @@ assert Path(transport.origin) == expected
 def test_apply_wrapper_runs_legacy_cli_without_items(tmp_path, monkeypatch, tamper_map):
     """RM16/RM44: apply accepts its real CLI and still checks the blinded map."""
     import importlib.machinery
-    import json
 
     from relaymind.canonical import canonical_digest
     from relaymind.evaluation import asset_whole_task
@@ -359,19 +350,8 @@ def test_apply_wrapper_runs_legacy_cli_without_items(tmp_path, monkeypatch, tamp
 
     m = module()
     args = _apply_fixture(tmp_path)
-    items = tmp_path / "items.json"
-    items.write_text(
-        json.dumps({"format": "relaymind.owner_run_blind_items.v1", "items": [{"blind_id": "x1"}]})
-    )
-    digest = tmp_path / "digest.json"
-    digest.write_text(
-        json.dumps(
-            {
-                "format": "relaymind.owner_run_blind_map_digest.v1",
-                "map_canonical_sha256": canonical_digest(m.read(args.map)),
-                "items": 1,
-            }
-        )
+    items, digest = _write_blinding_inputs(
+        tmp_path, blind_ids=("x1",), map_sha=canonical_digest(m.read(args.map))
     )
     manifest = tmp_path / "manifest.json"
     manifest.write_text(json.dumps(m.blinding_manifest(items, digest)))
@@ -388,22 +368,13 @@ def test_apply_wrapper_runs_legacy_cli_without_items(tmp_path, monkeypatch, tamp
     def load(loader, loaded):
         original_exec(loader, loaded)
         if loaded.__name__ == "automated_277_run":
-            loaded.require_committed_inputs = lambda commit, paths: checked.append((commit, paths))
+            loaded.require_committed_inputs = lambda commit, paths: checked.append(commit)
 
     monkeypatch.setattr(importlib.machinery.SourceFileLoader, "exec_module", load)
     monkeypatch.setattr(asset_whole_task, "host_summary", lambda *a: {"arms": []})
-    argv = [
-        "judge.py",
-        "--protocol",
-        str(m.HERE / "protocol.json"),
-        "--preregistration-commit",
-        "fixture-registration",
-        "--blind-manifest",
-        str(manifest),
-        "--blinding-commit",
-        "fixture-blinding",
-        "apply",
-    ]
+    argv = _wrapper_argv(
+        m, "fixture-registration", manifest, "--blinding-commit", "fixture-blinding", "apply"
+    )
     for name, path in vars(args).items():
         argv.extend(["--" + name, str(path)])
     monkeypatch.setattr(m.sys, "argv", argv)
@@ -420,4 +391,4 @@ def test_apply_wrapper_runs_legacy_cli_without_items(tmp_path, monkeypatch, tamp
             "judging:success-judgments",
         ]
         assert (args.evidence / "judging/map.json").read_bytes() == args.map.read_bytes()
-    assert [commit for commit, _ in checked] == ["fixture-registration", "fixture-blinding"]
+    assert checked == ["fixture-registration", "fixture-blinding"]

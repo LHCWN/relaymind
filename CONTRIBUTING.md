@@ -27,7 +27,7 @@ need the pinned Node environment and package setup in the
 
 | Action | Command |
 |--------|---------|
-| Run full test suite | `pytest` |
+| Run full test suite | `pytest -n auto --dist loadfile` |
 | Run a single test file | `pytest tests/test_<name>.py` |
 | Run a specific test | `pytest tests/test_<name>.py::test_case` |
 | Run live model tests | `pytest -m live` (needs `llama-server` and the model; see `models/README.md`) |
@@ -49,8 +49,8 @@ This project uses Spec-Driven Development and Test-Driven Development.
   Implementation-only refactoring does not.
 - Write a failing test first, then implement until it passes.
 
-See [`AGENTS.md`](AGENTS.md) for the full workflow, invariants, and
-repository map.
+See [`AGENTS.md`](AGENTS.md) for the full workflow and invariants, and
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the repository map.
 
 ## Tests and fixtures
 
@@ -87,8 +87,6 @@ summary only when readers need context.
   Follow the reader's task rather than the order in which issues were implemented.
 - State prerequisites before commands. Mark shell/platform differences, use
   copyable examples and describe the expected result.
-- Keep configuration limits and authority rules in the specification, current
-  delivery status in the roadmap, and measured claims in dated evidence.
 - Preserve existing link anchors when shortening a page. Verify relative links,
   referenced files and documented command options after editing.
 - Update English and Chinese guides together when supported behavior changes;

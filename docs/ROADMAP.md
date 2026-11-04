@@ -19,8 +19,7 @@ Milestone sections retain delivery history. Their dated results describe the
 recorded revision; they are not promises about every later build. For current
 M10 disposition, start with [automated evaluation and retained-use qualification](#automated-host-experiment-and-retained-use-qualification)
 and the [M10 section](#m10--multilingual-asset-recommendations-spec-066).
-The latter heading retains its original anchor for existing links; the current
-normative definitions are in [the specification](SPECIFICATION.md).
+The normative definitions are in [the specification](SPECIFICATION.md).
 
 ## M1 — Adapter and protocol qualification
 
@@ -1051,11 +1050,9 @@ listed here so the current order can be traced to its reason.
 
 ## M10 — Multilingual asset recommendations (spec 0.66)
 
-The following paragraphs record the 0.66 delivery history. Subsequent revisions
-0.67–0.68 add the automated experiment and automated host-operation reviews;
-see [the current disposition](#automated-host-experiment-and-retained-use-qualification).
-References below to pending records apply to the named historical record, not
-to the later scoped replacement.
+The following paragraphs record the 0.66 delivery history, so a pending record
+below means that named record, not a later replacement. See
+[the current disposition](#automated-host-experiment-and-retained-use-qualification).
 
 Spec 0.66 (#251) adds the owner-run acceptance profile (section 12.6.6): the
 owner runs every trial as operator on the owner's Apple M1 8 GiB MacBook

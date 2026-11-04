@@ -248,11 +248,6 @@ curl -s http://127.0.0.1:8080/v1/chat/completions \
   finishes. Configure warm-up and detection in `[placement]`; see the
   [launcher reference](docs/SPECIFICATION.md#141-operator-launcher).
 
-
-## Coming next
-
-What is planned is in [`docs/ROADMAP.md`](docs/ROADMAP.md).
-
 ## Documentation and contributing
 
 | Need | Source |
@@ -264,9 +259,8 @@ What is planned is in [`docs/ROADMAP.md`](docs/ROADMAP.md).
 | Development setup and checks | [Contributing](CONTRIBUTING.md), [contributor rules](AGENTS.md) |
 | Manual and automated verification | [Testing](docs/TESTING.md) |
 
-The specification defines requirements; the roadmap records delivery status;
-evidence records what actually ran. Dated release and design records preserve
-historical context and do not override those sources.
+Dated release and design records preserve historical context and do not override
+these sources.
 
 ## License
 

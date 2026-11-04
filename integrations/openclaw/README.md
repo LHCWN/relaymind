@@ -761,8 +761,7 @@ artifact (not the checkout) through the pinned transport. It also checks that
 CI runs every OpenClaw test module. `tests/test_openclaw_install_check.py`
 checks the install check against a stub host. CI's `openclaw-plugin` job runs
 the suite and the pinned-host install check on the platforms selected by the
-[CI event matrix](../../docs/TESTING.md#ci-timing-reports). macOS runs only on
-pushes to master; the linked matrix defines each PR's platform subset.
+[CI event matrix](../../docs/TESTING.md#ci-timing-reports).
 
 To recapture the transport fixtures (they must not change on the same pins):
 
@@ -808,9 +807,7 @@ openclaw agent exec --config "$OPENCLAW_CONFIG_PATH" --json \
 ### Disable and remove
 
 Follow [operator step 11](#11-disable-and-remove), including explicit credential
-and configuration cleanup after uninstall. In the recorded Linux VPS functional
-check, no file under the isolated host home held the token after those steps.
-The host's `config.json.bak*` files also contained no token.
+and configuration cleanup after uninstall.
 
 ### Install check: the release artifact through a real host
 

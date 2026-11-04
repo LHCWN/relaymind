@@ -192,7 +192,6 @@ en→en、zh→zh、zh→en、en→zh、混合查询、相近替代项、干扰�
 | 规划与评分宿主、适配及平台报告 | [整任务参考](ASSET_BENCHMARK.md#whole-host-trials-adaptation-episodes-and-platform-exports-spec-060064065-section-1265) |
 | 冻结标签、预注册和恢复执行 | [回合与任务工具](ASSET_BENCHMARK.md#episode-and-host-task-run-kit-236-237) |
 | 采集平台生命周期 | [平台运行工具](ASSET_BENCHMARK.md#operations-and-platform-run-kit-242) |
-| 查看已完成工作与剩余资格门槛 | [当前路线图](ROADMAP.md#m10--multilingual-asset-recommendations-spec-066) |
 
 命令、退出码、输入字段和证据要求统一维护在上述参考中。评估须区分夹具、临时结果和
 经验证的资格；成功运行命令不等于通过正式验收。资格规则以[规范](SPECIFICATION.md)

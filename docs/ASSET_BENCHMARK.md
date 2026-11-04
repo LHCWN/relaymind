@@ -692,12 +692,8 @@ roadmap, docs and reports to list. A pending record lifts nothing. See the
 for reviewed records and their exact scope. The verifier is
 `relaymind.evaluation.asset_qualification_record`.
 
-Specification section 12.6.6 also permits recorded automated review for the
-explicitly allowed scopes, including `host_operation` under spec 0.68. This is
-not a general replacement for every profile's approval requirements. The
-[specification](SPECIFICATION.md) owns those rules; the
-[roadmap](ROADMAP.md#automated-host-experiment-and-retained-use-qualification)
-owns the current reviewed outcomes.
+Recorded automated review is defined by "Automated host-operation review" in
+[specification section 12.6.6](SPECIFICATION.md#1266-owner-run-acceptance-profile-spec-066-rm16rm38rm44-ac29ac37).
 
 **Native configuration validation (spec 0.65; #240).** Host, provider, sampling
 and budget configuration documents stay unverified and cannot establish qualified
@@ -1399,7 +1395,7 @@ Each new trial needs its own frozen inputs and genuine native host observations.
 Spec section 12.6.6 defines the capture source and qualification-record rules;
 operator-provided observations alone do not establish qualification. See the
 [recorded trials and remaining gates](ROADMAP.md#m10--multilingual-asset-recommendations-spec-066)
-for delivery status rather than treating this run kit as a pending-work list.
+for delivery status.
 
 ## Bilingual packaged walkthrough recorder (#238)
 

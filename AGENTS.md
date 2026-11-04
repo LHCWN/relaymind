@@ -90,7 +90,7 @@ See spec section 3 for the full component contract.
 5. Run the full check suite before committing:
 
 ```bash
-pytest
+pytest -n auto --dist loadfile
 ruff check .
 ruff format --check .
 ```

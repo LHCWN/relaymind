@@ -3,36 +3,32 @@
 This document maps the components defined in
 [`SPECIFICATION.md`](SPECIFICATION.md) section 3 to the code layout. The
 spec is the source of truth; this page only explains where things live.
+Implementation and qualification status belong to the [roadmap](ROADMAP.md).
+Follow the linked operator guides for commands.
 
 ## Component map
 
-This is the source-code map. Requirement definitions belong to the
-[specification](SPECIFICATION.md); implementation and qualification status belong
-to the [roadmap](ROADMAP.md). Follow the linked operator guides for commands.
+| Component | Directory | Main files | Responsibility |
+| --- | --- | --- | --- |
+| API | `src/relaymind/api/` | `app.py`, `chat.py`, `native.py`, `auth.py`, `errors.py`, `idempotency.py` | Validate requests, authenticate callers, expose compatible chat and native run APIs, and map errors. `server.py` binds to loopback. |
+| Orchestrator | `src/relaymind/orchestrator/` | `local_loop.py`, `router.py`, `route_decision.py`, `budgets.py`, `identifiers.py` | Admit model proposals, enforce budgets and identifier provenance, run the managed loop, and own answer publication. |
+| Handoff and client-owned inference | `src/relaymind/orchestrator/` | `handoff.py`, `client_loop.py` | Transfer completed work within the remaining budget; return client-owned tool proposals without executing them. |
+| Lifecycle and performance | `src/relaymind/orchestrator/` | `recovery.py`, `warmup.py`, `local_status.py`, `placement.py`, `performance.py`, `prefetch.py`, `routing_cache.py`, `workflows.py` | Recover interrupted runs, assess local availability, predict placement, and implement optional optimizations and the fixed parallel workflow. Predictions never change budgets. |
+| Managed skill selection (v1) | `src/relaymind/selection/` | `contract.py`, `catalog.py`, `chain.py`, `admission.py`, `model_router.py`, `example_match.py`, `http.py`, `settings.py` | Build the offered skill catalog, obtain a proposal, then admit it through gateway checks. HTTP selection uses the loopback transport. |
+| Model adapters | `src/relaymind/adapters/` | All | Normalize provider requests, streamed events, usage and timing. Adapters propose calls; they never execute tools. |
+| Skill registry | `src/relaymind/skills/` | `registry.py`, `cache.py`, `predicates.py` | Validate packages and prefetch declarations, cache parsed content, load instructions, and verify completion criteria. |
+| Tool executor | `src/relaymind/tools/` | `executor.py`, `sandbox.py` | Validate and execute allowed calls; own operation IDs, approvals, retry/replay and side effects. Demo data is disposable. |
+| Run store | `src/relaymind/store/` | All | Persist versioned state, trace events, approvals, tool outcomes, timing samples and outcome projections. Published schemas validate stored events. |
+| UI | `src/relaymind/ui/` | `trace_view.py`, `render.py`, `routes.py`, `comparison.py`, `settings.py` | Render recorded evidence, collect explicit input, and compare runs over reset fixtures. It does not infer hidden reasoning. |
+| Launcher | `src/relaymind/` | `launcher.py` | Validate TOML configuration, wire dependencies, recover runs, warm the local model and print the application token. See [configuration](../relaymind.example.toml). |
+| Shared boundaries | `src/relaymind/` | `canonical.py`, `schema_util.py`, `redaction.py`, `stats.py` | Canonical hashes, schema validation, configured secret redaction and adapter timing exports. |
+| Asset catalog | `src/relaymind/assets/`, `src/relaymind/store/` | All of `assets/`; `asset_catalog.py` in `store/` | Discover and publish metadata, enforce eligibility, schedule refresh, and rebuild lexical/semantic indexes. |
+| Asset recommendation selection (v2) | `src/relaymind/selection/` | `asset_*.py` | Rank offered skills and independent MCP tools with separate selection, fallback, hybrid and adaptation evidence. This is distinct from managed skill selection v1. |
+| Recommendation lifecycle | `src/relaymind/recommendations/` | All | Store recommendation requests, explicit choices, corrections and action receipts; enforce backend authority and private-file boundaries. A choice does not grant execution permission. |
+| Evaluation | `src/relaymind/evaluation/`, `evaluation/` | All | Load frozen corpora and locks, grade trace-backed results, resolve qualification records and export comparisons. See [asset benchmark](ASSET_BENCHMARK.md). |
+| OpenClaw integration | `integrations/openclaw/` | All | TypeScript provider and recommendation integration over public host APIs. The host owns sessions, tools and approvals. See its [operator guide](../integrations/openclaw/README.md). |
 
-| Component | Main files | Responsibility |
-| --- | --- | --- |
-| API | `src/relaymind/api/app.py`, `chat.py`, `native.py`, `auth.py`, `errors.py`, `idempotency.py` | Validate requests, authenticate callers, expose compatible chat and native run APIs, and map errors. `server.py` binds to loopback. |
-| Orchestrator | `src/relaymind/orchestrator/local_loop.py`, `router.py`, `route_decision.py`, `budgets.py`, `identifiers.py` | Admit model proposals, enforce budgets and identifier provenance, run the managed loop, and own answer publication. |
-| Handoff and client-owned inference | `orchestrator/handoff.py`, `client_loop.py` | Transfer completed work within the remaining budget; return client-owned tool proposals without executing them. |
-| Lifecycle and performance | `orchestrator/recovery.py`, `warmup.py`, `local_status.py`, `placement.py`, `performance.py`, `prefetch.py`, `routing_cache.py`, `workflows.py` | Recover interrupted runs, assess local availability, predict placement, and implement optional optimizations and the fixed parallel workflow. Predictions never change budgets. |
-| Managed skill selection (v1) | `src/relaymind/selection/contract.py`, `catalog.py`, `chain.py`, `admission.py`, `model_router.py`, `example_match.py`, `http.py`, `settings.py` | Build the offered skill catalog, obtain a proposal, then admit it through gateway checks. HTTP selection uses the loopback transport. |
-| Model adapters | `src/relaymind/adapters/` | Normalize provider requests, streamed events, usage and timing. Adapters propose calls; they never execute tools. |
-| Skill registry | `src/relaymind/skills/registry.py`, `cache.py`, `predicates.py` | Validate packages and prefetch declarations, cache parsed content, load instructions, and verify completion criteria. |
-| Tool executor | `src/relaymind/tools/executor.py`, `sandbox.py` | Validate and execute allowed calls; own operation IDs, approvals, retry/replay and side effects. Demo data is disposable. |
-| Run store | `src/relaymind/store/` | Persist versioned state, trace events, approvals, tool outcomes, timing samples and outcome projections. Published schemas validate stored events. |
-| UI | `src/relaymind/ui/trace_view.py`, `render.py`, `routes.py`, `comparison.py`, `settings.py` | Render recorded evidence, collect explicit input, and compare runs over reset fixtures. It does not infer hidden reasoning. |
-| Launcher | `src/relaymind/launcher.py` | Validate TOML configuration, wire dependencies, recover runs, warm the local model and print the application token. See [configuration](../relaymind.example.toml). |
-| Shared boundaries | `src/relaymind/canonical.py`, `schema_util.py`, `redaction.py`, `stats.py` | Canonical hashes, schema validation, configured secret redaction and adapter timing exports. |
-| Asset catalog | `src/relaymind/assets/`, `store/asset_catalog.py` | Discover and publish metadata, enforce eligibility, schedule refresh, and rebuild lexical/semantic indexes. |
-| Asset recommendation selection (v2) | `src/relaymind/selection/asset_*.py` | Rank offered skills and independent MCP tools with separate selection, fallback, hybrid and adaptation evidence. This is distinct from managed skill selection v1. |
-| Recommendation lifecycle | `src/relaymind/recommendations/` | Store recommendation requests, explicit choices, corrections and action receipts; enforce backend authority and private-file boundaries. A choice does not grant execution permission. |
-| Evaluation | `src/relaymind/evaluation/`, `evaluation/` | Load frozen corpora and locks, grade trace-backed results, resolve qualification records and export comparisons. See [asset benchmark](ASSET_BENCHMARK.md). |
-| OpenClaw integration | `integrations/openclaw/` | TypeScript provider and recommendation integration over public host APIs. The host owns sessions, tools and approvals. See its [operator guide](../integrations/openclaw/README.md). |
-
-Paths beginning with `src/`, `integrations/` or `evaluation/` are relative to
-the repository root. Other package paths abbreviate `src/relaymind/`; bare
-filenames in a row share the first file's directory. Supporting files:
+Supporting files:
 
 - [Developer scripts](../scripts/README.md) index the launch, benchmark,
   qualification and diagnostic commands.
@@ -42,8 +38,8 @@ filenames in a row share the first file's directory. Supporting files:
   GGUF files are not committed.
 - `tests/` contains deterministic tests and sandbox fixtures. Live capability
   tests are separate; see [Testing](TESTING.md).
-- `docs/evidence/` contains dated records and original exports. Do not edit a
-  frozen artifact to make a historical result agree with a newer implementation.
+- `docs/evidence/` contains dated records and original exports. Follow the
+  [documentation rules](../CONTRIBUTING.md#documentation-changes) for preserved records.
 
 ## Managed execution and performance
 
@@ -52,22 +48,13 @@ builder keeps completed tool results and completion criteria in the external
 request. The client-owned alias is separate: it returns proposals for the caller
 to execute and never takes ownership of host tools.
 
-Optional performance settings are validated at launch and recorded with each
-run. Prefetch and multiple read-only calls still pass normal permission,
-identifier and budget checks. Routing-cache hits reuse a skill choice, not tool
-results or authorization. The fixed parallel demo remains supported; declarative
-workflow packages are retired (RM30).
-
-Early response headers expose progress before an answer is ready. Gated live
-answer streaming is implemented: eligible statements are checked before being
-forwarded, and a late failure ends the stream without replacing earlier text.
-Buffered answers remain the default. Settings and limits are defined in
-[specification section 14.1](SPECIFICATION.md#141-operator-launcher), not in this map.
-
-Placement uses recorded timing samples and local-model status. Startup warm-up
-and recent local-stage outcomes can classify a model as unsuitable; auto then
-uses managed external execution. Placement predictions remain labeled and
-never silently increase a budget.
+The specification defines the behavior of these components:
+[execution boundaries](SPECIFICATION.md#43-tools-and-execution-boundaries),
+caching (RM24), prefetch (RM29),
+[early feedback](SPECIFICATION.md#73-streaming-and-early-feedback),
+[gated live answers](SPECIFICATION.md#731-verified-live-publication-spec-041-rm12-rm20-rm32-ac19),
+[launch settings](SPECIFICATION.md#141-operator-launcher) and
+[placement](SPECIFICATION.md#142-placement-execution-contract-spec-039).
 
 ## Runtime shape
 

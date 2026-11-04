@@ -9,9 +9,9 @@ Start with [development setup](../CONTRIBUTING.md#development-prerequisites).
 For operator setup, use the [gateway quickstart](../README.md),
 [OpenClaw guide](../integrations/openclaw/README.md), or asset recommendations
 ([English](asset-selection.md), [简体中文](asset-selection.zh-CN.md)).
-[Roadmap](ROADMAP.md) owns current delivery status and [Evidence](EVIDENCE.md)
-owns recorded results. Historical issue-specific notes below retain their
-original scope.
+For delivery status and recorded results, use the
+[documentation map](../README.md#documentation-and-contributing). Historical
+issue-specific notes below retain their original scope.
 
 ## Find a verification workflow
 
@@ -38,8 +38,7 @@ ruff format --check .
 The core `check` job runs `pytest -n auto --dist loadfile` (pytest-xdist, in
 the `dev` extra). Each worker runs whole test files, so tests in one file keep
 running in order in one process. Locally, `pytest -n 4 --dist loadfile` ran
-an earlier suite in about 3 minutes, against about 8 in one process. Those
-figures describe that run, not a current performance guarantee. On Windows,
+an earlier suite in about 3 minutes, against about 8 in one process. On Windows,
 the single-process `check` test step took about 29 minutes. The Chromium shell
 download is cached per OS and Playwright version under
 `$RUNNER_TEMP/ms-playwright`; Linux still installs its system packages on every
@@ -1697,10 +1696,9 @@ replaced neither; nothing else changed. Windows has not run.
   the rows in `docs/EVIDENCE.md` and the run cited by `docs/RELEASE.md`,
   `docs/ROADMAP.md`, this file, `CHANGELOG.md`, and the OpenClaw README.
 
-### What is not covered yet
+### Coverage gaps in the M1–M9 records
 
-The following gaps accompany the dated M1–M9 records. Check the
-[roadmap](ROADMAP.md) for current disposition before planning a new run.
+Check the [roadmap](ROADMAP.md) for current disposition before planning a new run.
 
 - The correctness corpus ran on Apple Silicon macOS only (#32). The
   latency benchmark ran on macOS (#33) and native x86-64 Windows
@@ -2420,11 +2418,10 @@ both the current application bearer and the separate
 `user_action_required`; it cannot register a channel. There is no public
 credential administration endpoint or model-callable action helper. The current
 backend trusts a registered adapter channel, not verified human identity or a
-compromised host. Production supports the reviewed
-`openclaw-native-2026.10.7.v1` contract with the required operator references.
-The [native host guide](../integrations/openclaw/README.md#native-recommendations-and-explicit-actions)
-defines the personal mapping and role setup. A supplied reference cannot qualify
-an arbitrary contract. Tests can inject a deterministic qualification resolver
+compromised host. The
+[native host guide](../integrations/openclaw/README.md#native-recommendations-and-explicit-actions)
+defines the supported production contract, personal mapping and role setup.
+Tests can inject a deterministic qualification resolver
 explicitly, outside launch configuration.
 
 `[user_actions].registrations_path` is optional and resolves relative to the

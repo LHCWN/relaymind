@@ -57,11 +57,10 @@ reset additionally require a separate `X-RelayMind-User-Action-Token` bound to a
 operator registration. The bearer cannot enroll that channel; no public
 registration or model-callable action helper exists.
 
-Production action registrations must match the reviewed
-`openclaw-native-2026.10.7.v1` contract. Follow the
-[native host setup](../integrations/openclaw/README.md#native-recommendations-and-explicit-actions)
-for personal mapping, restrictive roles and supported operations. Configuration
-cannot create qualification for an arbitrary host or operation. The benchmark
+Production action registrations must match the reviewed contract in the
+[native host setup](../integrations/openclaw/README.md#native-recommendations-and-explicit-actions),
+which also covers personal mapping, restrictive roles and supported operations.
+The benchmark
 `choose` CLI is not enrollment or backend feedback: its stdout receipt is
 separate from the report and executes nothing.
 
@@ -107,4 +106,3 @@ separates acquisition from the actual two scheduled product jobs and fixture
 failure/recovery tests. None establishes a whole-market or platform/resource pass.
 For supported semantic identities, host operations and remaining quality or
 platform gates, use the [roadmap](ROADMAP.md#m10--multilingual-asset-recommendations-spec-066).
-This privacy guide does not maintain a second qualification-status list.

@@ -8,14 +8,12 @@ machine is never a result for another (section 12.1).
 
 This is a historical release record, beginning with the 2026-10-23 baseline
 and including the dated M7–M9 additions below. For current implementation and
-acceptance status, use [ROADMAP.md](ROADMAP.md); for original measurements,
-use [EVIDENCE.md](EVIDENCE.md). Nothing here is a production reliability claim
+acceptance status, use [ROADMAP.md](ROADMAP.md); for M10 setup, use the
+[asset selection guide](asset-selection.md); for original measurements, use
+[EVIDENCE.md](EVIDENCE.md). Nothing here is a production reliability claim
 (section 12.3).
 
 ## Implemented behavior
-
-- Current M10 setup and delivery status are maintained in the
-  [asset selection guide](asset-selection.md) and [roadmap](ROADMAP.md#m10--multilingual-asset-recommendations-spec-066).
 
 - M1 to M5, as listed in [`ROADMAP.md`](ROADMAP.md): the llama.cpp and
   external Chat Completions adapters, the bounded local skill-and-tool
@@ -55,8 +53,7 @@ use [EVIDENCE.md](EVIDENCE.md). Nothing here is a production reliability claim
   (the `live` tests), on Apple Silicon macOS, Python 3.14.7, at the head
   of the #109 branch. `ruff check .` and `ruff format --check .` pass.
 - These counts describe the named historical revisions. Current CI results
-  are attached to each commit. The [CI matrix](TESTING.md#ci-timing-reports)
-  runs macOS only on pushes to master and defines the PR platform subsets.
+  are attached to each commit; see the [CI matrix](TESTING.md#ci-timing-reports).
 
 ## Measured live results
 
