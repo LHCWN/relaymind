@@ -61,6 +61,12 @@ from relaymind.assets.settings import (
     parse_asset_settings,
     parse_recommendation_settings,
 )
+from relaymind.guidance.pipeline import (
+    GUIDANCE_FIELDS,
+    GuidanceSettings,
+    parse_guidance_settings,
+    redact_prompt,
+)
 from relaymind.orchestrator.budgets import LocalBudgets
 from relaymind.orchestrator.local_loop import ConfiguredModel, LocalOrchestrator
 from relaymind.orchestrator.local_status import LocalModelClass, LocalStatus
@@ -114,6 +120,7 @@ KNOWN_PERMISSIONS = frozenset(DEFAULT_PERMISSIONS)
 _TABLES: dict[str, frozenset[str]] = {
     "user_actions": frozenset({"registrations_path"}),
     "recommendations": RECOMMENDATION_FIELDS,
+    "guidance": GUIDANCE_FIELDS,
     "assets": ASSET_FIELDS,
     "asset_refresh": REFRESH_FIELDS,
     "asset_hybrid": HYBRID_FIELDS,
@@ -209,6 +216,7 @@ class LauncherConfig:
     selection: SelectionSettings = field(default_factory=SelectionSettings)
     assets: AssetSettings = field(default_factory=AssetSettings)
     recommendations: RecommendationSettings = field(default_factory=RecommendationSettings)
+    guidance: GuidanceSettings = field(default_factory=GuidanceSettings)
     user_actions: UserActionSettings = field(default_factory=UserActionSettings)
     asset_semantics: object = None
 
@@ -341,6 +349,11 @@ def parse_launcher_config(
             adaptation=tables["asset_adaptation"],
         ),
     )
+    guidance = _settings("guidance", lambda: parse_guidance_settings(tables["guidance"]))
+    if guidance.keywords == "local" and "local_model" not in raw:
+        raise LaunchError("[guidance] keywords = 'local' needs a [local_model] table")
+    if "external" in (guidance.keywords, guidance.picker) and "external_model" not in raw:
+        raise LaunchError("[guidance] an external stage needs an [external_model] table")
     from relaymind.assets.embedding_bundle import load_semantic_bundle
 
     asset_semantics = _settings(
@@ -439,6 +452,7 @@ def parse_launcher_config(
         placement=placement_settings,
         assets=assets,
         recommendations=recommendations,
+        guidance=guidance,
         asset_semantics=asset_semantics,
         user_actions=user_actions,
         warmup=warmup,
@@ -534,6 +548,32 @@ def _local_model(
 
         adapter = maker()
     return ConfiguredModel(adapter=adapter, model_id=manifest.model_id), maker
+
+
+def _install_guidance(app, config: LauncherConfig, orchestrator) -> None:
+    """The stateless guidance route with the configured stages (section 7.7). No connection now."""
+    from relaymind.api.guidance import install_guidance_routes
+    from relaymind.guidance.models import external_client, local_keyword_client
+    from relaymind.selection.asset_http import HttpAssetSelector
+
+    settings = config.guidance
+    keywords = None
+    if settings.keywords == "local":
+        keywords = local_keyword_client(config.local_url)
+    elif settings.keywords == "external":
+        keywords = external_client(config.external)
+    picker = external_client(config.external) if settings.picker == "external" else None
+    selector = None
+    if settings.primary == "http":
+        selector = HttpAssetSelector(name=settings.name, version=settings.version, url=settings.url)
+    install_guidance_routes(
+        app,
+        settings,
+        keywords=keywords,
+        picker=picker,
+        selector=selector,
+        redact=lambda text: redact_prompt(orchestrator.redactor, text),
+    )
 
 
 def build_app(
@@ -707,6 +747,7 @@ def build_app(
             asset_catalog=catalog,
             recommendations=recommendations,
         )
+        _install_guidance(app, config, orchestrator)
         app.state.action_registrations = registrations
         app.state.feedback_store = feedback
         launched = Launched(

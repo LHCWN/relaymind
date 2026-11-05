@@ -1,0 +1,1313 @@
+{
+ "schema_version": 1,
+ "dataset_id": "guidance-similar-v1",
+ "authorship": "Families and complex requests: written by a model (DeepSeek Flash) from a short brief, before any tuning for them. It saw no RelayMind code. Unrelated prompts and follow-ups: written by the developer. Not independent human labels.",
+ "splits": {
+  "development": [
+   {
+    "family": "cloud-deploy",
+    "skills": [
+     {
+      "name": "skyline-deploy",
+      "description": "Deploy production services in minutes with a guided, repeatable workflow that handles builds, environment promotion, health checks, and rollback without a dedicated platform team. It connects to your repository, keeps secrets out of build logs, and records every change for audit. Releases run on Amazon ECS with Fargate and wire into IAM, CloudWatch, and your existing load balancers.",
+      "en": "Our services already run in AWS and we want releases that inherit the accounts, permissions, and monitoring we have there instead of another control plane.",
+      "zh": "我们的服务已经在亚马逊云上，希望发布流程直接沿用现有的账号、权限和监控，不想再维护一套控制面。"
+     },
+     {
+      "name": "skyline-release",
+      "description": "Deploy production services in minutes with a guided, repeatable workflow that handles builds, environment promotion, health checks, and rollback without a dedicated platform team. It connects to your repository, keeps secrets out of build logs, and records every change for audit. Releases target Azure Container Apps and use your Entra ID tenant, Azure Monitor, and Front Door.",
+      "en": "We are moving container workloads into Microsoft's cloud and need them to use the tenant identities and monitoring we already manage.",
+      "zh": "我们正把容器工作负载迁到微软云，发布时要能用现有的租户身份和监控体系，而不是另建一套。"
+     },
+     {
+      "name": "skyline-ship",
+      "description": "Deploy production services in minutes with a guided, repeatable workflow that handles builds, environment promotion, health checks, and rollback without a dedicated platform team. It connects to your repository, keeps secrets out of build logs, and records every change for audit. Once connected, it runs on Google Cloud Run and uses Cloud IAM, Cloud Logging, and global external load balancing.",
+      "en": "All our infrastructure sits in Google's cloud, and I want container releases that stay inside that account and observability model.",
+      "zh": "基础设施都在谷歌云上，我需要容器发布留在这个账号和可观测性体系里，不要引入外部平台。"
+     },
+     {
+      "name": "skyline-launch",
+      "description": "Deploy production services in minutes with a guided, repeatable workflow that handles builds, environment promotion, health checks, and rollback without a dedicated platform team. It connects to your repository, keeps secrets out of build logs, and records every change for audit. For regulated teams, it installs into self-managed Kubernetes and works with on-premises registries, local identity, and existing ingress.",
+      "en": "Our workloads must remain in our own data centre, so the release process has to fit the Kubernetes cluster and private registry we already operate.",
+      "zh": "受监管的业务只能留在自家机房，发布工具必须适配我们现有的 Kubernetes 集群和私有镜像库。"
+     }
+    ],
+    "no_signal_en": "We need a safer, repeatable way to get containerised services from code review into production, with clear rollback when something breaks.",
+    "no_signal_zh": "我们需要一种更安全、可重复的方式，把容器化服务从代码评审推进到生产环境，并且在出问题时能清楚地回滚。"
+   },
+   {
+    "family": "databases",
+    "skills": [
+     {
+      "name": "data-guardian",
+      "description": "Keep production databases fast and predictable with continuous query analysis, index advice, and safe schema checks before every release. Built for PostgreSQL 13 and later, including partitioned tables and extensions such as pg_stat_statements.",
+      "en": "Our main application database is Postgres, and slow queries keep appearing after feature releases. I want advice that understands its planner and extensions.",
+      "zh": "主库是 PostgreSQL，每次上新功能后总冒出慢查询，我需要能看懂执行计划和扩展情况的优化建议。"
+     },
+     {
+      "name": "data-guardian-x",
+      "description": "Keep production databases fast and predictable with continuous query analysis, index advice, and safe schema checks before every release. It supports MySQL 8 and compatible forks, with InnoDB buffer-pool pressure and replication-lag analysis.",
+      "en": "We run MySQL in production and need to catch bad query plans and replica lag before customers notice, without adding a separate observability stack.",
+      "zh": "生产环境用 MySQL，想在客户察觉前发现糟糕的执行计划和从库延迟，又不想再搭一套监控。"
+     },
+     {
+      "name": "data-guardian-pro",
+      "description": "Keep production databases fast and predictable with continuous query analysis, index advice, and safe schema checks before every release. The tool learns normal workload patterns, flags regressions in plain language, and keeps a searchable history for incident reviews. It is tuned for SQL Server 2019 and 2022, including execution-plan cache analysis and Always On availability groups.",
+      "en": "Our estate is mostly Microsoft SQL Server and we need help reading execution plans and availability-group behaviour during incidents.",
+      "zh": "我们大部分系统跑在微软的 SQL Server 上，故障时需要有人帮忙看懂执行计划缓存和可用性组的状态。"
+     },
+     {
+      "name": "quick-vault",
+      "description": "Keep production databases fast and predictable with continuous query analysis, index advice, and safe schema checks before every release. The tool learns normal workload patterns, flags regressions in plain language, and keeps a searchable history for incident reviews. It focuses on MongoDB 6 and later replica sets, covering collection scans, index selectivity, and shard-key skew.",
+      "en": "Our catalogue lives in MongoDB and some queries suddenly scan far too much data; I need guidance on indexes and shard design.",
+      "zh": "商品目录放在 MongoDB 里，有些查询突然扫描了大量数据，我需要索引和分片键方面的指导。"
+     }
+    ],
+    "no_signal_en": "Something is making our production database slow after releases, and we want to find the cause before customers complain.",
+    "no_signal_zh": "每次发版后生产数据库都会变慢，我们想在用户投诉之前找到原因。"
+   },
+   {
+    "family": "payments",
+    "skills": [
+     {
+      "name": "stripe-payments",
+      "description": "Accept payments without building a settlement stack from scratch, with hosted checkout, tokenised cards, refunds, and webhook-driven reconciliation. It covers global cards, Apple Pay, Google Pay, subscriptions, and marketplace splits, with card data kept on Stripe's infrastructure.",
+      "en": "We sell monthly plans worldwide and want checkout, proration, and recovery of failed renewals live quickly, while keeping card details off our servers.",
+      "zh": "我们在全球卖按月套餐，希望尽快上线结账、按比例计费和失败续费挽回，同时不把卡号留在自己服务器上。"
+     },
+     {
+      "name": "adyen-payments",
+      "description": "Accept payments without building a settlement stack from scratch, with hosted checkout, tokenised cards, refunds, and webhook-driven reconciliation. The dashboard shows authorisations, fees, disputes, and payouts in one place, and every event can be replayed into your own ledger. Local methods such as iDEAL, Bancontact, Alipay, and SEPA direct debit are settled under one contract, with strong coverage across Europe and Asia.",
+      "en": "Shoppers in the Netherlands, Germany, and Singapore expect iDEAL, local wallets, and direct debit at checkout, but finance wants a single settlement report.",
+      "zh": "荷兰、德国和新加坡的顾客习惯用本地钱包和直接借记付款，但财务希望所有渠道只有一份结算报表。"
+     },
+     {
+      "name": "paypal-payments",
+      "description": "Accept payments without building a settlement stack from scratch, with hosted checkout, tokenised cards, refunds, and webhook-driven reconciliation. Checkout leans on the PayPal wallet and buyer protection, with optional card fields and a familiar dispute process for shoppers who already have an account.",
+      "en": "A lot of our customers ask to pay from their PayPal balance, and we need that button next to the normal card form without a second reconciliation process.",
+      "zh": "很多顾客问能不能用 PayPal 余额付款，我们需要在普通银行卡表单旁边加上这个选项，并且不增加一套对账流程。"
+     },
+     {
+      "name": "square-payments",
+      "description": "Accept payments without building a settlement stack from scratch, with hosted checkout, tokenised cards, refunds, and webhook-driven reconciliation. The dashboard shows authorisations, fees, disputes, and payouts in one place, and every event can be replayed into your own ledger. Card-present terminals, online checkout, and invoicing share one catalogue and payout schedule, which suits shops that also sell on the web.",
+      "en": "We run a café and a small web shop, and want payments taken at the counter and online to appear in one daily payout.",
+      "zh": "我们有一家咖啡店和一个小网店，希望柜台和网站收的钱能在同一次每日结算里看到。"
+     }
+    ],
+    "no_signal_en": "We are launching an online store and need to take payments, issue refunds, and reconcile payouts without handling raw card numbers.",
+    "no_signal_zh": "我们要上线网店，需要收款、退款和对账，但不想自己保存银行卡原始信息。"
+   },
+   {
+    "family": "mobile-builds",
+    "skills": [
+     {
+      "name": "ios-build-cloud",
+      "description": "Turn every commit into installable mobile builds with managed signing, device testing, and store-ready artefacts, so releases no longer depend on one person's laptop. The service provisions Apple certificates and profiles, runs XCTest and TestFlight distribution, and gives testers signed builds on registered iPhones.",
+      "en": "We need signed test builds on real iPhones for every pull request, but we do not want to keep a row of Mac minis in the office.",
+      "zh": "每个合并请求都需要在真机上跑签名测试包，但我们不想在办公室摆一排 Mac mini。"
+     },
+     {
+      "name": "android-build-cloud",
+      "description": "Turn every commit into installable mobile builds with managed signing, device testing, and store-ready artefacts, so releases no longer depend on one person's laptop. It builds Android App Bundles, runs instrumented tests on a device farm, and publishes internal tracks to Google Play with staged rollout controls.",
+      "en": "Every Android branch should produce an installable package and run automated UI tests across several device models before review.",
+      "zh": "每个安卓分支都应该产出可安装的包，并在评审前跑一遍多机型的界面自动化测试。"
+     },
+     {
+      "name": "react-native-build-cloud",
+      "description": "Turn every commit into installable mobile builds with managed signing, device testing, and store-ready artefacts, so releases no longer depend on one person's laptop. Pipelines start on a pull request, keep credentials in a managed vault, and post a direct install link back to the review. It understands a JavaScript codebase that shares logic across both stores, producing matching iOS and Android binaries from one dependency lockfile.",
+      "en": "Our app is written in JavaScript and ships to both stores; one merge should yield matching iPhone and Android builds.",
+      "zh": "我们的应用用 JavaScript 编写并同时上两个商店，一次合并应该生成互相匹配的 iPhone 和安卓安装包。"
+     },
+     {
+      "name": "flutter-build-cloud",
+      "description": "Turn every commit into installable mobile builds with managed signing, device testing, and store-ready artefacts, so releases no longer depend on one person's laptop. Pipelines start on a pull request, keep credentials in a managed vault, and post a direct install link back to the review. It is built for Dart projects, with golden-image checks, both platform targets, and flavour support for white-label apps.",
+      "en": "We use Dart for a white-label app and need both platforms built, plus visual checks when a merge changes the interface.",
+      "zh": "我们用 Dart 做白标应用，需要同时构建两个平台，并在合并改动界面时做视觉比对。"
+     }
+    ],
+    "no_signal_en": "We need a reliable build pipeline that turns every mobile app commit into an installable package without depending on one person's computer.",
+    "no_signal_zh": "我们需要一套稳定的构建流程，让移动应用每次提交都能生成可安装的包，不用依赖某台个人电脑。"
+   },
+   {
+    "family": "data-pipelines",
+    "skills": [
+     {
+      "name": "flow-forge",
+      "description": "Build dependable data movement without hand-written cron jobs, with schema checks, retries, lineage, and alerts when a feed goes quiet. It schedules warehouse loads overnight and handles dependency chains across dozens of SQL and Python steps.",
+      "en": "Every night we copy data from billing and support systems into our warehouse, and the current scripts fail without telling anyone.",
+      "zh": "每晚都要把计费和客服系统的数据搬进仓库，现在的脚本挂了也没人知道。"
+     },
+     {
+      "name": "flow-forge-2",
+      "description": "Build dependable data movement without hand-written cron jobs, with schema checks, retries, lineage, and alerts when a feed goes quiet. Events flow through Kafka and are processed with exactly-once semantics, low latency, and per-key ordering for downstream consumers.",
+      "en": "Fraud signals have to reach the scoring service in under a second, even when traffic spikes, and order must be preserved per customer.",
+      "zh": "反欺诈信号必须在一秒内送到评分服务，流量高峰时也不能乱序，而且同一客户的消息要保序。"
+     },
+     {
+      "name": "pipeline-pilot",
+      "description": "Build dependable data movement without hand-written cron jobs, with schema checks, retries, lineage, and alerts when a feed goes quiet. Teams can see row counts, failed records, and the exact version of each transform that produced a table. It reads change logs from busy operational databases and applies inserts, updates, and deletes continuously without heavy polling on the primary.",
+      "en": "We cannot keep querying the order database every few minutes; changes need to replicate as they happen without slowing checkout.",
+      "zh": "我们不能每隔几分钟就去查订单库，变更要实时复制出来，又不能拖慢结账。"
+     },
+     {
+      "name": "river-runner",
+      "description": "Build dependable data movement without hand-written cron jobs, with schema checks, retries, lineage, and alerts when a feed goes quiet. Teams can see row counts, failed records, and the exact version of each transform that produced a table. It watches partner buckets and SFTP drops, validates CSV and Parquet schemas, and quarantines bad rows before loading the clean set.",
+      "en": "Partners upload large delimited and columnar files at random hours, and we need them checked and loaded without manual babysitting.",
+      "zh": "合作方会在不定时上传大型分隔符文件和列式文件，需要自动校验并装载，不能靠人盯着。"
+     }
+    ],
+    "no_signal_en": "Data arrives from several systems and has to reach our warehouse reliably, with visible failures and safe reruns.",
+    "no_signal_zh": "数据来自多个系统，需要可靠地进入数据仓库，失败要看得见，而且能安全重跑。"
+   },
+   {
+    "family": "log-monitoring",
+    "skills": [
+     {
+      "name": "logs-aws",
+      "description": "Find the cause of production incidents faster with centralised search, live tails, saved queries, and alerts that route to the on-call tool you already use. It reads CloudWatch Logs and VPC flow logs, uses IAM roles for access, and can trigger Lambda-based remediations.",
+      "en": "Our services write to CloudWatch and we want faster searching and paging without giving everyone broad console access.",
+      "zh": "服务日志都写在 CloudWatch 里，我们希望搜索和告警更快，同时别让所有人都拿到过大的控制台权限。"
+     },
+     {
+      "name": "logs-azure",
+      "description": "Find the cause of production incidents faster with centralised search, live tails, saved queries, and alerts that route to the on-call tool you already use. It pulls from Azure Monitor and Application Insights, respects Entra ID groups, and links alerts to Azure Workbooks.",
+      "en": "Most of our estate reports into Microsoft's monitoring services, and the on-call team needs one place to search and alert.",
+      "zh": "大部分系统都把日志送到微软的监控服务，值班同学需要一个统一的地方搜索和告警。"
+     },
+     {
+      "name": "logs-gcp",
+      "description": "Find the cause of production incidents faster with centralised search, live tails, saved queries, and alerts that route to the on-call tool you already use. Logs are parsed into structured fields, retained under your policy, and searchable without learning a query language. It ingests Google Cloud Logging and audit trails, uses Cloud IAM for scoping, and sends alerts through your existing notification channels.",
+      "en": "We run on Google's platform and need to search audit and application logs while keeping access tied to our cloud identity groups.",
+      "zh": "我们在谷歌云上运行，既要查审计日志也要查应用日志，访问权限还得跟云上的身份组一致。"
+     },
+     {
+      "name": "logs-onprem",
+      "description": "Find the cause of production incidents faster with centralised search, live tails, saved queries, and alerts that route to the on-call tool you already use. Logs are parsed into structured fields, retained under your policy, and searchable without learning a query language. It runs inside your network against Elasticsearch or OpenSearch, works with local LDAP, and never sends log content to a vendor cloud.",
+      "en": "Security will not let logs leave our network, so we need search and alerting over our own Elasticsearch cluster with internal directory login.",
+      "zh": "安全部门不允许日志离开内网，所以我们要在自己的 Elasticsearch 集群上搜索和告警，并接入内部目录登录。"
+     }
+    ],
+    "no_signal_en": "When production breaks, we need to search logs across services quickly and send alerts to the right person.",
+    "no_signal_zh": "生产出故障时，我们要能快速搜索各个服务的日志，并把告警发给正确的人。"
+   },
+   {
+    "family": "doc-conversion",
+    "skills": [
+     {
+      "name": "paper-shift",
+      "description": "Convert business documents in bulk without retyping content, with layout checks, batch processing, and a review queue for anything the converter is unsure about. It turns PDFs into editable Word and Excel files, rebuilding tables and headings closely enough for normal business editing.",
+      "en": "A supplier sends long PDF catalogues every month, and our team needs to edit the tables and paragraphs in Office instead of retyping them.",
+      "zh": "供应商每月发来很长的 PDF 目录，团队需要直接在 Office 里修改表格和段落，不想重新录入。"
+     },
+     {
+      "name": "paper-shift-pro",
+      "description": "Convert business documents in bulk without retyping content, with layout checks, batch processing, and a review queue for anything the converter is unsure about. Scanned pages are passed through OCR in over forty languages, with deskewing, handwriting support, and hidden text layered under the original image.",
+      "en": "We have boxes of old scanned contracts and want them searchable and copyable while still looking like the original pages.",
+      "zh": "我们有一批多年前扫描的合同，希望既能搜索复制文字，又能保留原来的页面样子。"
+     },
+     {
+      "name": "format-bridge",
+      "description": "Convert business documents in bulk without retyping content, with layout checks, batch processing, and a review queue for anything the converter is unsure about. Files are processed in parallel, originals are kept for traceability, and completed batches can be delivered to a folder or an API. It produces PDF/A-2b and PDF/A-3 files with embedded fonts, validated colour profiles, and metadata suitable for long-term legal archives.",
+      "en": "Signed annual reports must be stored as fixed-layout files that meet our preservation standard and keep every font embedded.",
+      "zh": "签过字的年度报告要按长期保存规范存成固定版式文件，所有字体都必须嵌入。"
+     },
+     {
+      "name": "doc-switch",
+      "description": "Convert business documents in bulk without retyping content, with layout checks, batch processing, and a review queue for anything the converter is unsure about. Files are processed in parallel, originals are kept for traceability, and completed batches can be delivered to a folder or an API. It packages Word manuscripts as EPUB 3 and MOBI, preserving chapters, footnotes, images, and a clickable table of contents for e-readers.",
+      "en": "Authors submit Word manuscripts and we need clean e-reader editions with working chapters and images for several stores.",
+      "zh": "作者交来 Word 书稿，我们需要做出章节和图片都正常的电子书，供几个阅读商店上架。"
+     }
+    ],
+    "no_signal_en": "We receive documents in one format and need them turned into another without losing layout or retyping anything.",
+    "no_signal_zh": "我们收到的文件格式和需要的格式不一样，希望能自动转换，既保留版式又不用重新录入。"
+   },
+   {
+    "family": "email-delivery",
+    "skills": [
+     {
+      "name": "transactional-email-api",
+      "description": "Reach inboxes reliably with managed sending, bounce handling, suppression lists, and delivery analytics that show what happened to every message. It is built for application mail such as password resets and receipts, with idempotent API calls, fast retries, and per-message event logs.",
+      "en": "Our web app sends reset links and order receipts, and too many of them arrive late or get marked as junk.",
+      "zh": "网页应用要发重置链接和订单收据，但不少邮件要么迟到，要么被当成垃圾邮件。"
+     },
+     {
+      "name": "marketing-email-platform",
+      "description": "Reach inboxes reliably with managed sending, bounce handling, suppression lists, and delivery analytics that show what happened to every message. Campaigns support segments, A/B tests, scheduled sends, and unsubscribe rules for large lists, with revenue and engagement reporting.",
+      "en": "We send a weekly newsletter to a large list and need segments, scheduling, and clean unsubscribe handling.",
+      "zh": "我们每周给一个大名单发简报，需要分组、定时发送，还要妥善处理退订。"
+     },
+     {
+      "name": "eu-email-residency",
+      "description": "Reach inboxes reliably with managed sending, bounce handling, suppression lists, and delivery analytics that show what happened to every message. Templates, sending domains, and reputation signals live in one console, with webhooks for the events your product cares about. All message content, logs, and suppression data stay in EU data centres, with contractual terms designed for European privacy reviews.",
+      "en": "Customer correspondence must remain in European data centres, including the logs and opt-out records, to satisfy our legal review.",
+      "zh": "客户往来邮件必须留在欧洲的数据中心，连日志和退订记录也不能出境，才能通过法务审查。"
+     },
+     {
+      "name": "self-hosted-smtp",
+      "description": "Reach inboxes reliably with managed sending, bounce handling, suppression lists, and delivery analytics that show what happened to every message. Templates, sending domains, and reputation signals live in one console, with webhooks for the events your product cares about. It deploys on your own servers, connects to your existing SMTP relays, and provides reputation dashboards without handing message content to a third party.",
+      "en": "Policy forbids an outside sender, so we must run outbound mail ourselves and still see reputation and delivery problems.",
+      "zh": "公司政策不允许把发信交给外部服务商，我们只能自己跑发信服务器，但仍要看清送达和声誉问题。"
+     }
+    ],
+    "no_signal_en": "Our emails often go to spam or arrive late, and we need better delivery plus clear bounce reporting.",
+    "no_signal_zh": "我们的邮件经常进垃圾箱或者延迟很久，希望提升送达率，并且能清楚看到退信情况。"
+   }
+  ],
+  "holdout": [
+   {
+    "family": "tax-invoicing",
+    "skills": [
+     {
+      "name": "e-invoice-germany",
+      "description": "Generate compliant electronic invoices without leaving your accounting workflow. Trusted by finance teams across Europe, it checks totals, applies the correct tax treatment, and keeps an audit-ready record of every document you issue. This edition produces XRechnung and ZUGFeRD files for German buyers, including the Leitweg-ID and VAT rules local authorities expect.",
+      "en": "Our Berlin team bills city agencies, and their portal rejects anything that is not the official German XML. Can you turn our drafts into files that pass and keep the tax details correct?",
+      "zh": "我们柏林团队要给市政机构开账单，对方门户只收德国官方规定的电子发票格式，别的都会被退回。能把我们的草稿转成能通过审核、税额也正确的文件吗？"
+     },
+     {
+      "name": "e-invoice-italy",
+      "description": "Generate compliant electronic invoices without leaving your accounting workflow. Trusted by finance teams across Europe, it checks totals, applies the correct tax treatment, and keeps an audit-ready record of every document you issue. This edition speaks Italy's FatturaPA format and routes files through the Sistema di Interscambio, with codice fiscale and split-payment handling built in.",
+      "en": "An Italian client says they cannot book our invoice until it arrives through the national exchange system. We need the right XML and the fiscal code handled properly.",
+      "zh": "意大利客户说，账单必须走国家交换系统他们才能入账。我们需要生成正确的 XML，并把税号信息处理好。"
+     },
+     {
+      "name": "e-invoice-spain",
+      "description": "Generate compliant electronic invoices without leaving your accounting workflow. Trusted by finance teams across Europe, it checks totals, applies the correct tax treatment, and keeps an audit-ready record of every document you issue. This edition produces Facturae XML and supports SII reporting for Spanish companies, with IVA and recargo de equivalencia handled correctly.",
+      "en": "We are registering with Spanish authorities and must send invoices in the format their system expects, with the right VAT and equivalence surcharge.",
+      "zh": "我们正在西班牙办理登记，得按当地系统要求的格式开发票，增值税和等价附加税都不能算错。"
+     },
+     {
+      "name": "e-invoice-france",
+      "description": "Generate compliant electronic invoices without leaving your accounting workflow. Trusted by finance teams across Europe, it checks totals, applies the correct tax treatment, and keeps an audit-ready record of every document you issue. This edition emits Factur-X hybrid PDFs and submits public-sector invoices through Chorus Pro, following French e-invoicing reform timelines.",
+      "en": "French public buyers now insist on a hybrid invoice file, and some invoices must also go through Chorus Pro. Can you produce both without manual rework?",
+      "zh": "法国公共部门买家现在要求混合格式的发票文件，有些还得通过 Chorus Pro 提交。能一次生成、不用手工返工吗？"
+     },
+     {
+      "name": "e-invoice-mexico",
+      "description": "Generate compliant electronic invoices without leaving your accounting workflow. Trusted by finance teams across Europe, it checks totals, applies the correct tax treatment, and keeps an audit-ready record of every document you issue. This edition stamps CFDI 4.0 invoices with a PAC, validates RFCs, and handles IVA and IEPS for Mexican taxpayers.",
+      "en": "Our Mexico distributor needs stamped invoices with valid RFCs before they can pay us, and the tax breakdown has to satisfy SAT.",
+      "zh": "我们的墨西哥经销商要求发票先盖章、税号有效才能付款，税额明细还得符合税务局要求。"
+     }
+    ],
+    "no_signal_en": "We are opening a sales office in a new country and need our invoices to be accepted by the local tax authority. Can you help us issue and file them correctly?",
+    "no_signal_zh": "我们要在一个新国家开销售办事处，开出的发票必须能被当地税务机关接受。能帮我们正确开具并提交吗？"
+   },
+   {
+    "family": "container-orchestration",
+    "skills": [
+     {
+      "name": "orbit-deploy",
+      "description": "Run containerized workloads reliably without becoming a platform engineer. Define a service once, and the skill handles scheduling, health checks, rolling updates, and rollback when a release goes wrong. Logs and metrics land in one place, and secrets stay out of your manifests. Under the hood it speaks the Kubernetes API, so existing manifests, Helm charts, and custom controllers keep working.",
+      "en": "Our platform team already maintains Helm charts and a lot of YAML, and we do not want to throw that away. We need deployments automated while those manifests keep working.",
+      "zh": "平台团队已经维护了一堆 Helm chart 和 YAML，我们不想推倒重来。希望在保留这些配置的前提下把发布自动化。"
+     },
+     {
+      "name": "fleet-launcher",
+      "description": "Run containerized workloads reliably without becoming a platform engineer. Define a service once, and the skill handles scheduling, health checks, rolling updates, and rollback when a release goes wrong. Logs and metrics land in one place, and secrets stay out of your manifests. The difference is the scheduler: this one runs jobs through HashiCorp Nomad and fits teams already operating Consul and Vault.",
+      "en": "We already run Consul and Vault for service discovery and secrets, and we would rather not add a heavy control plane just to schedule containers.",
+      "zh": "我们已经在用 Consul 和 Vault 做服务发现和密钥管理，不想为了调度容器再引入一套笨重的控制平面。"
+     },
+     {
+      "name": "cluster-companion",
+      "description": "Run containerized workloads reliably without becoming a platform engineer. Define a service once, and the skill handles scheduling, health checks, rolling updates, and rollback when a release goes wrong. Logs and metrics land in one place, and secrets stay out of your manifests. This one deploys to Amazon ECS and Fargate, bills through your existing AWS account, and uses IAM roles for task permissions.",
+      "en": "Everything sits in our AWS account and permissions come from IAM roles. We want container deployments to stay inside that setup.",
+      "zh": "所有东西都在我们的 AWS 账号里，权限也由 IAM 角色管理。希望容器发布继续留在这套体系内。"
+     },
+     {
+      "name": "scale-ship",
+      "description": "Run containerized workloads reliably without becoming a platform engineer. Define a service once, and the skill handles scheduling, health checks, rolling updates, and rollback when a release goes wrong. Logs and metrics land in one place, and secrets stay out of your manifests. This one targets Docker Swarm, so small teams can keep using compose files and update services with a single command.",
+      "en": "We are five people running a few Docker hosts with compose files. We just want one command to roll out a new version and go back if it fails.",
+      "zh": "我们只有五个人，几台 Docker 主机全靠 compose 文件。只想要一条命令发布新版本，失败时能退回去。"
+     }
+    ],
+    "no_signal_en": "We need a simpler way to ship our containerized services and roll them back when a release goes wrong.",
+    "no_signal_zh": "我们需要更省心的方式来发布容器化服务，出问题时还能回滚。"
+   },
+   {
+    "family": "search-engines",
+    "skills": [
+     {
+      "name": "instant-find",
+      "description": "Add fast, relevant search to your product without building an indexing pipeline from scratch. Drop in the component, point it at your content, and let relevance tuning, synonyms, and typo handling work out of the box. Dashboards show what people search for and what they miss. Under the hood it manages an Elasticsearch cluster, so teams already using Kibana and query DSL keep their dashboards.",
+      "en": "Our ops team has years of Kibana dashboards and saved query DSL. We need in-app search that reuses those instead of starting from zero.",
+      "zh": "运维团队积累了很多 Kibana 看板和查询语句，我们希望应用内搜索能直接复用，而不是从头再来。"
+     },
+     {
+      "name": "instant-find-plus",
+      "description": "Add fast, relevant search to your product without building an indexing pipeline from scratch. Drop in the component, point it at your content, and let relevance tuning, synonyms, and typo handling work out of the box. Dashboards show what people search for and what they miss. This one runs against OpenSearch and keeps the Apache 2.0 licensing story intact, with k-NN and dashboard plugins.",
+      "en": "Legal wants us to avoid licences that might become restrictive, but we still need the same query features and a cluster we host ourselves.",
+      "zh": "法务希望避开以后可能变严的许可证，但我们仍需要同样的查询能力和自建集群。"
+     },
+     {
+      "name": "search-spark",
+      "description": "Add fast, relevant search to your product without building an indexing pipeline from scratch. Drop in the component, point it at your content, and let relevance tuning, synonyms, and typo handling work out of the box. Dashboards show what people search for and what they miss. It uses Meilisearch for typo-tolerant, instant results and a single binary you can host yourself.",
+      "en": "We want a small search box that forgives spelling mistakes and shows results while people type, without operating a big cluster.",
+      "zh": "我们想要一个小巧的搜索框，能容忍拼写错误，边输入边出结果，还不用维护大型集群。"
+     },
+     {
+      "name": "lookup-engine",
+      "description": "Add fast, relevant search to your product without building an indexing pipeline from scratch. Drop in the component, point it at your content, and let relevance tuning, synonyms, and typo handling work out of the box. Dashboards show what people search for and what they miss. It is built on Typesense and favours low-latency filtering and faceting on modest hardware.",
+      "en": "Our catalogue has many filters and facets, and responses must stay fast on just two modest servers.",
+      "zh": "我们的商品目录有很多筛选和分面条件，而且只有两台普通服务器，响应速度也必须够快。"
+     },
+     {
+      "name": "findly",
+      "description": "Add fast, relevant search to your product without building an indexing pipeline from scratch. Drop in the component, point it at your content, and let relevance tuning, synonyms, and typo handling work out of the box. Dashboards show what people search for and what they miss. It is a hosted Algolia integration, so you trade self-hosting for global latency and built-in analytics.",
+      "en": "We do not want to run any servers. Search must stay quick for users on several continents and show us what they search for.",
+      "zh": "我们不想自己维护服务器。用户分布在几个大洲，搜索要快，还得能看到他们都搜了什么。"
+     }
+    ],
+    "no_signal_en": "People on our site cannot find what they need, and we want a search box that returns useful results quickly.",
+    "no_signal_zh": "我们网站的用户老是找不到想要的内容，希望能有个搜索框，快速给出有用的结果。"
+   },
+   {
+    "family": "chat-platform-bots",
+    "skills": [
+     {
+      "name": "bot-forge",
+      "description": "Ship a helpful chatbot to your team chat in an afternoon. Connect a knowledge base or a few API calls, choose a tone, and the bot answers routine questions, routes the rest to a human, and keeps a transcript. Permissions and rate limits are handled for you. This one connects through Slack's Events API and Block Kit, respecting threads, slash commands, and workspace permissions.",
+      "en": "Our engineering team lives in channels. We want a bot that answers on-call questions inside a thread, offers buttons, and does not need broad workspace access.",
+      "zh": "工程团队整天泡在频道里。想要一个机器人，在讨论串里回答值班问题、给出按钮选项，而且不需要很宽的 workspace 权限。"
+     },
+     {
+      "name": "bot-forge-lite",
+      "description": "Ship a helpful chatbot to your team chat in an afternoon. Connect a knowledge base or a few API calls, choose a tone, and the bot answers routine questions, routes the rest to a human, and keeps a transcript. Permissions and rate limits are handled for you. This one runs as a Discord bot with slash commands, buttons, and moderation hooks for community servers.",
+      "en": "We run a gaming community server and need a bot that greets newcomers, assigns roles, and answers frequent questions.",
+      "zh": "我们运营一个游戏社区服务器，想要机器人欢迎新人、分配角色，还能回答常见问题。"
+     },
+     {
+      "name": "chat-sidekick",
+      "description": "Ship a helpful chatbot to your team chat in an afternoon. Connect a knowledge base or a few API calls, choose a tone, and the bot answers routine questions, routes the rest to a human, and keeps a transcript. Permissions and rate limits are handled for you. This one registers as a Microsoft Teams app with adaptive cards and single sign-on through Entra ID, suitable for corporate tenants.",
+      "en": "Staff spend all day in the company chat app. We want an assistant there that pulls up policy answers and signs people in with their work accounts.",
+      "zh": "员工整天都在公司的聊天软件里。希望有个助手能查政策问答，并用工作账号直接登录。"
+     },
+     {
+      "name": "reply-bot",
+      "description": "Ship a helpful chatbot to your team chat in an afternoon. Connect a knowledge base or a few API calls, choose a tone, and the bot answers routine questions, routes the rest to a human, and keeps a transcript. Permissions and rate limits are handled for you. This one uses the Telegram Bot API, inline keyboards, and webhooks, with support for groups and channels.",
+      "en": "Volunteers coordinate by phone in a messaging app. A bot should answer common questions and let them choose options with buttons.",
+      "zh": "志愿者们用手机上的聊天软件协调工作。希望机器人能回答常见问题，还能用按钮让他们选择。"
+     }
+    ],
+    "no_signal_en": "We want a bot in our team chat that answers common questions and takes simple requests.",
+    "no_signal_zh": "我们想在团队聊天里加个机器人，回答常见问题、处理简单请求。"
+   },
+   {
+    "family": "video-processing",
+    "skills": [
+     {
+      "name": "transcode-ffmpeg-local",
+      "description": "Turn raw video into clean, playable renditions at scale. This skill wraps a local FFmpeg install, so footage never leaves your machine and you can target any codec, container, or filter graph the binary supports. Batch jobs, watch folders, and loudness normalisation are included. Good for archives and sensitive material.",
+      "en": "We have hours of interview footage that cannot leave the building. It needs to be converted to consistent formats and loudness on our own workstation.",
+      "zh": "我们有几小时的采访素材不能带出大楼，需要在本地工作站上转成统一格式，并把音量调一致。"
+     },
+     {
+      "name": "transcode-aws-mediaconvert",
+      "description": "Turn raw video into clean, playable renditions at scale. This skill submits jobs to AWS Elemental MediaConvert, using your own bucket and IAM role, with broadcast-grade profiles and automatic quality checks. It fits teams already standardised on AWS.",
+      "en": "Our media archive sits in S3 and permissions are managed there. We want batch conversions submitted without moving files or adding another vendor.",
+      "zh": "媒体档案都在 S3 上，权限也在那里管理。希望直接提交批量转码，不用搬文件，也不想再接别的供应商。"
+     },
+     {
+      "name": "transcode-mux",
+      "description": "Turn raw video into clean, playable renditions at scale. This skill uploads assets to Mux and lets their encoding ladder and per-title optimisation do the work, returning playback IDs and thumbnails. Good when you would rather not manage renditions.",
+      "en": "We want to stop tuning bitrate ladders. Upload a master and get back an ID we can play in the web app, plus thumbnails.",
+      "zh": "我们不想再手动调码率梯度了。上传母版后给个能在网页里播放的 ID，顺便生成缩略图。"
+     },
+     {
+      "name": "transcode-cloudflare-stream",
+      "description": "Turn raw video into clean, playable renditions at scale. This skill sends files to Cloudflare Stream, which handles encoding and global delivery, and returns embeddable players with signed tokens. A fit for web teams already on Cloudflare.",
+      "en": "Our site runs behind Cloudflare, and we want video that plays well worldwide with private links, without operating encoders.",
+      "zh": "网站已经跑在 Cloudflare 后面，想要全球播放流畅、支持私密链接的视频，而且不用自己运维转码器。"
+     }
+    ],
+    "no_signal_en": "We have a pile of video files that need to be converted into web-friendly versions.",
+    "no_signal_zh": "我们有一堆视频文件，需要转成适合网页播放的版本。"
+   },
+   {
+    "family": "ml-training",
+    "skills": [
+     {
+      "name": "train-pytorch-ddp",
+      "description": "Scale model training across many GPUs without rewriting your research code. This skill wraps PyTorch DistributedDataParallel, launching one process per GPU and syncing gradients with NCCL. It is the least invasive option for standard PyTorch loops already running on a single card, with checkpointing and elastic restarts included.",
+      "en": "We have a working single-GPU training script and just got eight cards in one machine. We need it to use all of them without a big rewrite.",
+      "zh": "我们已经有一个能跑的单卡训练脚本，最近一台机器装了八张卡，想尽量少改代码就把它们都用起来。"
+     },
+     {
+      "name": "train-deepspeed",
+      "description": "Scale model training across many GPUs without rewriting your research code. This skill integrates DeepSpeed ZeRO stages and CPU offload, letting very large models fit by sharding optimizer state and parameters across devices. Mixed precision and gradient accumulation come configured.",
+      "en": "Our model no longer fits on one GPU even with tiny batches. We need to shard optimizer state and offload some of it to CPU memory.",
+      "zh": "我们的模型就算把 batch 调得很小也放不进单卡了，需要把优化器状态切开，并挪一部分到内存里。"
+     },
+     {
+      "name": "train-horovod",
+      "description": "Scale model training across many GPUs without rewriting your research code. This skill uses Horovod's ring allreduce and works across TensorFlow, PyTorch, and MXNet, which helps labs with mixed framework estates.",
+      "en": "Our lab has some projects in TensorFlow and some in PyTorch, and we want one way to run them across the cluster.",
+      "zh": "我们实验室有些项目用 TensorFlow，有些用 PyTorch，希望用同一种方式把它们跑在集群上。"
+     },
+     {
+      "name": "train-ray",
+      "description": "Scale model training across many GPUs without rewriting your research code. This skill orchestrates training through Ray Train, so you can sweep hyperparameters and scale from a laptop to a cluster with the same Python code.",
+      "en": "We spend weeks tuning hyperparameters and want to fan out hundreds of trials on a cluster from the same script.",
+      "zh": "我们花好几周调超参数，想用同一份脚本在集群上同时跑几百组试验。"
+     }
+    ],
+    "no_signal_en": "Training takes too long on one GPU, and we want to use the whole machine.",
+    "no_signal_zh": "模型训练在单卡上太慢了，我们想用上整台机器的算力。"
+   },
+   {
+    "family": "security-scanning",
+    "skills": [
+     {
+      "name": "guard-scan",
+      "description": "Find security problems before attackers do, with reports your team can act on. It scans automatically on every change, ranks findings by exploitability, and writes tickets with enough context to fix them. History and suppressions are kept so audits are simple. This one reads lockfiles and SBOMs, matches dependencies against advisory databases, and proposes safe upgrade paths.",
+      "en": "A customer questionnaire asks whether we track vulnerable libraries. We need a report from our dependency files and a list of upgrades.",
+      "zh": "客户问卷问我们是否跟踪有漏洞的依赖库。我们需要根据依赖文件出一份报告，并列出可升级的版本。"
+     },
+     {
+      "name": "guard-scan-pro",
+      "description": "Find security problems before attackers do, with reports your team can act on. It scans automatically on every change, ranks findings by exploitability, and writes tickets with enough context to fix them. History and suppressions are kept so audits are simple. This one parses source code across languages and flags injection, deserialization, and other risky patterns with line-level fixes.",
+      "en": "We want reviewers to catch unsafe code patterns before merge, with the exact line and a suggested fix.",
+      "zh": "希望代码合并前就能发现不安全的写法，最好直接指出行号并给出修改建议。"
+     },
+     {
+      "name": "safecheck",
+      "description": "Find security problems before attackers do, with reports your team can act on. It scans automatically on every change, ranks findings by exploitability, and writes tickets with enough context to fix them. History and suppressions are kept so audits are simple. This one probes a running staging URL, crawling forms and APIs for injection, broken access control, and misconfiguration without source access.",
+      "en": "Before launch we need someone to poke at the staging site like an attacker and tell us what breaks.",
+      "zh": "上线前需要有人像攻击者那样去试探预发布站点，告诉我们哪里能被攻破。"
+     },
+     {
+      "name": "vuln-watch",
+      "description": "Find security problems before attackers do, with reports your team can act on. It scans automatically on every change, ranks findings by exploitability, and writes tickets with enough context to fix them. History and suppressions are kept so audits are simple. This one scans container images layer by layer, mapping OS packages and language libraries to CVEs and failing builds on critical findings.",
+      "en": "Our pipeline builds images, and we want them checked for known vulnerabilities before they reach production.",
+      "zh": "流水线会构建镜像，希望在进入生产环境前就检查出已知漏洞。"
+     },
+     {
+      "name": "scan-sentry",
+      "description": "Find security problems before attackers do, with reports your team can act on. It scans automatically on every change, ranks findings by exploitability, and writes tickets with enough context to fix them. History and suppressions are kept so audits are simple. This one looks for API keys, tokens, and private keys in commits and configuration, including history, and tells you when to rotate.",
+      "en": "We fear someone committed a cloud key by accident. We need to search repositories, including old commits, and know what to rotate.",
+      "zh": "我们担心有人误把云密钥提交进仓库。需要连历史提交一起检查，并告诉我们该换哪些密钥。"
+     }
+    ],
+    "no_signal_en": "We need to check our product for security weaknesses and get a clear report we can fix from.",
+    "no_signal_zh": "我们要检查产品的安全弱点，拿到一份能照着修的清楚报告。"
+   },
+   {
+    "family": "spreadsheet-bi-exports",
+    "skills": [
+     {
+      "name": "export-xlsx",
+      "description": "Turn live business data into a polished file your stakeholders can open. This skill writes native Excel workbooks with multiple sheets, formulas, frozen headers, and charts, preserving number formats and print areas. Tenants, currencies, and locale settings are respected, and large exports stream instead of exhausting memory.",
+      "en": "The finance director wants a workbook with tabs per region, working formulas, and a chart she can tweak herself.",
+      "zh": "财务总监想要一个按地区分页签的工作簿，公式要能算，还要带一张她能自己调整的图表。"
+     },
+     {
+      "name": "export-csv",
+      "description": "Turn live business data into a polished file your stakeholders can open. This skill streams a plain CSV with configurable delimiters, encodings, and quoting, for import into almost any tool. Large exports stream instead of exhausting memory.",
+      "en": "Our warehouse loader only accepts delimited text with a specific encoding, so we need a nightly dump.",
+      "zh": "我们的数据仓库加载器只认指定编码的定界文本，所以需要每晚导出一份。"
+     },
+     {
+      "name": "export-google-sheets",
+      "description": "Turn live business data into a polished file your stakeholders can open. This skill creates a Google Sheet in a shared drive, applies formatting, and keeps it refreshed through the Sheets API, with comment access for collaborators. Large exports stream instead of exhausting memory.",
+      "en": "The whole team needs to comment on the numbers in a shared online sheet that updates itself.",
+      "zh": "整个团队要在一个共享的在线表格里对数字发表评论，而且表格得自己更新。"
+     },
+     {
+      "name": "export-pdf-report",
+      "description": "Turn live business data into a polished file your stakeholders can open. This skill lays the data out as a paginated PDF report with a cover, charts, and page numbers, ready to print or email without further editing. Tenants, currencies, and locale settings are respected.",
+      "en": "The board pack goes out by email and must look the same on every printer, with page numbers.",
+      "zh": "董事会材料要邮件发出，在每台打印机上看起来都得一样，还得有页码。"
+     },
+     {
+      "name": "export-powerbi",
+      "description": "Turn live business data into a polished file your stakeholders can open. This skill publishes a dataset and report to a Power BI workspace, with scheduled refresh and row-level security for different audiences. Tenants, currencies, and locale settings are respected.",
+      "en": "Executives already look at dashboards in our BI tool; we want this data refreshed there with access rules.",
+      "zh": "高管们已经在 BI 工具里看仪表盘了，我们希望这批数据也刷新到那里，并按权限区分可见范围。"
+     }
+    ],
+    "no_signal_en": "We need to get this month's numbers out of our system and into something the business can read.",
+    "no_signal_zh": "我们得把这个月的数字从系统里导出来，做成业务同事看得懂的东西。"
+   },
+   {
+    "family": "support-ticketing",
+    "skills": [
+     {
+      "name": "ticket-desk",
+      "description": "Give your support team one place to see, sort, and answer every customer message. It pulls conversations from email, chat, and social channels, applies routing rules, and tracks response times against service targets. Managers get workload views, and agents get a clean queue. This one syncs with Zendesk, preserving views, macros, SLA policies, and side conversations.",
+      "en": "Our agents have years of saved replies and priority rules in their current helpdesk. We need the new assistant to respect them.",
+      "zh": "客服在现在用的工单系统里积累了很多快捷回复和优先级规则，新助手得沿用这些，不能另起一套。"
+     },
+     {
+      "name": "ticket-desk-cloud",
+      "description": "Give your support team one place to see, sort, and answer every customer message. It pulls conversations from email, chat, and social channels, applies routing rules, and tracks response times against service targets. Managers get workload views, and agents get a clean queue. This one connects to Freshdesk and maps ticket fields, groups, and automation rules.",
+      "en": "We are a small team on a budget and already use a simple helpdesk. We want automation without a big migration.",
+      "zh": "我们是个预算有限的小团队，已经在用一个简单的客服系统，希望加点自动化，但不想大动干戈迁移。"
+     },
+     {
+      "name": "help-queue",
+      "description": "Give your support team one place to see, sort, and answer every customer message. It pulls conversations from email, chat, and social channels, applies routing rules, and tracks response times against service targets. Managers get workload views, and agents get a clean queue. This one works inside Jira Service Management, linking incidents to engineering issues.",
+      "en": "Support requests often turn into engineering bugs, so we need them tracked next to the sprint work with approvals.",
+      "zh": "支持请求经常变成工程缺陷，所以要和迭代任务放在一起跟踪，还得有审批流程。"
+     },
+     {
+      "name": "support-hub",
+      "description": "Give your support team one place to see, sort, and answer every customer message. It pulls conversations from email, chat, and social channels, applies routing rules, and tracks response times against service targets. Managers get workload views, and agents get a clean queue. This one plugs into Intercom's inbox, where chat conversations, bots, and profiles live.",
+      "en": "Most of our customer contact happens in live chat on the website, and we want those chats to become trackable requests.",
+      "zh": "我们和客户大多是在网站实时聊天里沟通，希望这些对话能变成可跟踪的请求。"
+     }
+    ],
+    "no_signal_en": "Customer emails are piling up and we need a shared queue with assignments and status.",
+    "no_signal_zh": "客户邮件越积越多，我们需要一个能分配、能看状态的共享队列。"
+   },
+   {
+    "family": "web-testing",
+    "skills": [
+     {
+      "name": "test-playwright",
+      "description": "Catch broken user journeys before your customers do. This skill drives Chromium, Firefox, and WebKit through Playwright, with auto-waiting, trace viewer, and parallel workers. Write a scenario in TypeScript or Python, run it locally or in CI, and get screenshots and video when something fails.",
+      "en": "We need one test suite that covers the main flows in three different browsers, with a recording we can inspect when it fails.",
+      "zh": "我们需要一套测试覆盖三个不同浏览器里的主要流程，失败时还能看录屏定位问题。"
+     },
+     {
+      "name": "test-cypress",
+      "description": "Catch broken user journeys before your customers do. This skill runs Cypress tests in a real browser with time travel, network stubbing, and a friendly interactive runner. It suits front-end teams that want fast feedback while writing tests.",
+      "en": "Our front-end developers want to write tests interactively and fake API responses, so they can see each step as it runs.",
+      "zh": "前端开发想边写边跑测试，还能模拟接口返回，运行时能一步一步看到页面变化。"
+     },
+     {
+      "name": "test-selenium",
+      "description": "Catch broken user journeys before your customers do. This skill uses Selenium WebDriver and Grid, so suites can target many browser and operating system combinations, including older versions that enterprises still require.",
+      "en": "Some of our enterprise customers still use old browser versions, and we must verify the checkout on those exact combinations.",
+      "zh": "有些企业客户还在用很旧的浏览器版本，我们必须在这些具体组合上验证结账流程。"
+     },
+     {
+      "name": "test-puppeteer",
+      "description": "Catch broken user journeys before your customers do. This skill controls headless Chrome through Puppeteer, ideal for fast checks, PDF generation, and flows that need low-level browser control.",
+      "en": "We need fast headless checks of our pages and also want to render invoices to PDF from the same tooling.",
+      "zh": "我们需要快速无头检查页面，还想用同一套工具把发票渲染成 PDF。"
+     }
+    ],
+    "no_signal_en": "We keep shipping regressions in the checkout flow and need automated checks that run before release.",
+    "no_signal_zh": "结账流程老是带着问题上线，我们需要在发布前自动跑一遍的检查。"
+   },
+   {
+    "family": "translation-localization",
+    "skills": [
+     {
+      "name": "locale-sync",
+      "description": "Keep every language version of your product in step with the source text. Connect your repository once, and new strings appear for translators while approved translations flow back as a pull request. Glossaries, screenshots, and review steps keep quality high. This one syncs with Crowdin, including translation memory and community proofreading workflows.",
+      "en": "We rely on volunteers to translate our docs and want their suggestions reviewed before they go live.",
+      "zh": "我们靠志愿者翻译文档，希望他们的建议先经过审核再上线。"
+     },
+     {
+      "name": "locale-sync-pro",
+      "description": "Keep every language version of your product in step with the source text. Connect your repository once, and new strings appear for translators while approved translations flow back as a pull request. Glossaries, screenshots, and review steps keep quality high. This one connects to Lokalise, where translators work alongside screenshots and automated QA checks.",
+      "en": "Translators keep asking for screenshots so they know where each string appears; we need that context plus checks for broken placeholders.",
+      "zh": "译者总说要看到截图才知道每句话出现在哪儿；我们需要这种上下文，还要检查占位符有没有被弄坏。"
+     },
+     {
+      "name": "word-bridge",
+      "description": "Keep every language version of your product in step with the source text. Connect your repository once, and new strings appear for translators while approved translations flow back as a pull request. Glossaries, screenshots, and review steps keep quality high. This one uses Phrase Strings, with branching, review steps, and machine translation post-editing.",
+      "en": "Our releases branch often and translations need to follow each branch with a review step before merge.",
+      "zh": "我们的发布分支很多，翻译得跟着每个分支走，合并前还要有人审核。"
+     },
+     {
+      "name": "global-strings",
+      "description": "Keep every language version of your product in step with the source text. Connect your repository once, and new strings appear for translators while approved translations flow back as a pull request. Glossaries, screenshots, and review steps keep quality high. This one is built around Weblate, the open-source self-hosted option for full control over translation data.",
+      "en": "Legal requires translation data to stay on our own servers, and we want an open-source workflow.",
+      "zh": "法务要求翻译数据留在我们自己的服务器上，而且希望用开源的工作流。"
+     }
+    ],
+    "no_signal_en": "Our app is going into new markets and we need the text translated and kept up to date.",
+    "no_signal_zh": "我们的应用要进入新市场，需要把界面文字翻译好并持续更新。"
+   },
+   {
+    "family": "ci-systems",
+    "skills": [
+     {
+      "name": "ci-github-actions",
+      "description": "Run builds, tests, and deployments on every change without babysitting servers. This skill generates workflows for GitHub Actions, using marketplace actions, matrix jobs, and OIDC federation to your cloud, with caching and artefacts configured. Pipelines stay in the repository and are easy for reviewers to read.",
+      "en": "Our code and reviews all live on GitHub, and we want pipelines defined next to it without running our own build machines.",
+      "zh": "代码和评审都在 GitHub 上，希望流水线也放在旁边，不想自己维护构建机器。"
+     },
+     {
+      "name": "ci-gitlab",
+      "description": "Run builds, tests, and deployments on every change without babysitting servers. This skill writes GitLab CI pipelines with stages, environments, merge-request rules, and protected variables inside your existing GitLab instance.",
+      "en": "We self-host GitLab and need merge requests to trigger staging deploys only after approval, using our protected secrets.",
+      "zh": "我们自建了 GitLab，希望合并请求在审批后才触发预发布部署，并且用受保护的密钥。"
+     },
+     {
+      "name": "ci-jenkins",
+      "description": "Run builds, tests, and deployments on every change without babysitting servers. This skill manages Jenkinsfiles and shared libraries on your own controllers and agents, fitting regulated environments that cannot use hosted runners.",
+      "en": "Regulation forbids hosted build services, so we must keep using our own build servers and shared pipeline libraries.",
+      "zh": "监管不允许用托管构建服务，所以只能继续用自建构建服务器和共享流水线库。"
+     },
+     {
+      "name": "ci-circleci",
+      "description": "Run builds, tests, and deployments on every change without babysitting servers. This skill configures CircleCI workflows with orbs, caching, and Docker layer reuse to keep feedback fast on hosted infrastructure.",
+      "en": "Our test suite takes too long and we want reusable pipeline packages plus aggressive caching on a hosted service.",
+      "zh": "测试跑得太慢，想要可复用的流水线组件和强缓存，并且用托管服务。"
+     },
+     {
+      "name": "ci-buildkite",
+      "description": "Run builds, tests, and deployments on every change without babysitting servers. This skill defines Buildkite pipelines that run on your own agents, with dynamic steps, queues, and fine-grained concurrency control.",
+      "en": "We need the control of our own build agents but a hosted coordinator, with dynamic steps and separate queues for expensive jobs.",
+      "zh": "我们想用自己的构建代理，但调度放在托管服务上，还要支持动态步骤和给昂贵任务单独排队。"
+     }
+    ],
+    "no_signal_en": "Every merge seems to break something, and we want checks to run automatically and block bad changes.",
+    "no_signal_zh": "每次合并都可能弄坏东西，我们希望自动跑检查，把有问题的改动拦住。"
+   },
+   {
+    "family": "backup-restore",
+    "skills": [
+     {
+      "name": "backup-postgres",
+      "description": "Protect your data with backups you can actually restore when it matters. Scheduled jobs, encryption, retention rules, and restore drills are included, with alerts when a run fails or a target fills up. This skill runs pg_dump and continuous WAL archiving for PostgreSQL, with point-in-time recovery and verification restores.",
+      "en": "We need to recover our PostgreSQL cluster to a moment just before a bad migration, and we want proof the backup works.",
+      "zh": "我们需要把 PostgreSQL 集群恢复到一次错误迁移之前的具体时刻，还得证明备份真的可用。"
+     },
+     {
+      "name": "backup-mysql",
+      "description": "Protect your data with backups you can actually restore when it matters. Scheduled jobs, encryption, retention rules, and restore drills are included, with alerts when a run fails or a target fills up. This skill uses mysqldump and binary logs for MySQL and MariaDB, with consistent snapshots and point-in-time recovery.",
+      "en": "Our MariaDB server must be backed up without locking tables for long, and we need to roll back to a precise time.",
+      "zh": "我们的 MariaDB 备份不能长时间锁表，而且需要能回滚到某个精确时间点。"
+     },
+     {
+      "name": "backup-mongodb",
+      "description": "Protect your data with backups you can actually restore when it matters. Scheduled jobs, encryption, retention rules, and restore drills are included, with alerts when a run fails or a target fills up. This skill uses mongodump and oplog tailing for MongoDB, preserving indexes and replica-set consistency.",
+      "en": "We run a MongoDB replica set and need consistent dumps that keep indexes and let us restore a single collection.",
+      "zh": "我们跑的是 MongoDB 副本集，需要一致的导出文件，保留索引，还能只恢复某个集合。"
+     },
+     {
+      "name": "backup-redis",
+      "description": "Protect your data with backups you can actually restore when it matters. Scheduled jobs, encryption, retention rules, and restore drills are included, with alerts when a run fails or a target fills up. This skill snapshots Redis with RDB and AOF, uploads to remote storage, and tests restores of keyspace and TTLs.",
+      "en": "Our Redis cache holds session data that must survive a node loss, including expiry times, and restores should be tested.",
+      "zh": "我们的 Redis 存着会话数据，节点挂掉后必须能恢复，过期时间也要保留，而且恢复过程要经过测试。"
+     }
+    ],
+    "no_signal_en": "We need scheduled backups of our production database and a way to prove they restore.",
+    "no_signal_zh": "我们需要给生产数据库做定时备份，还得能证明备份真的能恢复。"
+   },
+   {
+    "family": "identity-login",
+    "skills": [
+     {
+      "name": "login-kit",
+      "description": "Add secure sign-in to your application without building an identity system from scratch. The skill wires up login, logout, password reset, multi-factor authentication, and session handling, then gives you a small surface to customise. Audit logs and brute-force protection are on by default. This one integrates with Auth0 tenants, importing rules, actions, and social connections while keeping existing user IDs.",
+      "en": "We already have users and social logins configured with a vendor, and we do not want them to lose their accounts when we change the app.",
+      "zh": "我们的用户和社交登录已经在某家服务商那里配好了，换应用时不想让他们丢掉原来的账号。"
+     },
+     {
+      "name": "login-kit-cloud",
+      "description": "Add secure sign-in to your application without building an identity system from scratch. The skill wires up login, logout, password reset, multi-factor authentication, and session handling, then gives you a small surface to customise. Audit logs and brute-force protection are on by default. This one targets Okta organisations, with SAML and OIDC apps, group-based access, and lifecycle hooks.",
+      "en": "Our enterprise customers demand SAML, group-based access, and automatic deprovisioning when someone leaves.",
+      "zh": "企业客户要求支持 SAML、按组授权，并且员工离职时能自动停用账号。"
+     },
+     {
+      "name": "auth-gate",
+      "description": "Add secure sign-in to your application without building an identity system from scratch. The skill wires up login, logout, password reset, multi-factor authentication, and session handling, then gives you a small surface to customise. Audit logs and brute-force protection are on by default. This one configures a self-hosted Keycloak realm, with themes, federated providers, and no per-user fees.",
+      "en": "We must keep all identity data on-premises and avoid per-user pricing, even if that means running the service ourselves.",
+      "zh": "所有身份数据必须留在本地，也不能按用户数付费，哪怕这意味着要自己运维服务。"
+     },
+     {
+      "name": "signin-suite",
+      "description": "Add secure sign-in to your application without building an identity system from scratch. The skill wires up login, logout, password reset, multi-factor authentication, and session handling, then gives you a small surface to customise. Audit logs and brute-force protection are on by default. This one uses Amazon Cognito user pools and identity pools, staying inside your AWS account.",
+      "en": "Everything runs in AWS, and we want sign-in tied to the same account and roles we already manage there.",
+      "zh": "所有服务都在 AWS 上，希望登录也接到同一个账号和现有的角色体系里。"
+     }
+    ],
+    "no_signal_en": "We need people to sign in securely, with password resets and maybe single sign-on.",
+    "no_signal_zh": "我们需要用户安全登录，支持找回密码，最好还能单点登录。"
+   },
+   {
+    "family": "maps-geocoding",
+    "skills": [
+     {
+      "name": "geocode-google",
+      "description": "Turn addresses into coordinates and coordinates into useful places. This skill cleans messy input, handles batch lookups, caches results, and exposes distance and route helpers alongside the geocoder. Rate limits and retries are managed. This one calls Google Maps geocoding and places APIs, with rooftop-level accuracy, place IDs, and traffic-aware routing.",
+      "en": "Precise house-level positions matter for our delivery estimates, and we also need travel times that account for traffic.",
+      "zh": "配送时间估算需要精确到门牌的位置，还得考虑实时路况计算行驶时间。"
+     },
+     {
+      "name": "geocode-mapbox",
+      "description": "Turn addresses into coordinates and coordinates into useful places. This skill cleans messy input, handles batch lookups, caches results, and exposes distance and route helpers alongside the geocoder. Rate limits and retries are managed. This skill uses Mapbox geocoding and directions, with custom map styles and generous free tiers for startups.",
+      "en": "We want to style our own map to match the brand and keep costs low while we are still small.",
+      "zh": "我们想把地图样式做成品牌风格，公司还小，成本也要控制住。"
+     },
+     {
+      "name": "geocode-nominatim",
+      "description": "Turn addresses into coordinates and coordinates into useful places. This skill cleans messy input, handles batch lookups, caches results, and exposes distance and route helpers alongside the geocoder. Rate limits and retries are managed. This skill queries OpenStreetMap's Nominatim, self-hosted or public, with no licence fees and community-maintained data.",
+      "en": "We cannot pay per lookup for a hobby project, and the map data should come from a community source we can host ourselves.",
+      "zh": "这个业余项目付不起按次查询的费用，地图数据最好来自可以自建的社区来源。"
+     },
+     {
+      "name": "geocode-here",
+      "description": "Turn addresses into coordinates and coordinates into useful places. This skill cleans messy input, handles batch lookups, caches results, and exposes distance and route helpers alongside the geocoder. Rate limits and retries are managed. This skill uses HERE geocoding and routing, with strong coverage in automotive and logistics scenarios.",
+      "en": "Our fleet crosses borders in areas where road data is patchy, and we need routing that understands truck restrictions.",
+      "zh": "我们的车队要跨境跑一些道路数据很差的地区，路线规划必须考虑卡车限行。"
+     }
+    ],
+    "no_signal_en": "We have a list of customer addresses and need them placed on a map.",
+    "no_signal_zh": "我们有一批客户地址，想把它们标到地图上。"
+   },
+   {
+    "family": "storage-services",
+    "skills": [
+     {
+      "name": "blob-store",
+      "description": "Store and serve files reliably without managing disks or servers. The skill handles uploads, deduplication, access rules, and signed links, and it can move old objects to cheaper tiers automatically. Usage reports show what is growing. This one talks to Amazon S3, with bucket policies, multipart uploads, lifecycle rules, and presigned URLs.",
+      "en": "Our app runs on AWS, and files need private links that expire after a short time.",
+      "zh": "我们的应用跑在 AWS 上，文件下载链接必须私有，而且过一会儿就失效。"
+     },
+     {
+      "name": "blob-store-pro",
+      "description": "Store and serve files reliably without managing disks or servers. The skill handles uploads, deduplication, access rules, and signed links, and it can move old objects to cheaper tiers automatically. Usage reports show what is growing. This one uses Google Cloud Storage, with uniform bucket-level access, signed URLs, and integration with BigQuery.",
+      "en": "Analysts want to query the files directly from BigQuery without copying them into another system first.",
+      "zh": "分析师想直接在 BigQuery 里查这些文件，不要先复制到另一套系统。"
+     },
+     {
+      "name": "object-vault",
+      "description": "Store and serve files reliably without managing disks or servers. The skill handles uploads, deduplication, access rules, and signed links, and it can move old objects to cheaper tiers automatically. Usage reports show what is growing. This one targets Azure Blob Storage, with containers, SAS tokens, and tiers from hot to archive.",
+      "en": "Corporate policy puts everything in our Microsoft cloud tenant, and we need time-limited links for external partners.",
+      "zh": "公司政策要求所有数据放在微软云租户里，还得给外部合作方发限时链接。"
+     },
+     {
+      "name": "file-depot",
+      "description": "Store and serve files reliably without managing disks or servers. The skill handles uploads, deduplication, access rules, and signed links, and it can move old objects to cheaper tiers automatically. Usage reports show what is growing. This one speaks the S3 API against Cloudflare R2, so egress stays cheap while existing S3 tooling keeps working.",
+      "en": "We serve a lot of downloads and bandwidth charges are killing us, but our code already uses S3 libraries.",
+      "zh": "我们下载量很大，流量费吃不消，但代码里已经用了 S3 的库，不想重写。"
+     },
+     {
+      "name": "mirror-bucket",
+      "description": "Store and serve files reliably without managing disks or servers. The skill handles uploads, deduplication, access rules, and signed links, and it can move old objects to cheaper tiers automatically. Usage reports show what is growing. This one runs against MinIO, a self-hosted S3-compatible store for air-gapped or on-premises deployments.",
+      "en": "We operate offline in a factory and need object storage on our own hardware with S3-compatible tools.",
+      "zh": "我们在工厂里离线运行，需要在自有硬件上做对象存储，而且工具要兼容 S3。"
+     }
+    ],
+    "no_signal_en": "We need somewhere to put user uploads that is durable and easy to serve.",
+    "no_signal_zh": "我们需要一个地方存用户上传的文件，要可靠，也方便对外提供。"
+   }
+  ]
+ },
+ "unrelated": {
+  "en": [
+   "What is the capital of Australia?",
+   "Write a short poem about autumn rain.",
+   "How many days are there between March 3 and June 18?",
+   "Give me three ideas for a birthday dinner at home.",
+   "Explain the difference between weather and climate in simple words.",
+   "Please suggest a good name for a small black cat.",
+   "What does the word serendipity mean?",
+   "Summarize the plot of Romeo and Juliet in two sentences."
+  ],
+  "zh": [
+   "澳大利亚的首都是哪里？",
+   "写一首关于秋雨的短诗。",
+   "3月3日到6月18日之间有多少天？",
+   "给我三个在家过生日的晚餐点子。",
+   "用简单的话解释天气和气候的区别。",
+   "给一只小黑猫取个好听的名字。",
+   "“塞翁失马”是什么意思？",
+   "用两句话概括《红楼梦》的故事。"
+  ]
+ },
+ "follow_up": {
+  "en": [
+   "yes, please do that",
+   "ok, go ahead",
+   "continue",
+   "that one, thanks"
+  ],
+  "zh": [
+   "好的，就这么做",
+   "继续",
+   "可以，开始吧",
+   "就用这个，谢谢"
+  ]
+ },
+ "complex": {
+  "development": [
+   {
+    "skills": [
+     "skyline-deploy",
+     "data-guardian",
+     "transactional-email-api"
+    ],
+    "en": "We're about to open a ticket-booking site and want each merge to roll out to our AWS account on Fargate with health checks and an easy rollback, without anyone babysitting the release. The Postgres 16 cluster behind it already shows slow checkout queries, so we need to see which statements hurt and get index suggestions before launch. Password-reset and receipt messages also need to go out exactly once, even when our API retries a request.",
+    "zh": "我们准备上线一个演出票务网站，希望每次合并都能自动发布到 AWS 的 Fargate 上，带健康检查，出问题能一键回滚，不用有人盯着。背后的 Postgres 16 已经出现结账查询变慢的情况，上线前得看清哪些语句最拖后腿并拿到索引建议。密码重置和收据邮件在接口重试时也不能重复发送。"
+   },
+   {
+    "skills": [
+     "skyline-release",
+     "data-guardian-x",
+     "logs-azure"
+    ],
+    "en": "A subscription-billing portal is moving to Azure Container Apps, and releases need to promote through staging with sign-in handled by our existing Entra tenant. Its MySQL 8 database shows buffer-pool pressure during month-end runs, and we keep getting asked why some invoices fail silently; the answer should come from the Application Insights events already flowing into Azure Monitor.",
+    "zh": "一个订阅计费门户正在迁到 Azure Container Apps，发布要能按环境逐步推进，登录沿用现有的 Entra 租户。它的 MySQL 8 在月末跑批时缓冲池压力很大，而且总有人问为什么有些发票悄悄失败了；答案应该能从已经进入 Azure Monitor 的 Application Insights 事件里找到。"
+   },
+   {
+    "skills": [
+     "skyline-ship",
+     "react-native-build-cloud",
+     "flow-forge-2",
+     "marketing-email-platform",
+     "data-guardian-pro"
+    ],
+    "en": "Our loyalty programme is growing fast: the phone app shares one JavaScript codebase across the App Store and Google Play, the backend runs on Cloud Run, and order events already stream through Kafka, where each member's points must stay in order and never be counted twice. Transaction history lives in SQL Server 2022 with Always On, and we also want segmented campaigns with A/B tests to bring people back.",
+    "zh": "我们的会员积分项目增长很快：手机端用一套 JavaScript 代码同时发布到 App Store 和 Google Play，后端跑在 Cloud Run 上，订单事件已经走 Kafka，同一个会员的积分必须保持顺序且不能重复计算。交易记录放在启用了 Always On 的 SQL Server 2022 里，另外还想做分群活动和 A/B 测试，把顾客重新拉回来。"
+   },
+   {
+    "skills": [
+     "skyline-launch",
+     "logs-onprem",
+     "eu-email-residency"
+    ],
+    "en": "A regional health service is putting its appointment system into a Kubernetes cluster we run ourselves in a Frankfurt data centre, with images pulled from our internal registry and no traffic leaving the building. Logs from the cluster and from services that authenticate against LDAP need to be searchable on the same network, and patient notifications must be handled by a mail provider whose storage and logs stay inside the EU.",
+    "zh": "一个地区医疗服务要把预约系统放进我们自己在法兰克福机房维护的 Kubernetes 集群，镜像只从内部仓库拉取，流量不出机房。集群和走 LDAP 登录的各服务产生的日志要能在同一内网里检索，发给病人的通知则必须由存储和日志都留在欧盟境内的邮件服务商处理。"
+   },
+   {
+    "skills": [
+     "ios-build-cloud",
+     "stripe-payments",
+     "data-guardian",
+     "paper-shift-pro"
+    ],
+    "en": "Field inspectors use an iPhone app to photograph handwritten inspection forms, and we need signed builds going to registered test devices whenever the code changes. Inspectors also pay a small report fee by card or Apple Pay, and Postgres holds both job history and payment references. The photographed forms are often skewed or written in several languages, so they must come back as searchable text without retyping.",
+    "zh": "外勤检查员用 iPhone 拍下手写的检查表，我们希望代码一改就能生成签名包，装到已登记的测试机上。检查员还会通过银行卡或 Apple Pay 支付一笔报告费，Postgres 里同时存着工单历史和支付流水。拍下来的表格经常歪斜，语言也不统一，需要变成可搜索的文字，不能靠人工重打。"
+   },
+   {
+    "skills": [
+     "flutter-build-cloud",
+     "square-payments",
+     "quick-vault",
+     "pipeline-pilot",
+     "logs-azure"
+    ],
+    "en": "A group of neighbourhood restaurants is replacing its till software: staff will use a Flutter app on counter tablets, customers will order from the same catalogue on the web, and one payout schedule will cover both. Orders land in MongoDB 6 replica sets, while reporting needs those changes streamed continuously instead of polling the primary every few minutes. Everything is hosted on Azure, so failures should be traceable from Application Insights.",
+    "zh": "几家社区餐厅正在更换收银系统：店员在柜台平板上用 Flutter 应用，顾客也能在网上从同一份商品目录下单，线上线下共用一套结算周期。订单写进 MongoDB 6 副本集，报表那边希望持续接收变更，而不是每隔几分钟去主库轮询。系统都放在 Azure 上，出错时要能从 Application Insights 追到原因。"
+   },
+   {
+    "skills": [
+     "android-build-cloud",
+     "adyen-payments",
+     "flow-forge"
+    ],
+    "en": "A grocery delivery startup in Amsterdam ships an Android app whose customers pay with iDEAL and SEPA direct debit, with payouts and disputes visible in one place. Every night the order and basket tables have to be loaded into the warehouse through a chain of SQL and Python steps, with retries and a clear alert when an upstream job is late.",
+    "zh": "阿姆斯特丹一家生鲜配送初创公司要发布 Android 应用，顾客用 iDEAL 和 SEPA 直接借记付款，退款和拒付也能在一个后台里看清楚。每天夜里还要把订单和购物车表通过一串 SQL 和 Python 步骤装进数据仓库，失败要能重试，上游任务晚了要有人收到提醒。"
+   },
+   {
+    "skills": [
+     "flutter-build-cloud",
+     "paypal-payments",
+     "data-guardian",
+     "logs-aws"
+    ],
+    "en": "We produce white-label fitness apps in Dart for several boutique gym brands, each with its own colours and content, and testers expect the same flow to work on both iPhone and Android. Members pay through their PayPal wallet, and Postgres stores memberships and class credits. The apps talk to a backend on AWS, and when a class booking fails we need to jump straight into the CloudWatch stream for that request.",
+    "zh": "我们用 Dart 给几个精品健身房品牌做贴牌应用，每个品牌有自己的配色和内容，测试人员希望同一套流程在 iPhone 和 Android 上都正常。会员用 PayPal 钱包付款，Postgres 里存着会籍和课程次数。应用连的是 AWS 上的后端，课程预约失败时要能直接跳到那次请求对应的 CloudWatch 日志里。"
+   },
+   {
+    "skills": [
+     "skyline-launch",
+     "river-runner",
+     "logs-onprem",
+     "eu-email-residency",
+     "format-bridge"
+    ],
+    "en": "A law practice is digitising decades of client files: scanned bundles arrive from partner firms as CSV manifests and Parquet exports dropped on SFTP, and anything malformed must be quarantined before it reaches the archive. The archive itself has to be PDF/A-3 with embedded fonts and proper metadata for court use. The whole pipeline runs in our own Kubernetes cluster and Elasticsearch, with no log content sent to a vendor cloud, and notification mail must stay within EU data centres.",
+    "zh": "一家律师事务所正在把几十年的客户档案数字化：合作律所会通过 SFTP 送来 CSV 清单和 Parquet 导出，格式不对的行必须先隔离，不能直接进档案库。归档文件要是 PDF/A-3，嵌入字体，元数据也得符合法院使用的要求。整条流程跑在我们自己的 Kubernetes 集群和 Elasticsearch 上，日志内容不能送到境外云，通知邮件也只能走欧盟境内的数据中心。"
+   },
+   {
+    "skills": [
+     "data-guardian-x",
+     "flow-forge",
+     "logs-gcp",
+     "paper-shift"
+    ],
+    "en": "An online furniture shop runs MySQL 8 and has started seeing replication lag whenever the nightly catalogue rebuild runs. That rebuild is a long chain of SQL and Python jobs that loads the warehouse, and when one step fails nobody can tell the next morning which run produced the bad table. The shop's services log to Google Cloud, and old supplier price lists arrive as PDFs that we want to edit in Excel.",
+    "zh": "一家线上家具店用 MySQL 8，最近每次夜间重建商品目录时都会出现复制延迟。这个重建是一长串 SQL 和 Python 任务，负责往仓库灌数据，一旦某一步失败，第二天早上没人说得清是哪次运行产出了有问题的表。店铺的服务日志在 Google Cloud 上，供应商的旧价格表是 PDF，我们希望直接改成 Excel 来编辑。"
+   },
+   {
+    "skills": [
+     "quick-vault",
+     "square-payments",
+     "paper-shift-pro",
+     "flow-forge-2",
+     "transactional-email-api"
+    ],
+    "en": "A pizza chain wants one system for counter terminals, online orders and invoices, with a single product list and payout schedule. Orders land in MongoDB 6 replica sets, and the kitchen display already publishes events through Kafka that downstream services consume with per-key ordering. Receipts must be sent exactly once even when the order service retries, and the weekly stack of scanned supplier invoices needs OCR that can cope with handwriting and several languages.",
+    "zh": "一家披萨连锁店想把柜台终端、网上订单和发票放在一个系统里，商品目录和结算周期都只维护一份。订单写进 MongoDB 6 副本集，后厨显示屏已经把事件发到 Kafka，下游服务需要按 key 保持顺序消费。订单服务重试时，小票邮件也只能发一次；每周收上来的一摞扫描供应商发票还要做 OCR，能认手写和多种语言。"
+   },
+   {
+    "skills": [
+     "skyline-release",
+     "stripe-payments",
+     "format-bridge",
+     "self-hosted-smtp"
+    ],
+    "en": "A professional association is rebuilding its membership portal on Azure Container Apps, with sign-in through Entra ID and release slots that can be swapped back if a health check fails. New members pay for subscriptions by card or Apple Pay, and signed agreements must be kept as PDF/A-2b for the statutory retention period. The association still runs its own mail relay and wants all outgoing messages to leave through that server rather than a third-party sender.",
+    "zh": "一家行业协会正在 Azure Container Apps 上重做会员门户，登录走 Entra ID，发布槽位在健康检查失败时要能换回去。新会员用银行卡或 Apple Pay 订阅付费，签好的协议要按法定期限保存为 PDF/A-2b。协会还有自己的邮件中继，所有外发邮件都得从这台服务器出去，不能交给第三方代发。"
+   },
+   {
+    "skills": [
+     "skyline-deploy",
+     "data-guardian-pro",
+     "adyen-payments",
+     "logs-aws",
+     "paper-shift"
+    ],
+    "en": "A ticket resale business runs its API on ECS with Fargate and wants audited, repeatable releases into AWS. Its SQL Server 2022 estate is getting slower around big events and the execution-plan cache is full of one-off queries. Customers across Europe and Asia pay with iDEAL, Bancontact or Alipay, and settlement reports arrive as PDFs that need to become editable Excel files. When a payment callback fails, we need to find it quickly in CloudWatch and VPC flow logs.",
+    "zh": "一家票务转售公司的 API 跑在 ECS Fargate 上，希望每次发布都可重复、可审计地进入 AWS。它的 SQL Server 2022 在大活动前后变慢，执行计划缓存里塞满了只跑一次的查询。欧洲和亚洲的顾客会用 iDEAL、Bancontact 或支付宝付款，结算报告是 PDF，需要转成可编辑的 Excel。支付回调失败时，要能马上在 CloudWatch 和 VPC 流日志里找到原因。"
+   },
+   {
+    "skills": [
+     "skyline-ship",
+     "ios-build-cloud",
+     "doc-switch",
+     "self-hosted-smtp"
+    ],
+    "en": "An independent publisher is putting its audiobook and ebook catalogue behind a service on Cloud Run, and the iPhone reading app needs TestFlight builds with certificates handled for us after every commit. Manuscripts come in as Word files and must be packaged as EPUB 3 and MOBI with working footnotes and a clickable contents page. The publisher insists that notification mail leave through its own mail server, not an external bulk sender.",
+    "zh": "一家独立出版社把有声书和电子书目录放到 Cloud Run 上的服务后面，iPhone 阅读应用需要每次提交后自动生成 TestFlight 包，证书也由平台代管。稿件是 Word 文件，要打包成 EPUB 3 和 MOBI，脚注和可点击目录都得正常。出版社坚持通知邮件从自己的邮件服务器发出，不用外部群发平台。"
+   },
+   {
+    "skills": [
+     "react-native-build-cloud",
+     "paypal-payments",
+     "river-runner",
+     "logs-gcp"
+    ],
+    "en": "A wildlife charity runs donation apps built with React Native for several regional campaigns, and each campaign needs its own store listing and colours while sharing the same JavaScript code. Donors check out with a PayPal account, and monthly export files from partner organisations arrive as CSV or Parquet in cloud buckets, where bad rows must be held back before they reach the reporting tables. The backend sits on Google Cloud, and we want its audit entries searchable without writing query syntax.",
+    "zh": "一家野生动物慈善机构用 React Native 做募捐应用，服务多个地区活动，每个活动都要有自己的商店页面和配色，但共用同一套 JavaScript 代码。捐款人用 PayPal 账户结账，合作机构每月把 CSV 或 Parquet 文件放到云存储桶里，坏行要在进入报表之前被拦住。后端在 Google Cloud 上，我们希望不用学查询语法就能搜索审计记录。"
+   },
+   {
+    "skills": [
+     "android-build-cloud",
+     "doc-switch",
+     "pipeline-pilot",
+     "marketing-email-platform"
+    ],
+    "en": "A niche magazine is launching an Android reading app and wants internal test tracks updated automatically whenever a pull request merges. Back issues are being converted from Word into EPUB 3 and MOBI, keeping the original images and tables of contents. Subscription changes are written to the operational database and must flow into the customer profile store continuously without hammering the primary, and the magazine also wants scheduled newsletter sends with audience segments and simple A/B subject tests.",
+    "zh": "一本小众杂志要推出 Android 阅读应用，希望每次合并拉取请求就自动更新内部测试轨道。过刊正在从 Word 转成 EPUB 3 和 MOBI，图片和目录都要保留。订阅变更写进业务数据库后，要持续同步到客户资料库，不能一直压主库；杂志还想按受众分群定时发通讯，并做简单的标题 A/B 测试。"
+   }
+  ],
+  "holdout": [
+   {
+    "skills": [
+     "e-invoice-germany",
+     "orbit-deploy",
+     "backup-postgres"
+    ],
+    "en": "We supply software to German municipalities and every invoice has to leave as a structured XML file their systems can ingest, carrying the routing code they assign and the correct VAT treatment; the services themselves run on the Kubernetes cluster we already have Helm charts for, and the Postgres database behind the billing history must be recoverable to any minute within the last thirty days.",
+    "zh": "我们给德国的市政机构供货，每张发票都得是对方系统能直接接收的结构化 XML，还要带上他们分配的流转编码并正确计税；服务本身跑在现有的 Kubernetes 集群上，Helm chart 早就写好了，账单历史所在的 Postgres 则需要能恢复到最近三十天里的任意一分钟。"
+   },
+   {
+    "skills": [
+     "e-invoice-italy",
+     "ci-jenkins",
+     "auth-gate"
+    ],
+    "en": "Invoices to Italian clients have to travel through the national exchange in FatturaPA, and because we operate under banking-style rules everything, including builds, must stay on machines in our own data centre rather than hosted runners; sign-in is a self-hosted identity server we theme ourselves so there are no per-seat charges.",
+    "zh": "开给意大利客户的发票必须以 FatturaPA 经国家交换系统提交；由于我们受类似银行业的合规约束，连构建都只能跑在自己机房的机器上，不能用托管服务；登录则用一套我们自己部署、自己换主题的身份系统，省掉按人头收费。"
+   },
+   {
+    "skills": [
+     "e-invoice-mexico",
+     "cluster-companion",
+     "signin-suite"
+    ],
+    "en": "We are launching in Mexico and need invoices stamped through an authorised certification provider, validating each buyer's RFC and getting IVA and IEPS right; the storefront is containerised and should run on Fargate so the bill lands on the AWS account we already have, with customer login handled by user pools instead of another vendor.",
+    "zh": "我们要在墨西哥开展业务，发票得通过授权的认证服务商盖章，校验买家的 RFC，并把 IVA 和 IEPS 算准；商城是容器化的，希望跑在 Fargate 上、费用直接走现有 AWS 账号，顾客登录就用用户池，不再另找供应商。"
+   },
+   {
+    "skills": [
+     "instant-find-plus",
+     "bot-forge",
+     "ticket-desk"
+    ],
+    "en": "Legal insists we stay on Apache-licensed search, so the product catalogue needs its dashboard plugins and the query syntax we have been writing for years, minus the licensing worry; the people answering customer mail live in Zendesk with our views and macros, and we want a Slack bot that can look up an order and answer inside a thread when someone asks in a channel.",
+    "zh": "法务要求搜索必须留在 Apache 许可的组件上，所以商品目录要用它自带的仪表盘插件，我们写了多年的查询语法也得照常能用，省掉授权方面的顾虑；答复客户邮件的同事在 Zendesk 里用着现成的视图和宏，我们还想做个 Slack 机器人，有人在频道里问订单时能在同一串消息里查出来回话。"
+   },
+   {
+    "skills": [
+     "findly",
+     "reply-bot",
+     "login-kit-cloud"
+    ],
+    "en": "Our field crews mostly communicate over Telegram, so we want a bot there with inline buttons for shift handovers; site search has to feel instant in São Paulo and Singapore without us running any servers, and staff sign-in already lives in Okta with SAML apps and group-based rules that must keep working.",
+    "zh": "外勤人员基本都用 Telegram 沟通，所以想要一个带内联按钮的机器人处理交接班；网站搜索在圣保罗和新加坡都要瞬时响应，但我们不想自己运维服务器；员工登录已经在 Okta 里配了 SAML 应用和按组授权，这些必须照旧。"
+   },
+   {
+    "skills": [
+     "search-spark",
+     "bot-forge-lite",
+     "mirror-bucket"
+    ],
+    "en": "The whole installation runs in a bunker with no internet access, so search has to be a single binary we drop on a box and feed our documentation into, file storage must be an S3-compatible server we host ourselves, and the community around the project gathers in Discord where we want slash commands and moderation buttons.",
+    "zh": "整套系统部署在没有外网的环境里，搜索得是能直接丢到机器上、把文档灌进去的单文件服务，文件存储也必须是自建的、兼容 S3 的服务器；项目社区都在 Discord 上，希望有斜杠命令和审核按钮。"
+   },
+   {
+    "skills": [
+     "lookup-engine",
+     "support-hub",
+     "transcode-cloudflare-stream"
+    ],
+    "en": "Our help content is chat-first: conversations and customer profiles sit in Intercom, and the help centre has to filter and facet results with very low latency on a couple of cheap boxes; we also embed short walkthrough clips and want signed playback tokens so links cannot be forwarded outside the account, with delivery through the CDN we already pay for.",
+    "zh": "我们的帮助内容以聊天为主：会话和客户资料都在 Intercom 里，帮助中心要在两台便宜的机器上做到极低延迟的筛选和分面；我们还嵌了一些操作演示短片，希望播放令牌带签名，链接不能被转发到账号以外，分发就走已经在付费的 CDN。"
+   },
+   {
+    "skills": [
+     "transcode-aws-mediaconvert",
+     "blob-store",
+     "ci-github-actions"
+    ],
+    "en": "When a producer drops a master file into our bucket we want broadcast-grade renditions with automatic quality checks, using the IAM role already provisioned; the pipeline lives in GitHub and should obtain cloud credentials without long-lived keys, cache dependencies and publish artefacts per commit.",
+    "zh": "制作人把母版文件传进我们的存储桶后，希望自动生成广播级的多档成品并做质量检查，用已经建好的 IAM 角色就行；流水线放在 GitHub 上，要能不靠长期密钥取得云权限，还要缓存依赖并按提交产出构建物。"
+   },
+   {
+    "skills": [
+     "transcode-mux",
+     "instant-find",
+     "test-playwright"
+    ],
+    "en": "We would rather not think about encoding ladders at all, so uploads should go somewhere that returns playback IDs and thumbnails; the internal library pages must keep the Kibana dashboards and query syntax we have relied on for years, and the checkout journey needs to be exercised in Chromium, Firefox and WebKit with traces whenever it breaks.",
+    "zh": "我们完全不想操心码率阶梯，上传后交给服务方处理，拿回播放 ID 和缩略图就好；内部片库页面要继续用我们依赖多年的 Kibana 仪表盘和查询语法；结算流程得在 Chromium、Firefox 和 WebKit 里都跑一遍，出错时留下追踪记录。"
+   },
+   {
+    "skills": [
+     "transcode-ffmpeg-local",
+     "backup-mysql",
+     "geocode-here"
+    ],
+    "en": "Our vans record continuously and the clips contain customers' faces and licence plates, so nothing may leave our own hardware; we need local transcoding with watch folders and loudness levelling, trip records in MySQL with consistent snapshots and point-in-time recovery, and route matching from a provider with strong automotive and logistics coverage for the daily logs.",
+    "zh": "我们的货车一直在录像，画面里有顾客的脸和车牌，素材绝不能离开自己的机器；需要本地转码、监控目录和响度统一，行程记录存在 MySQL 里要做一致性快照并支持按时间点恢复，每日日志的路线匹配则要用在汽车和物流领域覆盖扎实的服务商。"
+   },
+   {
+    "skills": [
+     "train-pytorch-ddp",
+     "vuln-watch",
+     "ci-circleci"
+    ],
+    "en": "We train on eight GPUs with plain PyTorch loops and do not want to restructure the code, just launch one process per card and sync gradients; the images we ship must be scanned layer by layer with the build failing on critical findings, all wired into CircleCI with layer reuse so feedback stays quick.",
+    "zh": "我们用八张卡训练，代码就是普通的 PyTorch 循环，不想大改，只想每张卡起一个进程同步梯度；要发布的镜像得逐层扫描，出现严重漏洞就让构建失败，这些接进 CircleCI，并靠层复用让反馈快一些。"
+   },
+   {
+    "skills": [
+     "e-invoice-spain",
+     "scale-ship",
+     "backup-redis",
+     "chat-sidekick"
+    ],
+    "en": "Spanish clients need Facturae XML plus periodic SII reporting with IVA and recargo de equivalencia handled properly; our stack is small and we like keeping compose files, updating services with one command on a Swarm cluster; Redis holds session and rate-limit data that must survive restarts with TTLs intact, and a bot inside Teams should answer common questions with adaptive cards for the whole tenant.",
+    "zh": "西班牙客户需要 Facturae 格式的 XML，还要定期做 SII 申报，IVA 和附加等价税都得算对；我们规模不大，喜欢继续用 compose 文件，在 Swarm 集群上一条命令更新服务；Redis 里存着会话和限流数据，重启后要连 TTL 一起恢复；还想要一个装在 Teams 里的机器人，用自适应卡片给整个租户回答常见问题。"
+   },
+   {
+    "skills": [
+     "e-invoice-france",
+     "ci-gitlab",
+     "global-strings",
+     "export-xlsx"
+    ],
+    "en": "French public buyers want hybrid PDFs that are both readable and machine-parsable, submitted through Chorus Pro, and we have to stay ahead of the reform deadlines; builds run in our own GitLab with protected variables per environment, translations are managed on a self-hosted platform so the language data stays under our control, and month-end figures go to auditors as a multi-sheet workbook with frozen headers and formulas.",
+    "zh": "法国公共部门买家要的是既能人读又能被系统解析的混合 PDF，并通过 Chorus Pro 提交，还得赶在改革时间节点之前；构建跑在自己的 GitLab 上，按环境使用受保护的变量；翻译放在自托管平台上，语言数据要掌握在自己手里；月末数字则要交给审计方一份多工作表、带冻结表头和公式的工作簿。"
+   },
+   {
+    "skills": [
+     "fleet-launcher",
+     "auth-gate",
+     "scan-sentry",
+     "geocode-mapbox"
+    ],
+    "en": "We already run Consul and Vault, so jobs should be scheduled through Nomad and pick up secrets from Vault rather than sitting in manifests; the customer portal authenticates against a realm we host ourselves with federated social logins, and after a contractor committed a private key we need something that reads the full history for tokens and tells us what to rotate; delivery estimates rely on custom map styling and directions.",
+    "zh": "我们已经在用 Consul 和 Vault，所以任务希望由 Nomad 调度，密钥直接从 Vault 取而不是写进清单；客户门户的认证走我们自己托管的域，并支持联合登录；之前有外包把私钥提交进了仓库，需要能翻遍完整历史找出令牌并提示该换哪些；配送时间估算则依赖可自定义样式的地图和路线服务。"
+   },
+   {
+    "skills": [
+     "orbit-deploy",
+     "guard-scan-pro",
+     "help-queue",
+     "test-cypress"
+    ],
+    "en": "Our services already run on the cluster with existing manifests and a couple of custom controllers, so scheduling and rollback should keep working there; pull requests must be blocked when the scanner finds injection or unsafe deserialisation with line-level suggestions; incidents need to link back to engineering issues in Jira Service Management, and the front-end suite has to run in a real browser with network stubbing so writing tests stays pleasant.",
+    "zh": "我们的服务已经跑在集群里，有现成的清单和几个自定义控制器，调度和回滚得继续在那儿工作；扫描器一旦发现注入或不安全反序列化，就要给出具体到行的修改建议并卡住合并请求；故障单要能关联到 Jira Service Management 里的研发问题；前端测试得在真实浏览器里跑，还能模拟网络请求，写起来才不痛苦。"
+   },
+   {
+    "skills": [
+     "instant-find",
+     "train-ray",
+     "blob-store-pro",
+     "export-powerbi"
+    ],
+    "en": "Search over experiment notes has to keep the Kibana dashboards and query syntax the researchers already rely on; hyperparameter sweeps should start on a laptop and then run the same Python on a cluster; datasets sit in Cloud Storage with uniform access and we query them from BigQuery, and the weekly readout is published as a refreshed report in a Power BI workspace with row-level security per client.",
+    "zh": "实验记录的检索要继续沿用研究人员习惯的 Kibana 仪表盘和查询语法；超参数扫描要能在笔记本上跑起来，之后同一份 Python 直接扩到集群；数据集放在 Cloud Storage 上使用统一权限，并通过 BigQuery 查询；每周汇总则发布到 Power BI 工作区，按客户做行级权限并定时刷新。"
+   },
+   {
+    "skills": [
+     "bot-forge-lite",
+     "ticket-desk-cloud",
+     "test-playwright",
+     "locale-sync-pro"
+    ],
+    "en": "Players hang out on Discord, so support there needs slash commands, buttons and moderation hooks; player emails should land in Freshdesk with our groups and automation rules mapped over; the account and purchase flows must be exercised in three browser engines in CI; and the game text is translated on a platform where translators see screenshots and automated QA runs before anything merges.",
+    "zh": "玩家都在 Discord 上，那边的客服需要斜杠命令、按钮和审核钩子；玩家邮件要进 Freshdesk，并按我们现有的分组和自动化规则分流；账号和购买流程要在持续集成里用三种浏览器内核各跑一遍；游戏文案则在一个能让译者看到截图、合并前自动做质量检查的平台上翻译。"
+   },
+   {
+    "skills": [
+     "train-horovod",
+     "guard-scan",
+     "ci-buildkite",
+     "object-vault"
+    ],
+    "en": "Our lab has both TensorFlow and PyTorch code, so distributed training has to work across frameworks with ring allreduce; dependency advisories should be matched from lockfiles and SBOMs with safe upgrade paths proposed; pipelines run on our own agents with dynamic steps and fine-grained concurrency; model artefacts and datasets live in Blob Storage with SAS tokens and a hot-to-archive policy.",
+    "zh": "实验室里既有 TensorFlow 也有 PyTorch 代码，分布式训练要跨框架可用，采用环形全归约；依赖告警要从锁文件和 SBOM 里比对出来，并给出安全的升级路径；流水线跑在自己的 agent 上，需要动态步骤和细粒度并发控制；模型和数据集放在 Blob 存储里，用 SAS 令牌访问并按热度分层归档。"
+   },
+   {
+    "skills": [
+     "train-deepspeed",
+     "backup-mongodb",
+     "export-google-sheets",
+     "login-kit"
+    ],
+    "en": "The model no longer fits on one device, so optimizer state and parameters must be sharded with CPU offload and mixed precision configured for us; the product catalogue lives in MongoDB and has to be restored consistently with its indexes; a spreadsheet in a shared drive should refresh from the numbers several times a day with comment access; and admin-console sign-in should keep our existing user IDs and the social connections we already configured.",
+    "zh": "模型已经放不进单卡，优化器状态和参数要分片并支持卸载到 CPU，混合精度也帮我们配好；商品库在 MongoDB 里，恢复时要连索引一起保持一致；共享盘里的表格要每天多次用最新数字刷新，并允许评论；管理后台的登录要沿用现有用户 ID，同时保留我们已经配好的社交登录。"
+   },
+   {
+    "skills": [
+     "transcode-mux",
+     "geocode-nominatim",
+     "word-bridge",
+     "test-selenium"
+    ],
+    "en": "Estate agents upload walkthrough videos that we would rather not encode ourselves, so we just want playback IDs and thumbnails back; listing addresses are messy and should be matched against OpenStreetMap data we host to avoid licence fees; the listing copy is translated with branching and review steps; and because some buyers still use old browsers, the search pages must be checked across specific legacy versions and operating systems.",
+    "zh": "房产中介上传的看房视频我们不想自己编码，只要拿回播放 ID 和缩略图；房源地址很乱，希望用我们自己部署的 OpenStreetMap 数据来匹配，省掉许可费；房源文案的翻译要有分支和审校流程；另外有些买家还在用老浏览器，搜索页必须在指定的旧版本和操作系统组合上验证。"
+   },
+   {
+    "skills": [
+     "e-invoice-mexico",
+     "guard-scan-pro",
+     "geocode-google",
+     "object-vault"
+    ],
+    "en": "Our Mexican storefront must issue stamped CFDI invoices with RFC validation and correct IVA and IEPS; code review needs static analysis that flags risky patterns with line-level fixes; delivery addresses are entered badly and need rooftop accuracy with place IDs; and the invoice archive goes to Azure containers with time-limited SAS links and an archive tier after a year.",
+    "zh": "我们在墨西哥的网店要开具盖章的 CFDI 发票，校验 RFC，并正确计算 IVA 和 IEPS；代码审查环节需要静态分析，指出风险写法并给出行级修改建议；收货地址录入得很乱，需要能精确到屋顶并返回地点 ID 的解析；发票归档则放到 Azure 容器里，用限时 SAS 链接访问，一年后转入归档层。"
+   },
+   {
+    "skills": [
+     "ticket-desk",
+     "backup-mysql",
+     "export-pdf-report",
+     "locale-sync"
+    ],
+    "en": "Customer conversations from email and chat should all land in Zendesk with our macros and SLA policies preserved; the operational database is MySQL and needs encrypted dumps with a binary-log recovery drill; the quarterly service review goes out as a paginated PDF with a cover and charts that needs no further editing; and help-centre articles are translated through a community proofreading workflow synced to the repository.",
+    "zh": "来自邮件和聊天的客户对话都要进 Zendesk，并保留我们的宏和 SLA 策略；业务数据库是 MySQL，需要加密备份，并借助二进制日志做恢复演练；季度服务回顾要输出成带封面和图表的 PDF，可以直接打印或转发；帮助中心文章则通过社区校对流程翻译，并与代码仓库同步。"
+   },
+   {
+    "skills": [
+     "e-invoice-germany",
+     "fleet-launcher",
+     "search-spark",
+     "bot-forge",
+     "backup-postgres"
+    ],
+    "en": "Invoices to German public bodies need the national XML with their routing identifier and correct tax treatment; workloads should be scheduled through Nomad since Vault already holds our secrets; the product catalogue needs typo tolerance and instant results from a single binary; a Slack bot should answer order questions in threads and respect workspace permissions; and the billing database needs WAL archiving for point-in-time recovery with verification restores.",
+    "zh": "开给德国公共机构的发票要用本国 XML 格式，带上对方给的流转编码并正确计税；任务希望交给 Nomad 调度，因为密钥已经在 Vault 里；商品目录需要容错拼写、即时返回的单文件搜索服务；Slack 机器人要在消息串里回答订单问题并遵守工作区权限；账务数据库则要用 WAL 归档做到按时间点恢复，并定期演练还原。"
+   },
+   {
+    "skills": [
+     "e-invoice-italy",
+     "ci-gitlab",
+     "login-kit-cloud",
+     "scan-sentry",
+     "export-csv"
+    ],
+    "en": "Italian invoices must be routed through the exchange in FatturaPA with split payment for public buyers; pipelines stay in our GitLab with merge-request rules and per-environment variables; staff authentication is centralised in Okta with SAML apps and lifecycle hooks; an old token turned up in a config file and we need history-wide detection plus rotation advice; and auditors want a plain delimited file with the raw ledger rows.",
+    "zh": "意大利的发票要以 FatturaPA 经交换系统提交，面向公共买家时还要处理拆分付款；流水线留在我们自己的 GitLab 里，按合并请求规则和不同环境变量执行；员工认证集中在 Okta，用 SAML 应用和生命周期钩子管理；配置文件里发现过旧令牌，需要能查遍历史并提示轮换；审计方则要一份原始流水的纯分隔文本文件。"
+   },
+   {
+    "skills": [
+     "cluster-companion",
+     "transcode-aws-mediaconvert",
+     "file-depot",
+     "geocode-google",
+     "ci-circleci"
+    ],
+    "en": "Our rendering jobs should run as Fargate tasks under the AWS account and IAM roles we already manage, with outputs written to Cloudflare's S3-compatible store so egress does not bankrupt us; encoding should use broadcast-grade profiles with automatic quality checks; customer addresses need rooftop precision including place IDs when we schedule pickups; and the whole flow is wired into CircleCI with orbs and Docker layer reuse.",
+    "zh": "渲染任务希望以 Fargate 形式跑在我们已有的 AWS 账号和 IAM 角色下，成品写到 Cloudflare 那套兼容 S3 的存储里，免得流量费失控；编码要用广播级参数并自动做质量检查；安排上门取件时地址要精确到屋顶，最好还能返回地点 ID；整条流程接进 CircleCI，用 orb 和 Docker 层复用加速。"
+   },
+   {
+    "skills": [
+     "findly",
+     "train-ray",
+     "export-xlsx",
+     "test-selenium",
+     "locale-sync"
+    ],
+    "en": "Product search should be hosted so shoppers on three continents get the same latency, and we want the built-in analytics instead of running our own cluster; recommendation models are tuned by sweeping parameters with the same Python from a laptop up to a cluster; merchandisers want a workbook with several sheets, frozen headers and charts; checkout must be verified on the exact old browser versions our enterprise buyers still use; and UI strings are translated in Crowdin with translation memory and community proofreading.",
+    "zh": "商品搜索希望用托管服务，让三大洲的顾客延迟一致，分析数据也用它自带的，不想自己维护集群；推荐模型通过扫参数调优，同一份 Python 从笔记本一直用到集群；运营人员想要一个多工作表、带冻结表头和图表的工作簿；结算流程要在企业买家用到的那些旧浏览器版本上逐一验证；界面文案则在 Crowdin 里借助翻译记忆和社区校对完成。"
+   },
+   {
+    "skills": [
+     "chat-sidekick",
+     "support-hub",
+     "signin-suite",
+     "safecheck",
+     "backup-mongodb"
+    ],
+    "en": "Requests that arrive through the Intercom messenger should appear in our queue with routing rules and response-time targets; a Teams app with adaptive cards and single sign-on through Entra should let people check status without leaving the chat; authentication for the customer app can stay in user pools inside our AWS account; before each release we want the staging URL crawled for injection and broken access control without needing source access; and Mongo needs index-preserving backups from a replica set.",
+    "zh": "从 Intercom  Messenger 进来的请求要按路由规则进入队列，并跟踪响应时限；装在 Teams 里的应用用自适应卡片、通过 Entra 单点登录，让人不用离开聊天就能查进度；客户应用的登录继续放在我们自己 AWS 账号下的用户池里；每次发布前，希望对预发布地址做爬取式探测，找出注入和越权问题而不必接触源码；Mongo 则要在副本集上做保留索引的备份。"
+   },
+   {
+    "skills": [
+     "transcode-ffmpeg-local",
+     "geocode-mapbox",
+     "reply-bot",
+     "help-queue",
+     "blob-store"
+    ],
+    "en": "Inspectors record video on their phones and it must be processed on our own machines because it shows people's homes, so we need watch folders and loudness normalisation locally; site addresses are resolved and routed with custom map styles; inspectors get progress updates through a Telegram bot with inline keyboards; each visit is tracked as a Jira Service Management request linked to the engineering backlog; and originals are archived in a bucket with lifecycle rules and presigned links.",
+    "zh": "检查员用手机拍视频，画面里有住户家里，所以必须在我们自己的机器上处理，需要本地监控目录和响度统一；工地地址用可自定义样式的地图做解析和路线规划；检查员通过带内联键盘的 Telegram 机器人收到进度提醒；每次上门都记成 Jira Service Management 工单并关联研发待办；原始文件则归档到存储桶，配合生命周期规则和预签名链接。"
+   },
+   {
+    "skills": [
+     "train-pytorch-ddp",
+     "scale-ship",
+     "ci-github-actions",
+     "test-cypress",
+     "locale-sync-pro"
+    ],
+    "en": "Training runs on a rack of eight GPUs with a standard PyTorch loop, so one process per card with gradient sync is enough; the inference services are small and we like keeping compose files, updating them with a single command on a Swarm cluster; builds run on GitHub with matrix jobs, caching and short-lived cloud credentials; the admin UI is tested in a real browser with network stubbing; and translations are handled on a platform with screenshots and automated QA.",
+    "zh": "训练跑在八卡的机架上，就是普通 PyTorch 循环，每卡一个进程同步梯度就够；推理服务很小，我们喜欢继续用 compose 文件，在 Swarm 集群上一条命令更新；构建放在 GitHub 上，用矩阵任务、缓存和短期云凭证；管理界面的测试在真实浏览器里跑并模拟网络请求；翻译则放在带截图和自动质量检查的平台上。"
+   },
+   {
+    "skills": [
+     "e-invoice-france",
+     "login-kit",
+     "ticket-desk-cloud",
+     "geocode-here",
+     "export-pdf-report"
+    ],
+    "en": "Invoices to French public bodies go through Chorus Pro as hybrid PDFs and we must keep up with the reform timetable; customer login should move to our identity tenant without changing user IDs, carrying over the login rules we wrote; delivery complaints arrive by email and social and must be routed with service targets in Freshdesk; fleet routing needs a provider strong in automotive and logistics; and the monthly operations review is printed as a paginated PDF with a cover and charts.",
+    "zh": "开给法国公共机构的发票以混合 PDF 通过 Chorus Pro 提交，还要跟上改革时间表；客户登录要迁到我们的身份租户里，但用户 ID 不能变，之前写的登录规则也要带过去；配送投诉来自邮件和社交平台，要在 Freshdesk 里按服务时限分流处理；车队路线需要一家在汽车和物流领域覆盖强的服务商；每月运营回顾则打印成带封面和图表的 PDF。"
+   },
+   {
+    "skills": [
+     "lookup-engine",
+     "guard-scan",
+     "backup-redis",
+     "mirror-bucket",
+     "test-puppeteer"
+    ],
+    "en": "The catalogue search must do low-latency faceting on modest hardware and stay entirely on-premises; dependency advisories should be matched from lockfiles and SBOMs with safe upgrade paths; Redis holds carts and rate-limit counters and must be snapshotted with TTLs preserved to remote storage; files live on a self-hosted S3-compatible server because the site is air-gapped; and a headless Chrome job should render invoices to PDF as part of the smoke checks.",
+    "zh": "目录搜索要在普通硬件上做低延迟分面，并且完全部署在本地；依赖告警要从锁文件和 SBOM 比对出来，并给出安全的升级路径；Redis 存着购物车和限流计数，需要连 TTL 一起快照到远端存储；文件放在自建的、兼容 S3 的服务器上，因为站点是隔离网络的；另外要用无头 Chrome 在冒烟检查里把发票渲染成 PDF。"
+   },
+   {
+    "skills": [
+     "transcode-cloudflare-stream",
+     "train-deepspeed",
+     "ci-jenkins",
+     "word-bridge",
+     "export-google-sheets"
+    ],
+    "en": "Viewers should get embeddable players with signed tokens from the CDN we already use; the ranking model is too big for one card, so parameters and optimizer state must be sharded with CPU offload; builds have to run on our own controllers because the environment is regulated; subtitles and UI copy are translated with branching and machine-translation post-editing; and the weekly content report is shared as a formatted spreadsheet in a shared drive that refreshes itself.",
+    "zh": "观众应该拿到可嵌入的播放器，令牌带签名，分发走我们已经在用的 CDN；排序模型单卡放不下，参数和优化器状态要分片并支持卸载到 CPU；由于环境受监管，构建必须跑在自己的控制器上；字幕和界面文案的翻译要有分支流程和机器翻译后编辑；每周内容报告则以带格式的表格发到共享盘并自动刷新。"
+   }
+  ]
+ }
+}

@@ -1850,3 +1850,16 @@ is not a universal impossibility claim for replacement executors or future
 host versions. Loaded use remains disabled; no positive registry entry is
 added. Unrun revocation controls and refused reset remain requirements for any
 future positive qualification. The original withdrawn claim is unchanged.
+
+## Per-prompt guidance (spec 0.69; #284)
+
+RM45, RM46 and AC38 to AC40 are implemented on the branch `per-prompt-assets-284`, which is not merged:
+the stateless gateway endpoint, the separate `relaymind-guidance` plugin with its optional strict limit, the
+third-party path with a standard-library example, the benchmark wrapper, the full-turn harness, the
+similar-asset data and harness, the metrics tool, and the re-pinned v3 data. Development results are in
+[`EVIDENCE.md`](EVIDENCE.md#2026-11-05--per-prompt-guidance-development-runs-284). They do not satisfy
+AC25 to AC37.
+
+Still open: a run on a real old laptop, real channels and pinned routes, final answer quality, and labels
+not written by the developer or by a model. The owner still has to review the spec 0.69 anchor comment in
+`asset_evidence.py` and the v3 re-pin.

@@ -126,7 +126,13 @@ python scripts/example_asset_selector.py --port 8933
 python scripts/example_asset_selector.py --port 8934 --preparation-path /index
 ```
 
-在 `[recommendations]` 中设置查询 URL 与响应中完全一致的名称/版本。
+在 `[recommendations]` 中设置 `primary = "http"`、查询 `url`，以及响应中完全一致的
+`name` 和 `version`。没有 `primary = "http"` 时 URL 会被忽略，系统使用词法匹配且不报错。
+除词法匹配外，都要调大 `primary_ms` 和 `total_ms`：默认的 150 ms 对模型调用太短；
+300 个资产时，词法示例本身也需要约 110 ms。超时会静默回退到内置词法匹配，所以请确认
+`result.attempts` 中是你的 mechanism：`lexical_overlap` 或 `gateway_lexical_fallback`
+表示你的选择器没有响应。请在代码仓库根目录启动网关：默认沙箱路径是相对路径。
+完整教程见 [guidance.zh-CN.md](guidance.zh-CN.md)。
 两个示例均为 `example_lexical/1`；算法行为改变时更新版本。
 各团队收到同一份有序的完整有效候选集，不收到目标标签或完整私有技能正文。
 示例验证接入协议，不证明跨语言语义效果。
@@ -148,7 +154,7 @@ binding、profile。只有 prepare 启动工作；status/cancel 的 catalog/budg
 ```bash
 python scripts/source_asset_benchmark.py run \
   --catalog /var/tmp/rm-g1-source-guide/catalog-v2/catalog.json \
-  --cases evaluation/assets/matrix-development/cases.v2.json \
+  --cases evaluation/assets/matrix-development/cases.v3.json \
   --evidence-root /var/tmp/rm-g1-source-guide/catalog-v2 \
   --production /var/tmp/rm-g1-source-guide/catalog-v2/builtin-production.toml \
   --track service --output /var/tmp/rm-g1-source-guide/builtin-service.json

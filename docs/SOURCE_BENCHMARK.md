@@ -57,13 +57,18 @@ If an output directory already exists, choose a new private root throughout;
 
 ```bash
 python scripts/source_asset_benchmark.py acquire \
-  --recipe evaluation/assets/matrix-development/sources.v2.json \
+  --recipe evaluation/assets/matrix-development/sources.v3.json \
   --cache /var/tmp/rm-matrix-benchmark-20261030/large-pinned-cache
 python scripts/source_asset_benchmark.py build \
-  --recipe evaluation/assets/matrix-development/sources.v2.json \
+  --recipe evaluation/assets/matrix-development/sources.v3.json \
   --cache /var/tmp/rm-matrix-benchmark-20261030/large-pinned-cache \
   --output /var/tmp/rm-g1-source-guide/catalog-v2
 ```
+
+Version 3 (5 November 2026, #284) re-pins 96 Matrix archives that upstream rebuilt on
+4 November. It keeps the same 412 assets, 61 exclusions and 128 cases: 86 of 87 Matrix
+skill texts keep their exact hash, one changed. The version 2 measurements were made on
+the version 2 bytes.
 
 `acquire` fetches exact HTTPS URLs and checks declared lengths and SHA-256. Each
 job is bounded to 60 seconds and 100 MiB, including at most ten seconds per
@@ -172,26 +177,26 @@ Run cold before reuse while the indexed server remains alive.
 ```bash
 python scripts/source_asset_benchmark.py run \
   --catalog /var/tmp/rm-g1-source-guide/catalog-v2/catalog.json \
-  --cases evaluation/assets/matrix-development/cases.v2.json \
+  --cases evaluation/assets/matrix-development/cases.v3.json \
   --evidence-root /var/tmp/rm-g1-source-guide/catalog-v2 \
   --production /var/tmp/rm-g1-source-guide/catalog-v2/builtin-production.toml \
   --track service --output /var/tmp/rm-g1-source-guide/builtin-service.json
 python scripts/source_asset_benchmark.py run \
   --catalog /var/tmp/rm-g1-source-guide/catalog-v2/catalog.json \
-  --cases evaluation/assets/matrix-development/cases.v2.json \
+  --cases evaluation/assets/matrix-development/cases.v3.json \
   --evidence-root /var/tmp/rm-g1-source-guide/catalog-v2 \
   --production /var/tmp/rm-g1-source-guide/catalog-v2/stateless-production.toml \
   --track service --output /var/tmp/rm-g1-source-guide/stateless-service.json
 python scripts/source_asset_benchmark.py run \
   --catalog /var/tmp/rm-g1-source-guide/catalog-v2/catalog.json \
-  --cases evaluation/assets/matrix-development/cases.v2.json \
+  --cases evaluation/assets/matrix-development/cases.v3.json \
   --evidence-root /var/tmp/rm-g1-source-guide/catalog-v2 \
   --production /var/tmp/rm-g1-source-guide/catalog-v2/indexed-production.toml \
   --preparation-config /var/tmp/rm-g1-source-guide/catalog-v2/cold.toml \
   --track service --output /var/tmp/rm-g1-source-guide/cold-service.json
 python scripts/source_asset_benchmark.py run \
   --catalog /var/tmp/rm-g1-source-guide/catalog-v2/catalog.json \
-  --cases evaluation/assets/matrix-development/cases.v2.json \
+  --cases evaluation/assets/matrix-development/cases.v3.json \
   --evidence-root /var/tmp/rm-g1-source-guide/catalog-v2 \
   --production /var/tmp/rm-g1-source-guide/catalog-v2/indexed-production.toml \
   --preparation-config /var/tmp/rm-g1-source-guide/catalog-v2/reuse.toml \

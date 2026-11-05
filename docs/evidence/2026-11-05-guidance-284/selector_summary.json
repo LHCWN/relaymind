@@ -1,0 +1,471 @@
+{
+ "commit": "9f823dd9",
+ "runner_digest": "09594cef03a1d4619b95caf1dcf8a17bd358e1926597d3e7472ca0806096231c",
+ "environment": {
+  "cpu": "Apple M1",
+  "ram_bytes": 8589934592,
+  "os_version": "macOS 27.0.1",
+  "python": "3.12.0"
+ },
+ "note": "Development diagnostics; developer-authored references; acceptance_eligible false in every compare.",
+ "arms": {
+  "builtin90": {
+   "all": [
+    48,
+    63,
+    67,
+    116
+   ],
+   "en_to_en": [
+    27,
+    35,
+    38,
+    39
+   ],
+   "zh_hans_to_en": [
+    0,
+    0,
+    0,
+    39
+   ],
+   "zh_hans_to_zh_hans": [
+    14,
+    15,
+    15,
+    15
+   ],
+   "en_to_zh_hans": [
+    2,
+    6,
+    7,
+    15
+   ],
+   "code_switch": [
+    5,
+    7,
+    7,
+    8
+   ],
+   "skill": [
+    38,
+    47,
+    48,
+    77
+   ],
+   "tool": [
+    10,
+    16,
+    19,
+    39
+   ],
+   "negative_none": [
+    0,
+    6
+   ],
+   "ambiguous_none": [
+    0,
+    6
+   ],
+   "p50": 44,
+   "p95": 62,
+   "failed": 0,
+   "attempt_failures": 0,
+   "mechanisms": {
+    "lexical_overlap": 128
+   }
+  },
+  "example_intent": {
+   "all": [
+    59,
+    67,
+    71,
+    116
+   ],
+   "en_to_en": [
+    35,
+    37,
+    38,
+    39
+   ],
+   "zh_hans_to_en": [
+    0,
+    0,
+    0,
+    39
+   ],
+   "zh_hans_to_zh_hans": [
+    14,
+    15,
+    15,
+    15
+   ],
+   "en_to_zh_hans": [
+    5,
+    9,
+    11,
+    15
+   ],
+   "code_switch": [
+    5,
+    6,
+    7,
+    8
+   ],
+   "skill": [
+    44,
+    49,
+    52,
+    77
+   ],
+   "tool": [
+    15,
+    18,
+    19,
+    39
+   ],
+   "negative_none": [
+    0,
+    6
+   ],
+   "ambiguous_none": [
+    0,
+    6
+   ],
+   "p50": 49,
+   "p95": 75,
+   "failed": 0,
+   "attempt_failures": 0,
+   "mechanisms": {
+    "example_intent_rank": 128
+   }
+  },
+  "example_glm": {
+   "all": [
+    111,
+    111,
+    111,
+    116
+   ],
+   "en_to_en": [
+    38,
+    38,
+    38,
+    39
+   ],
+   "zh_hans_to_en": [
+    36,
+    36,
+    36,
+    39
+   ],
+   "zh_hans_to_zh_hans": [
+    15,
+    15,
+    15,
+    15
+   ],
+   "en_to_zh_hans": [
+    14,
+    14,
+    14,
+    15
+   ],
+   "code_switch": [
+    8,
+    8,
+    8,
+    8
+   ],
+   "skill": [
+    75,
+    75,
+    75,
+    77
+   ],
+   "tool": [
+    36,
+    36,
+    36,
+    39
+   ],
+   "negative_none": [
+    6,
+    6
+   ],
+   "ambiguous_none": [
+    0,
+    6
+   ],
+   "p50": 3779,
+   "p95": 6649,
+   "failed": 0,
+   "attempt_failures": 0,
+   "mechanisms": {
+    "example_intent_rank": 128
+   }
+  },
+  "guidance_word": {
+   "all": [
+    59,
+    67,
+    71,
+    116
+   ],
+   "en_to_en": [
+    35,
+    37,
+    38,
+    39
+   ],
+   "zh_hans_to_en": [
+    0,
+    0,
+    0,
+    39
+   ],
+   "zh_hans_to_zh_hans": [
+    14,
+    15,
+    15,
+    15
+   ],
+   "en_to_zh_hans": [
+    5,
+    9,
+    11,
+    15
+   ],
+   "code_switch": [
+    5,
+    6,
+    7,
+    8
+   ],
+   "skill": [
+    44,
+    49,
+    52,
+    77
+   ],
+   "tool": [
+    15,
+    18,
+    19,
+    39
+   ],
+   "negative_none": [
+    0,
+    6
+   ],
+   "ambiguous_none": [
+    0,
+    6
+   ],
+   "p50": 278,
+   "p95": 304,
+   "failed": 0,
+   "attempt_failures": 0,
+   "mechanisms": {
+    "guidance_word_match": 128
+   }
+  },
+  "guidance_local": {
+   "all": [
+    76,
+    88,
+    100,
+    116
+   ],
+   "en_to_en": [
+    35,
+    37,
+    38,
+    39
+   ],
+   "zh_hans_to_en": [
+    16,
+    20,
+    29,
+    39
+   ],
+   "zh_hans_to_zh_hans": [
+    14,
+    15,
+    15,
+    15
+   ],
+   "en_to_zh_hans": [
+    5,
+    9,
+    11,
+    15
+   ],
+   "code_switch": [
+    6,
+    7,
+    7,
+    8
+   ],
+   "skill": [
+    57,
+    64,
+    69,
+    77
+   ],
+   "tool": [
+    19,
+    24,
+    31,
+    39
+   ],
+   "negative_none": [
+    0,
+    6
+   ],
+   "ambiguous_none": [
+    0,
+    6
+   ],
+   "p50": 431,
+   "p95": 655,
+   "failed": 0,
+   "attempt_failures": 0,
+   "mechanisms": {
+    "guidance_word_match_keywords": 69,
+    "guidance_word_match": 59
+   }
+  },
+  "guidance_local_glm": {
+   "all": [
+    110,
+    110,
+    110,
+    116
+   ],
+   "en_to_en": [
+    38,
+    38,
+    38,
+    39
+   ],
+   "zh_hans_to_en": [
+    35,
+    35,
+    35,
+    39
+   ],
+   "zh_hans_to_zh_hans": [
+    15,
+    15,
+    15,
+    15
+   ],
+   "en_to_zh_hans": [
+    14,
+    14,
+    14,
+    15
+   ],
+   "code_switch": [
+    8,
+    8,
+    8,
+    8
+   ],
+   "skill": [
+    75,
+    75,
+    75,
+    77
+   ],
+   "tool": [
+    35,
+    35,
+    35,
+    39
+   ],
+   "negative_none": [
+    6,
+    6
+   ],
+   "ambiguous_none": [
+    0,
+    6
+   ],
+   "p50": 2385,
+   "p95": 4790,
+   "failed": 0,
+   "attempt_failures": 0,
+   "mechanisms": {
+    "guidance_word_match_keywords_picker": 69,
+    "guidance_word_match_picker": 59
+   }
+  },
+  "guidance_glm": {
+   "all": [
+    113,
+    114,
+    114,
+    116
+   ],
+   "en_to_en": [
+    38,
+    38,
+    38,
+    39
+   ],
+   "zh_hans_to_en": [
+    39,
+    39,
+    39,
+    39
+   ],
+   "zh_hans_to_zh_hans": [
+    15,
+    15,
+    15,
+    15
+   ],
+   "en_to_zh_hans": [
+    14,
+    14,
+    14,
+    15
+   ],
+   "code_switch": [
+    7,
+    8,
+    8,
+    8
+   ],
+   "skill": [
+    75,
+    76,
+    76,
+    77
+   ],
+   "tool": [
+    38,
+    38,
+    38,
+    39
+   ],
+   "negative_none": [
+    6,
+    6
+   ],
+   "ambiguous_none": [
+    0,
+    6
+   ],
+   "p50": 4193,
+   "p95": 7776,
+   "failed": 0,
+   "attempt_failures": 0,
+   "mechanisms": {
+    "guidance_word_match_keywords_picker": 69,
+    "guidance_word_match_picker": 59
+   }
+  }
+ }
+}

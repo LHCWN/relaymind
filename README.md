@@ -129,8 +129,18 @@ line says so and `auto` uses the external model the same way. Set
 `detect = false` in a `[placement]` table to skip that check. Every setting is described in
 [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md), section 14.1.
 
+### Per-prompt guidance
+
+The optional [guidance](docs/guidance.md) feature shows an OpenClaw model only the few
+skills and tools one prompt needs, and can limit it to them. It works with no index, on Chinese
+prompts over English skills, and with no API key; a cheap model tells similar skills apart. Any
+third-party algorithm can replace its selection and be compared with the baseline on precision and
+recall.
+
 ### Loopback HTTP selector
 
+This is managed selection v1: it covers skills only and drives managed runs, not OpenClaw
+traffic. For skills and MCP tools, see [guidance](docs/guidance.md).
 [RM28](docs/SPECIFICATION.md#41-routing-and-local-autonomy) permits a selector running
 in another local process; [section 14.3](docs/SPECIFICATION.md#143-loopback-http-selector-contract-spec-040)
 of the specification holds the contract. Start the deterministic standard-library

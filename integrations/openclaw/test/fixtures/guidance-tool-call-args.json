@@ -1,0 +1,205 @@
+{
+ "about": "How OpenClaw 2026.10.7 reads the target and the target's arguments of a tool_call (prepareToolSearchDispatcherArguments, then readToolSearchCallArgs). `tools` is the catalog of tool names, when the case has one. The plugin's strict limit and the turn grader must read calls the same way; guidance-plugin.test.ts also checks each case against the pinned host's own code.",
+ "cases": [
+  {
+   "params": {
+    "id": "skills_read",
+    "args": {
+     "name": "x"
+    }
+   },
+   "args": {
+    "name": "x"
+   },
+   "target": "skills_read"
+  },
+  {
+   "params": {
+    "id": "skills_read",
+    "input": {
+     "name": "x"
+    }
+   },
+   "args": {
+    "name": "x"
+   },
+   "target": "skills_read"
+  },
+  {
+   "params": {
+    "id": "skills_read",
+    "args.name": "x"
+   },
+   "args": {
+    "name": "x"
+   },
+   "target": "skills_read"
+  },
+  {
+   "params": {
+    "id": "skills_read",
+    "args": {
+     "name": "x"
+    },
+    "args.other": 1
+   },
+   "args": {
+    "other": 1,
+    "name": "x"
+   },
+   "target": "skills_read"
+  },
+  {
+   "params": {
+    "id": "skills_read",
+    "args": {
+     "name": "x"
+    },
+    "args.name": "y"
+   },
+   "args": {
+    "name": "x"
+   },
+   "target": "skills_read"
+  },
+  {
+   "params": {
+    "id": "skills_read",
+    "name": "x"
+   },
+   "args": {
+    "name": "x"
+   },
+   "target": "skills_read"
+  },
+  {
+   "params": {
+    "id": "skills_read",
+    "args": {},
+    "name": "x"
+   },
+   "args": {
+    "name": "x"
+   },
+   "target": "skills_read"
+  },
+  {
+   "params": {
+    "id": "read",
+    "path": "a/SKILL.md",
+    "args.offset": 2
+   },
+   "args": {
+    "offset": 2,
+    "path": "a/SKILL.md"
+   },
+   "target": "read"
+  },
+  {
+   "params": {
+    "toolId": "read",
+    "path": "a/SKILL.md"
+   },
+   "args": {
+    "path": "a/SKILL.md"
+   },
+   "target": "read"
+  },
+  {
+   "params": {
+    "name": "read",
+    "path": "a/SKILL.md"
+   },
+   "args": {
+    "path": "a/SKILL.md"
+   },
+   "target": "read"
+  },
+  {
+   "params": {
+    "name": "skills_read",
+    "args": {
+     "name": "x"
+    }
+   },
+   "args": {
+    "name": "x"
+   },
+   "target": "skills_read"
+  },
+  {
+   "params": {
+    "id": "read",
+    "toolId": "other",
+    "path": "a/SKILL.md"
+   },
+   "args": {
+    "toolId": "other",
+    "path": "a/SKILL.md"
+   },
+   "target": "read"
+  },
+  {
+   "params": {
+    "id": "bogus",
+    "name": "gh__blocked",
+    "q": 1
+   },
+   "tools": [
+    "gh__blocked",
+    "read"
+   ],
+   "target": "gh__blocked",
+   "args": {
+    "id": "bogus",
+    "q": 1
+   }
+  },
+  {
+   "params": {
+    "name": "skills_read",
+    "toolId": "nothing",
+    "args": {
+     "name": "x"
+    }
+   },
+   "tools": [
+    "skills_read"
+   ],
+   "target": "nothing",
+   "args": {
+    "name": "x"
+   }
+  },
+  {
+   "params": {
+    "args": {
+     "id": "gh__x",
+     "q": 2
+    }
+   },
+   "tools": [
+    "gh__x"
+   ],
+   "target": "gh__x",
+   "args": {
+    "q": 2
+   }
+  },
+  {
+   "params": {
+    "input": {
+     "toolId": "read",
+     "path": "a/SKILL.md"
+    }
+   },
+   "tools": [
+    "read"
+   ],
+   "target": "read",
+   "args": {
+    "path": "a/SKILL.md"
+   }
+  }
+ ]
+}

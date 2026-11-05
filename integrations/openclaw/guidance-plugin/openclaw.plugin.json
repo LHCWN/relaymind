@@ -1,0 +1,19 @@
+{
+  "id": "relaymind-guidance",
+  "name": "RelayMind guidance",
+  "description": "Optional per-prompt hint that names the few skills and tools a prompt needs (RM45), with an optional strict limit to them (RM46).",
+  "activation": { "onStartup": true },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["baseUrl"],
+    "properties": {
+      "baseUrl": { "type": "string", "description": "The gateway's loopback address, such as http://127.0.0.1:8080/v1." },
+      "tokenEnv": { "type": "string", "description": "Environment variable with the application token. Default RELAYMIND_APP_TOKEN." },
+      "timeoutMs": { "type": "integer", "minimum": 1, "maximum": 14000, "description": "How long to wait before going on without a hint. Default 13000." },
+      "maxPicks": { "type": "integer", "minimum": 1, "maximum": 20, "description": "The most assets to name. Unset, the gateway's setting decides." },
+      "toolsFile": { "type": "string", "description": "Optional absolute path to a JSON list of {name, description} tools to include in the offer." },
+      "limit": { "enum": ["hint", "strict"], "description": "hint (default) leaves other skills loadable. strict refuses what was offered and not selected for this request." }
+    }
+  }
+}

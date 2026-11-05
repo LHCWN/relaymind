@@ -128,7 +128,14 @@ python scripts/example_asset_selector.py --port 8933
 python scripts/example_asset_selector.py --port 8934 --preparation-path /index
 ```
 
-Set the query URL and exact returned name/version in `[recommendations]`.
+In `[recommendations]`, set `primary = "http"`, the query `url`, and the exact returned
+`name` and `version`. Without `primary = "http"` the URL is ignored and word match runs,
+with no error. Raise `primary_ms` and `total_ms` for anything but word match: the 150 ms
+default is too short for a model, and with 300 assets even the word match example needs
+about 110 ms. A timeout quietly falls back to built-in word match, so check that
+`result.attempts` names your mechanism: `lexical_overlap` or `gateway_lexical_fallback`
+means your selector did not answer. Start the gateway from the checkout: the default
+sandbox seed path is relative to it. The complete tutorial is [guidance.md](guidance.md).
 Both examples use `example_lexical/1`; bump identity when your implementation changes.
 Every team gets the same complete ordered eligible offer, never target labels or
 private whole skill bodies. The examples prove transport, not semantic quality.
@@ -151,7 +158,7 @@ The tutorial's complete builtin/stateless/indexed run recipes use these paths:
 ```bash
 python scripts/source_asset_benchmark.py run \
   --catalog /var/tmp/rm-g1-source-guide/catalog-v2/catalog.json \
-  --cases evaluation/assets/matrix-development/cases.v2.json \
+  --cases evaluation/assets/matrix-development/cases.v3.json \
   --evidence-root /var/tmp/rm-g1-source-guide/catalog-v2 \
   --production /var/tmp/rm-g1-source-guide/catalog-v2/builtin-production.toml \
   --track service --output /var/tmp/rm-g1-source-guide/builtin-service.json
