@@ -2270,8 +2270,7 @@ fallback = true
 ```
 
 Enabled configuration also requires explicit `[assets]` sources and the existing
-model-table requirement. This constructs the selector; it does not expose a new
-API in #193. Static URL validation makes no connection. Each dispatched HTTP
+model-table requirement. Static URL validation makes no connection. Each dispatched HTTP
 attempt sends the same full eligible projection, uses one fresh isolated client,
 never follows redirects or retries, and accepts only one bounded UTF-8 JSON
 object with `application/json` media type (optional `charset=utf-8`).
@@ -2760,3 +2759,23 @@ replay with identical bytes. The final wrapper is scanned for the original
 person/gateway secrets after all additions, and inventory exports omit raw
 parameters and response bodies.
 No production MCP operation, runtime snapshot or AC35 acceptance is enabled.
+
+## Per-prompt guidance (spec 0.69; RM45, RM46, AC38 to AC40)
+
+Deterministic, with model doubles: `tests/test_guidance.py`, `tests/test_guidance_api.py`,
+`tests/test_guidance_selectors.py`, `tests/test_guidance_docs.py`,
+`tests/test_guidance_compare.py`, `tests/test_guidance_similar_benchmark.py`,
+`tests/test_guidance_turn_benchmark.py`, `tests/test_matrix_benchmark_v3.py`, and in
+`integrations/openclaw`, `test/guidance-plugin.test.ts`.
+
+Live and separate, because they spend on a real model:
+`scripts/guidance_similar_benchmark.py` runs the stages or a third-party selector over families of similar
+skills, and `scripts/guidance_turn_benchmark.py` runs real full turns, with `--similar` for similar skills,
+`--tools` for MCP tools over a fake server, and strict arms. Develop on `--split development`, report on
+`--split holdout`. Run from one frozen commit and run the default arm twice, since identical runs differ.
+The turn harness refuses a setup that did not apply, and refuses an arm with a missing input before it spends.
+
+A test double of the host cannot show what the host really sends. Real runs found faults the unit tests had
+passed: no descriptions sent on `agent exec`, a relative `read` past the strict limit because the tool hook
+gets no workspace, and a timestamp the host writes before our hint on `chat.send`. See
+[`EVIDENCE.md`](EVIDENCE.md#2026-11-05--per-prompt-guidance-development-runs-284).

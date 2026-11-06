@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://relaymind.local/schemas/guidance_request.v1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "task_text", "assets"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "task_text": {"type": "string", "minLength": 1},
+    "recent_text": {"type": "string"},
+    "max_picks": {"type": "integer", "minimum": 1, "maximum": 20},
+    "assets": {
+      "type": "array",
+      "maxItems": 20000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "kind", "description"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "kind": {"enum": ["skill", "mcp_tool"]},
+          "description": {"type": "string"}
+        }
+      }
+    }
+  }
+}

@@ -4,6 +4,12 @@ Use [the runnable guide](../../../docs/SOURCE_BENCHMARK.md) to acquire originals
 build the catalog and ordinary product metadata imports, prepare a team index,
 and run builtin/external selectors against the same full catalog and cases.
 
+- `sources.v3.json`, `cases.v3.json` (#284): the inputs to use now. Upstream rebuilt 96
+  Matrix archives on 4 November 2026, so the version 2 pins can no longer be acquired.
+  Version 3 re-pins those files. It keeps the same 412 assets, 61 exclusions and 128
+  cases and labels. 86 of 87 Matrix skill texts keep their exact hash. The text of
+  `hmos-account-kit-quicklogin-client` changed, so its evidence moved in the two
+  capability-09 cases; its description still matches those cases.
 - `sources.v2.json`: 442 pinned files, 445 retained original candidates and 28
   predeclared exclusions; the bounded builder produces 412 assets and 61 exclusions.
   It records exact URLs, revisions, lengths, hashes and applicable source evidence.

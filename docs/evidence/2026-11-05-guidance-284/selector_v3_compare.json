@@ -1,0 +1,230 @@
+{
+ "arms": {
+  "builtin": {
+   "metrics": {
+    "prompts": 128,
+    "positive_prompts": 116,
+    "first_pick": 0.41379310344827586,
+    "mrr": 0.4785303776683087,
+    "precision_at_3": 0.1810344827586207,
+    "recall_at_3": 0.5431034482758621,
+    "f1_at_3": 0.27155172413793105,
+    "recall_at_8": 0.5775862068965517,
+    "picks_per_prompt": 9.836206896551724,
+    "unrelated_prompts": 6,
+    "unrelated_false_picks": 1.0,
+    "undecided_prompts": 6,
+    "undecided_asked": 0.0,
+    "undecided_share_offered": 0.75,
+    "workflow_prompts": 0,
+    "workflow_found": null,
+    "workflow_all_found": null,
+    "workflow_precision": null,
+    "workflow_picks": null,
+    "degraded": 0,
+    "p50_ms": 44.8538544587791,
+    "p95_ms": 66.04850012809038
+   },
+   "input_tokens": null
+  },
+  "word": {
+   "metrics": {
+    "prompts": 128,
+    "positive_prompts": 116,
+    "first_pick": 0.5086206896551724,
+    "mrr": 0.5485016420361247,
+    "precision_at_3": 0.38580246913580246,
+    "recall_at_3": 0.5775862068965517,
+    "f1_at_3": 0.4626049491825011,
+    "recall_at_8": 0.6120689655172413,
+    "picks_per_prompt": 3.7586206896551726,
+    "unrelated_prompts": 6,
+    "unrelated_false_picks": 0.0,
+    "undecided_prompts": 6,
+    "undecided_asked": 0.0,
+    "undecided_share_offered": 0.5833333333333334,
+    "workflow_prompts": 0,
+    "workflow_found": null,
+    "workflow_all_found": null,
+    "workflow_precision": null,
+    "workflow_picks": null,
+    "degraded": 0,
+    "p50_ms": 274.51447944622487,
+    "p95_ms": 293.9089999999851
+   },
+   "input_tokens": null,
+   "paired_with_baseline": {
+    "wins": 12,
+    "losses": 1,
+    "same": 103,
+    "sign_test_p": 0.00341796875
+   }
+  },
+  "local": {
+   "metrics": {
+    "prompts": 128,
+    "positive_prompts": 116,
+    "first_pick": 0.603448275862069,
+    "mrr": 0.6740763546798029,
+    "precision_at_3": 0.48919753086419754,
+    "recall_at_3": 0.7241379310344828,
+    "f1_at_3": 0.5839217578176397,
+    "recall_at_8": 0.7931034482758621,
+    "picks_per_prompt": 3.6120689655172415,
+    "unrelated_prompts": 6,
+    "unrelated_false_picks": 0.3333333333333333,
+    "undecided_prompts": 6,
+    "undecided_asked": 0.0,
+    "undecided_share_offered": 0.5833333333333334,
+    "workflow_prompts": 0,
+    "workflow_found": null,
+    "workflow_all_found": null,
+    "workflow_precision": null,
+    "workflow_picks": null,
+    "degraded": 0,
+    "p50_ms": 437.3933121096343,
+    "p95_ms": 659.2231660615653
+   },
+   "input_tokens": null,
+   "paired_with_baseline": {
+    "wins": 27,
+    "losses": 5,
+    "same": 84,
+    "sign_test_p": 0.00011307420209050179
+   }
+  },
+  "local_glm": {
+   "metrics": {
+    "prompts": 128,
+    "positive_prompts": 116,
+    "first_pick": 0.9482758620689655,
+    "mrr": 0.9525862068965517,
+    "precision_at_3": 0.9159420289855073,
+    "recall_at_3": 0.9568965517241379,
+    "f1_at_3": 0.9359715013809022,
+    "recall_at_8": 0.9568965517241379,
+    "picks_per_prompt": 1.103448275862069,
+    "unrelated_prompts": 6,
+    "unrelated_false_picks": 0.0,
+    "undecided_prompts": 6,
+    "undecided_asked": 0.0,
+    "undecided_share_offered": 0.9166666666666666,
+    "workflow_prompts": 0,
+    "workflow_found": null,
+    "workflow_all_found": null,
+    "workflow_precision": null,
+    "workflow_picks": null,
+    "degraded": 0,
+    "p50_ms": 2697.352312505245,
+    "p95_ms": 6400.554083054885
+   },
+   "input_tokens": null,
+   "paired_with_baseline": {
+    "wins": 63,
+    "losses": 1,
+    "same": 52,
+    "sign_test_p": 7.047314121155779e-18
+   }
+  },
+  "glm": {
+   "metrics": {
+    "prompts": 128,
+    "positive_prompts": 116,
+    "first_pick": 0.9827586206896551,
+    "mrr": 0.9827586206896551,
+    "precision_at_3": 0.94683908045977,
+    "recall_at_3": 0.9827586206896551,
+    "f1_at_3": 0.9644645287185148,
+    "recall_at_8": 0.9827586206896551,
+    "picks_per_prompt": 1.0775862068965518,
+    "unrelated_prompts": 6,
+    "unrelated_false_picks": 0.0,
+    "undecided_prompts": 6,
+    "undecided_asked": 0.0,
+    "undecided_share_offered": 0.9166666666666666,
+    "workflow_prompts": 0,
+    "workflow_found": null,
+    "workflow_all_found": null,
+    "workflow_precision": null,
+    "workflow_picks": null,
+    "degraded": 0,
+    "p50_ms": 4415.343250031583,
+    "p95_ms": 8635.100125102326
+   },
+   "input_tokens": null,
+   "paired_with_baseline": {
+    "wins": 66,
+    "losses": 0,
+    "same": 50,
+    "sign_test_p": 2.710505431213761e-20
+   }
+  },
+  "example": {
+   "metrics": {
+    "prompts": 128,
+    "positive_prompts": 116,
+    "first_pick": 0.5086206896551724,
+    "mrr": 0.5453407224958948,
+    "precision_at_3": 0.1925287356321839,
+    "recall_at_3": 0.5775862068965517,
+    "f1_at_3": 0.28879310344827586,
+    "recall_at_8": 0.6120689655172413,
+    "picks_per_prompt": 9.836206896551724,
+    "unrelated_prompts": 6,
+    "unrelated_false_picks": 1.0,
+    "undecided_prompts": 6,
+    "undecided_asked": 0.0,
+    "undecided_share_offered": 0.75,
+    "workflow_prompts": 0,
+    "workflow_found": null,
+    "workflow_all_found": null,
+    "workflow_precision": null,
+    "workflow_picks": null,
+    "degraded": 0,
+    "p50_ms": 49.20310410670936,
+    "p95_ms": 75.12608403339982
+   },
+   "input_tokens": null,
+   "paired_with_baseline": {
+    "wins": 11,
+    "losses": 0,
+    "same": 105,
+    "sign_test_p": 0.0009765625
+   }
+  },
+  "example_glm": {
+   "metrics": {
+    "prompts": 128,
+    "positive_prompts": 116,
+    "first_pick": 0.9741379310344828,
+    "mrr": 0.9741379310344828,
+    "precision_at_3": 0.8994252873563218,
+    "recall_at_3": 0.9741379310344828,
+    "f1_at_3": 0.9352919399196108,
+    "recall_at_8": 0.9741379310344828,
+    "picks_per_prompt": 1.1551724137931034,
+    "unrelated_prompts": 6,
+    "unrelated_false_picks": 0.0,
+    "undecided_prompts": 6,
+    "undecided_asked": 0.0,
+    "undecided_share_offered": 0.7222222222222222,
+    "workflow_prompts": 0,
+    "workflow_found": null,
+    "workflow_all_found": null,
+    "workflow_precision": null,
+    "workflow_picks": null,
+    "degraded": 0,
+    "p50_ms": 4073.878249968402,
+    "p95_ms": 7885.324208065867
+   },
+   "input_tokens": null,
+   "paired_with_baseline": {
+    "wins": 65,
+    "losses": 0,
+    "same": 51,
+    "sign_test_p": 5.421010862427522e-20
+   }
+  }
+ },
+ "lanes": {}
+}

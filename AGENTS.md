@@ -8,10 +8,11 @@ codebase.
 1. **The spec is the single source of truth.**
    [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md) defines what RelayMind
    does. Every implementation task and every acceptance test must reference
-   requirement IDs from it (RM01–RM44, AC01–AC37; RM30 and AC23 are retired;
+   requirement IDs from it (RM01–RM46, AC01–AC40; RM30 and AC23 are retired;
    RM33 and AC24 specify the M9 OpenClaw integration, added in 0.47 and
    revised in 0.49 and 0.50; RM34–RM44 and AC25–AC37 define M10
-   recommendations, added in 0.51 and revised through 0.68; the spec is at 0.68).
+   recommendations, added in 0.51 and revised through 0.68; RM45, RM46 and AC38–AC40 define per-prompt guidance,
+   added in 0.69; the spec is at 0.69).
    Sections 12.6.6–12.6.7 define recorded automated qualification review and
    the separate automated host experiment. Implementation status
    is recorded in docs/ROADMAP.md. If code and spec disagree,

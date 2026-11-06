@@ -1,0 +1,110 @@
+[
+ {
+  "name": "picked skill through tool_call",
+  "result": "al pdf files into one document\\n---\\nBody of alpha-merge.\\n\"\n      }\n    ],\n    \"details\": {\n      \"name\": \"alpha-merge\",\n      \"content\": \"---\\nname: alpha-merge\\ndescription: Merge several pdf files into one document\\n---\\nBody of alpha-merge.\\n\"\n    }\n  }\n}",
+  "refused": false,
+  "requests": 2
+ },
+ {
+  "name": "other skill through tool_call",
+  "result": "RelayMind limit: skill beta-weather is not selected for this request. Selected for this request: gamma-merge, alpha-merge, notion, skill-creator, demo__tool_001.",
+  "refused": true,
+  "requests": 2
+ },
+ {
+  "name": "search through tool_call",
+  "result": "RelayMind limit: searching for other skills is not selected for this request. Selected for this request: gamma-merge, alpha-merge, notion, skill-creator, demo__tool_001.",
+  "refused": true,
+  "requests": 2
+ },
+ {
+  "name": "plain read of the other skill",
+  "result": "RelayMind limit: skill beta-weather is not selected for this request. Selected for this request: gamma-merge, alpha-merge, notion, skill-creator, demo__tool_001.",
+  "refused": true,
+  "requests": 2
+ },
+ {
+  "name": "plain relative read of the other skill",
+  "result": "RelayMind limit: skill beta-weather is not selected for this request. Selected for this request: gamma-merge, alpha-merge, notion, skill-creator, demo__tool_001.",
+  "refused": true,
+  "requests": 2
+ },
+ {
+  "name": "plain read of a file in the other skill folder",
+  "result": "RelayMind limit: skill beta-weather is not selected for this request. Selected for this request: gamma-merge, alpha-merge, notion, skill-creator, demo__tool_001.",
+  "refused": true,
+  "requests": 2
+ },
+ {
+  "name": "plain read of the picked skill",
+  "result": "---\nname: alpha-merge\ndescription: Merge several pdf files into one document\n---\nBody of alpha-merge.\n",
+  "refused": false,
+  "requests": 2
+ },
+ {
+  "name": "selected MCP tool",
+  "result": "\n  },\n  \"result\": {\n    \"content\": [\n      {\n        \"type\": \"text\",\n        \"text\": \"called tool_001\"\n      }\n    ],\n    \"details\": {\n      \"mcpServer\": \"demo\",\n      \"mcpTool\": \"tool_001\"\n    }\n  }\n}\n<<<END_EXTERNAL_UNTRUSTED_CONTENT id=\"cf6c82968109aa1b\">>>",
+  "refused": false,
+  "requests": 2
+ },
+ {
+  "name": "other MCP tool",
+  "result": "RelayMind limit: tool demo__tool_002 is not selected for this request. Selected for this request: gamma-merge, alpha-merge, notion, skill-creator, demo__tool_001.",
+  "refused": true,
+  "requests": 2
+ },
+ {
+  "name": "other skill by name selector",
+  "result": "Validation failed for tool \"tool_call\":\n  - id: must have required properties id\n\nReceived arguments:\n{\n  \"name\": \"skills_read\",\n  \"args\": {\n    \"name\": \"beta-weather\"\n  }\n}",
+  "refused": false,
+  "requests": 2
+ },
+ {
+  "name": "other skill by catalog id",
+  "result": "RelayMind limit: skill beta-weather is not selected for this request. Selected for this request: gamma-merge, alpha-merge, notion, skill-creator, demo__tool_001.",
+  "refused": true,
+  "requests": 2
+ },
+ {
+  "name": "other MCP tool by catalog id",
+  "result": "RelayMind limit: tool demo__tool_002 is not selected for this request. Selected for this request: gamma-merge, alpha-merge, notion, skill-creator, demo__tool_001.",
+  "refused": true,
+  "requests": 2
+ },
+ {
+  "name": "other skill by @ file reference",
+  "result": "RelayMind limit: skill beta-weather is not selected for this request. Selected for this request: gamma-merge, alpha-merge, notion, skill-creator, demo__tool_001.",
+  "refused": true,
+  "requests": 2
+ },
+ {
+  "name": "other skill from the home-folder form",
+  "result": "RelayMind limit: skill beta-weather is not selected for this request. Selected for this request: gamma-merge, alpha-merge, notion, skill-creator, demo__tool_001.",
+  "refused": true,
+  "requests": 2
+ },
+ {
+  "name": "first prompt in a session",
+  "result": "",
+  "refused": false,
+  "requests": 1
+ },
+ {
+  "name": "follow-up keeps the skill",
+  "result": "al pdf files into one document\\n---\\nBody of alpha-merge.\\n\"\n      }\n    ],\n    \"details\": {\n      \"name\": \"alpha-merge\",\n      \"content\": \"---\\nname: alpha-merge\\ndescription: Merge several pdf files into one document\\n---\\nBody of alpha-merge.\\n\"\n    }\n  }\n}",
+  "refused": false,
+  "requests": 2
+ },
+ {
+  "name": "used skill stays on a new topic",
+  "result": "al pdf files into one document\\n---\\nBody of alpha-merge.\\n\"\n      }\n    ],\n    \"details\": {\n      \"name\": \"alpha-merge\",\n      \"content\": \"---\\nname: alpha-merge\\ndescription: Merge several pdf files into one document\\n---\\nBody of alpha-merge.\\n\"\n    }\n  }\n}",
+  "refused": false,
+  "requests": 2
+ },
+ {
+  "name": "unused skill is refused on a new topic",
+  "result": "RelayMind limit: skill gamma-merge is not selected for this request. Selected for this request: beta-weather, weather, add-model-provider, canvas, clawhub, cloud-image-bake, configure-channel, diagram-maker, alpha-merge.",
+  "refused": true,
+  "requests": 2
+ }
+]

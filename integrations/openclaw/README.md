@@ -1275,6 +1275,13 @@ fail. That capture did not establish current session/turn/availability revision
 binding. For the current MCP-use and interactive-approval disposition, see the
 [roadmap](../../docs/ROADMAP.md#m10--multilingual-asset-recommendations-spec-066).
 
+## Optional per-prompt guidance
+
+This provider plugin forwards the host's prompt and tools unchanged and narrows
+nothing. To show the model only the few skills a prompt needs, use the separate
+[guidance plugin](guidance-plugin/README.md) and [its tutorial](../../docs/guidance.md). It can also
+limit a turn to those skills and tools.
+
 ## Native recommendations and explicit actions
 
 [简体中文](README.zh-CN.md) · [Catalog setup](../../docs/asset-selection.md)

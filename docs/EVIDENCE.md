@@ -3685,3 +3685,328 @@ success/cost gates, development catalog and shared-VPS timing limits remain
 explicit. Runtime and raw review originals stay restricted on the VPS; public
 metadata binds their hashes and does not claim a clone includes those bytes.
 Production manual selection and direct-action authority remain unchanged.
+
+## 2026-11-05 — Per-prompt guidance development runs (#284)
+
+### Second round: similar skills, the strict limit and tools (RM45, RM46, AC38 to AC40)
+
+Development diagnostics. A model (DeepSeek Flash) wrote the similar-skill data and its expected answers from a
+short brief, before any tuning and without seeing this code; the developer wrote the unrelated prompts. These are
+not independent labels, loading a skill is not task success, and none of this satisfies AC25 to AC37. Raw results
+are in [`evidence/2026-11-05-guidance-284/`](evidence/2026-11-05-guidance-284/README.md).
+
+Same machine, host and models as below. Every change was tuned on the 8 development families, and the 16 holdout
+families (70 skills) were used only to measure. Two lanes are not held out: the 16 unrelated prompts are the same in
+both splits, and so are the short follow-up phrases (only their earlier request comes from the split), so the false-pick
+and follow-up numbers were seen during tuning. All selection and real-turn numbers below come from commit `e92bb076`,
+the code of this PR as reviewed. The default arms use no RelayMind code, so they were kept from an earlier run of the
+same prompts with the same harness.
+
+The round also changed what the picker is asked for. A simple prompt needs one asset, but a big workflow needs the
+right set, usually 3 to 5 and sometimes more. So the picker now picks the best asset for each task in the prompt, the
+default limit rose from 3 to 8, and each task's matches reach the shortlist. The data gained 16 development and 32
+holdout complex requests, written by the same model, each needing 3 to 5 skills from different families.
+
+**Similar skills, selection only.** Holdout, 284 prompts, 480 assets on offer, `scripts/guidance_compare.py`.
+
+| Arm | First pick | P@3 | R@3 | F1@3 | Picks | False picks | Asked when undecided | Set found | All found | Set exact | Set picks | Failed | p50 ms |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Word match | 26% | 18% | 40% | 0.25 | 5.51 | 12% | 0% | 59% | 36% | 38% | 7.05 | 0 | 9 |
+| Small local keywords | 33% | 25% | 51% | 0.33 | 5.55 | 25% | 0% | 58% | 36% | 43% | 6.25 | 0 | 82 |
+| Local keywords and GLM picker | 85% | 84% | 88% | 0.86 | 1.35 | 6% | 97% | 83% | 56% | 93% | 3.55 | 3 | 2911 |
+| GLM keywords and picker | 88% | 84% | 91% | 0.87 | 1.45 | 19% | 94% | 94% | 83% | 92% | 4.27 | 14 | 4878 |
+| Example third party, no model | 24% | 11% | 33% | 0.17 | 6.99 | 69% | 0% | 49% | 23% | 24% | 8.00 | 0 | 528 |
+| Example third party with GLM | 76% | 86% | 76% | 0.81 | 0.95 | 19% | 0% | 96% | 84% | 98% | 3.89 | 3 | 4296 |
+
+"Set" columns are over the 64 complex requests: the share of the needed set picked, the share with the whole set,
+the share of picks that are needed, and picks per request. Failed is mostly the picker passing the 12 s limit, which
+falls back to word match; that fallback is also most of the false picks with GLM.
+
+| Old to new | First pick or set found | Whole set found | F1@3 or set exact | Wins/losses (sign test p) |
+| --- | --- | --- | --- | --- |
+| GLM, English one-skill prompts | 69% to 90% | | 0.56 to 0.88 | 16/1 (0.00027) |
+| GLM, Chinese one-skill prompts | 70% to 93% | | 0.60 to 0.92 | 18/2 (0.0004) |
+| GLM, English complex requests | 60% to 96% | 9% to 84% | 78% to 97% | 28/0 (7.5e-09) |
+| GLM, Chinese complex requests | 62% to 92% | 19% to 81% | 62% to 87% | 22/1 (5.7e-06) |
+| Local and GLM, English one-skill prompts | 67% to 89% | | 0.61 to 0.88 | 17/2 (0.00073) |
+| Local and GLM, Chinese one-skill prompts | 59% to 84% | | 0.56 to 0.86 | 21/3 (0.00028) |
+| Local and GLM, English complex requests | 61% to 96% | 9% to 81% | 82% to 97% | 27/0 (1.5e-08) |
+| Local and GLM, Chinese complex requests | 44% to 71% | 3% to 31% | 67% to 90% | 23/1 (3e-06) |
+
+Old code had no follow-up input, so follow-ups are left out of this comparison. With GLM, unrelated English prompts got
+a false pick 2 of 8 times, against 0 before; Chinese went from 3 of 8 to 1 of 8. The picker's input per prompt is about
+2,900 tokens, about 50% more than before, because it reads more of each description. The small local model was also
+tried as the picker, through a development-only setting since removed, on development data only, and rejected: its
+first pick was no better than word match (16 of 32 English, 9 of 32 Chinese).
+
+**Larger benchmark, selection only.** `cases.v3.json`, 128 cases, built-in floor as baseline.
+
+| Arm | First pick | P@3 | R@3 | F1@3 | Picks | False picks (of 6) | Before: P@3, R@3, F1@3, false picks |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Built-in word floor | 41% | 18% | 54% | 0.27 | 9.84 | 6 | same |
+| Word match | 51% | 39% | 58% | 0.46 | 3.76 | 0 | 19%, 58%, 0.29, 6 |
+| Small local keywords | 60% | 49% | 72% | 0.58 | 3.61 | 2 | 25%, 76%, 0.38, 6 |
+| Local keywords and GLM picker | 95% | 92% | 96% | 0.94 | 1.10 | 0 | 52%, 95%, 0.68, 0 |
+| GLM keywords and picker | 98% | 95% | 98% | 0.96 | 1.08 | 0 | 51%, 98%, 0.67, 0 |
+| Example third party with GLM | 97% | 90% | 97% | 0.94 | 1.16 | 0 | 50%, 96%, 0.65, 0 |
+
+Every `compare` against the floor reported `compatible: true` and `acceptance_eligible: false`.
+
+**Similar skills, real turns.** 40 one-skill prompts (20 English, 20 Chinese) from the holdout, real OpenClaw
+2026.10.7, real GLM, 349 skills installed, read-only tools. No run failed. The picker's own call adds about 2,900 input
+tokens per prompt, not in these tables.
+
+| Arm | Right skill | Against default: won/lost (p) | Hint right | Used search | Median first input | Median total input |
+| --- | ---: | --- | ---: | ---: | ---: | ---: |
+| Default | 27 of 40 |  |  | 27 | 9,535 | 30,383 |
+| Default, repeat | 24 of 40 | 6/9 (0.61) |  | 22 | 9,538 | 29,577 |
+| Small local keywords, no key | 28 of 40 | 7/6 (1) | 22 | 9 | 3,090 | 6,317 |
+| Local keywords and GLM picker | 35 of 40 | 12/4 (0.077) | 35 | 2 | 2,832 | 5,766 |
+| GLM keywords and picker | 36 of 40 | 11/2 (0.022) | 38 | 1 | 2,834 | 5,766 |
+| The same, strict | 35 of 40 | 12/4 (0.077) | 38 | 0 | 2,836 | 5,768 |
+| Example third party with GLM | 38 of 40 | 13/2 (0.0074) | 38 | 3 | 2,834 | 5,772 |
+
+Two identical default arms differ on 15 prompts, which is the noise. The arms were compared without a correction for
+their number, so read the single p-values as a guide. Default lists 66 skills in the prompt; every other arm lists 0.
+
+**Big workflows, real turns.** 32 complex requests (16 English, 16 Chinese) from the holdout, each needing about 4
+skills, same setup. Won and lost count prompts where an arm loaded more or less of the needed set than the default.
+
+| Arm | Set loaded | Whole set loaded | Skills loaded | Against default: won/lost (p) | Used search | Median first input | Median total input |
+| --- | ---: | ---: | ---: | --- | ---: | ---: | ---: |
+| Default | 37% | 8 of 32 | 1.5 |  | 15 | 9,524 | 19,108 |
+| Local keywords and GLM picker | 71% | 17 of 32 | 2.8 | 19/7 (0.029) | 2 | 3,020 | 6,342 |
+| GLM keywords and picker | 93% | 26 of 32 | 3.6 | 23/1 (3e-06) | 1 | 3,030 | 6,396 |
+| The same, strict | 93% | 26 of 32 | 3.6 | 23/2 (1.9e-05) | 0 | 3,034 | 6,400 |
+| Example third party with GLM | 92% | 28 of 32 | 3.6 | 22/1 (5.7e-06) | 0 | 3,030 | 6,400 |
+
+The default mostly loads one or two skills and misses the rest. The weak case is Chinese requests with local keywords:
+the local model's single line of keywords does not cover every task, and 29 of 58 needed skills were loaded, against
+57 of 64 in English.
+
+In the strict arms no skill was loaded outside its hint in the similar-skill and workflow tests. In the regression
+test one strict turn was graded as loading a skill outside its hint, after three refusals; the skill's own text told
+the model to open the other skill. Its capture was not kept. Run twice more with captures, the same prompt was refused
+every time, by our limit and by the host. Looking for the cause found a real gap: the host's `read` takes a leading `@`
+and `~`, which the plugin did not. That was fixed after these runs, so the strict numbers here are from the plugin
+before the fix; the fix can only refuse more.
+
+**Regression, real turns.** The first round's 40 prompts over 279 skills.
+
+| Arm | Right skill | Against default: won/lost (p) | Hint right | Used search | Median first input | Median total input |
+| --- | ---: | --- | ---: | ---: | ---: | ---: |
+| Default | 35 of 40 |  |  | 34 | 9,587 | 37,198 |
+| Small local keywords, no key | 33 of 40 | 4/6 (0.75) | 31 | 6 | 3,006 | 11,085 |
+| Local keywords and GLM picker | 38 of 40 | 5/2 (0.45) | 36 | 5 | 2,834 | 11,326 |
+| GLM keywords and picker | 39 of 40 | 5/1 (0.22) | 37 | 7 | 2,835 | 10,088 |
+| The same, strict | 38 of 40 | 5/2 (0.45) | 38 | 0 | 2,836 | 10,770 |
+
+On these less similar skills the right-skill count did not fall, and a rise is not proven. One default run ended with an
+error. An automated review found that the grader counted a tool result as a refusal whenever it held a word such as
+"blocked", and one expected skill, `architectural-dxf-extraction`, has that word in its own text. Both its cases were
+graded wrong in every arm. The grader now counts only the refusal messages of the host and the plugin, and those 10
+runs were run again with it: all 10 loaded the right skill, so every arm above rose by 2 and no comparison changed.
+
+**MCP tools, real turns.** 20 prompts over a fake MCP server with the catalog's 131 tools, which only answers "called".
+The right answer is choosing the tool, by describing or calling it.
+
+| Arm | Chose the right tool | Against default: won/lost (p) | Hint right | Used search | Median first input | Median total input |
+| --- | ---: | --- | ---: | ---: | ---: | ---: |
+| Default | 14 of 20 |  |  | 0 | 9,950 | 32,246 |
+| Default, repeat | 15 of 20 | 3/2 (1) |  | 0 | 9,951 | 32,402 |
+| GLM keywords and picker | 14 of 20 | 4/4 (1) | 19 | 0 | 3,347 | 12,684 |
+| The same, strict | 13 of 20 | 4/5 (1) | 19 | 0 | 3,354 | 12,551 |
+
+The hint named the right tool on 19 of 20, so selection is sound, but tool use is not shown to improve. Captured turns
+show why at least part of this happens: these prompts hold no real arguments, such as a repository, so a model given
+the name often asks the user for them and touches no tool, which this grade counts as a miss. A test with complete
+prompts is still needed.
+
+**Strict limit on a real gateway.** `chat.send` through real OpenClaw and the real plugin, with a scripted model, so
+that each call is exact (`strict_gateway.json`). Refused: another skill through `tool_call`, by plain name and by
+catalog ID; search; a plain `read` of another skill by absolute and relative path, with the host's `@` file prefix and
+from `~`; a plain `read` of another file in its folder; another MCP tool, by plain name and by catalog ID; a skill not
+yet used, on a new topic. Allowed: the
+selected skill through `tool_call` and plain `read`; the selected MCP tool; a follow-up; a skill the session already
+used, on a new topic. A `tool_call` with `name` in place of `id` was rejected by the host's own validation. Host
+routes other than `chat.send` and `agent exec`, and real channels, were not tested.
+
+**More than 1,000 assets.** The same 284 holdout prompts with 10,000 assets on offer: the 70 holdout skills, the 410
+background assets, and copies of the background under new names. With GLM, F1 at 3 was 0.84 at both sizes, the first
+pick 83% against 82%, the needed set of a workflow 92% against 95%, and false picks 0% against 12%. GLM's own
+failures were 26 against 22. Word match alone took a median 27 ms per prompt at 10,000 assets (p95 67 ms, 512 ms
+for the first, cold prompt), timed one prompt at a time; at 480 assets, 2 ms.
+
+**Speed with no index.** Word match alone, in one process, while other work ran: 1 ms warm and 20 ms cold at 412
+assets, 8 and 248 ms at 5,000, 48 and 985 ms at 20,000.
+
+After these runs, Windows CI and a follow-up check found two path faults in the plugin, both fixed with tests. It
+refused a Windows `toolsFile` path, which turned the plugin off, and a strict `read` with different letter case got
+past the limit on a disk that ignores case. The strict gateway scenarios above were run again after these fixes, and the
+token and right-skill runs were not repeated, because neither fix touches a path those runs use.
+
+**Faults these runs found.** Each was fixed with a test, and none would have shown in unit tests alone:
+
+- A cut at 180 characters hid what sets similar skills apart.
+- The plugin's relative `read` check used the wrong folder, because the tool hook gets no workspace.
+- The host writes a timestamp before our hint, so earlier hints leaked into the follow-up text.
+- A short new request was mixed with the earlier topic.
+- The host's default caps (200 skills per source, 300 folders per root) hid some skills from every arm. Those runs
+  were discarded; the tutorial now says to raise the caps, and the plugin warns at the first one.
+- The first-round turn grader never matched a refused call, because the host rewrites tool-call IDs by dropping the
+  underscore. It could count a refused load as a load. Skills were not hidden from any arm in that round, so a
+  refusal was unlikely to change its results, and the default arm repeated here gave the same 33.
+
+- The picker was told to pick one asset normally, with a limit of 3, so a big workflow got only part of its set.
+- After the runs: the plugin refused a Windows `toolsFile` path, which turned it off; a strict `read` with other
+  letter case, or with the host's `@` or `~` forms, got past the limit.
+
+A second review on the PR found more, also fixed with tests: a picker answer followed by text with braces was thrown
+away; a full stop inside a number or a domain split a task; a filler follow-up such as "yes, do that" was missed in a
+list under 50 assets; a pick with no name gave an empty name in the hint; and the turn grader missed the `toolId` and
+`name` forms and Windows paths. The holdout selection was measured again after these fixes. None of them changes what
+happens for a Chinese prompt or a workflow (the task split is the same on all 284 prompts), yet among the prompts that
+succeeded in both runs GLM picked differently on 16: 3 better, 13 worse. That is GLM's own run-to-run variation, and
+GLM was slower on that run (median 6.7 s against 4.9 s), so 22 selections hit the 12 s limit against 14. Read
+differences of this size between runs as noise.
+
+A third review fixed, with tests: a two-part tool ID such as `server:tool` got past the strict limit; Chinese filler
+follow-ups such as "好的，就这么做" were missed in a list under 50 assets; a name touching Chinese letters was not
+seen as named; a short polite sentence such as "Thanks." cancelled every task of a workflow; the example selector lost
+its word-match list when the answer named no number; a thinking block cut off by the output limit was not removed;
+and the turn grader missed `file_path`, other letter case of `SKILL.md` and UTF-8 logs on Windows. Word match on the
+holdout gave the same results after these fixes, except Chinese follow-ups, which now use the earlier text.
+
+An automated review on the PR found two more, also fixed with tests: with the strict limit, a pick whose name cannot
+be shown in the hint set a limit the model could not see; and the redaction of prompt text missed a quoted JSON key
+such as `"api_key": "..."` and a prefixed one such as `OPENAI_API_KEY=...`.
+
+The first review on the PR found further faults, also fixed with tests: names and descriptions cut by letters instead of
+bytes in the benchmark server, a division by zero in the metrics, a development-only picker setting that the gateway
+would refuse, and the strict limit resolving every skill folder on every prompt, about 0.25 s at 20,000 skills, with a
+copy per session. Reviews by Codex and DeepSeek found further faults, also fixed: a failed read could widen the limit, a secret in a
+description reached the picker, a summary could pass its limit, repeated cases were dropped from the paired test, and
+others. Two DeepSeek points were checked and not taken as stated: `choice_required` is not the same as `choose`, and
+the host itself refuses `tool_call` with `name`.
+
+**Cost.** The real turns kept here used about 13M GLM input tokens. Turns superseded by the final code used about 5M,
+and turns discarded for harness faults about 6.5M: about 2M with a broken grader, about 3.2M with the host's caps, and
+1.3M with MCP tools filtered out. Picker calls in the selection runs used about 7M, and the example arms and the larger
+benchmark were not counted.
+
+### First round
+
+Development diagnostics for section 7.7 (RM45, AC38, AC39), measured before the second round below. The expected answers are
+developer-authored, every `compare` says `acceptance_eligible: false`, and loading the right skill
+is not task success. None of this satisfies AC25 to AC37. Raw summaries are in
+[`evidence/2026-11-05-guidance-284/`](evidence/2026-11-05-guidance-284/README.md).
+
+| Field | Value |
+| --- | --- |
+| Machine | Apple M1, 8 GiB RAM, macOS 27.0.1, CPU only for the small model |
+| Host | OpenClaw 2026.10.7 (pinned), with `tools.allow` set to read-only tools |
+| Small model | `models/qwen3-0.6b-q4_k_m.manifest.json`, llama-server 0.8.0 build 11960, `-ngl 0 -t 4 -c 8192` |
+| External model | GLM 5.3 flash, `reasoning_effort: low` |
+| Data | `evaluation/assets/matrix-development/cases.v3.json`: 412 assets, 128 cases, of which 116 positive |
+
+### Which assets each selector chooses
+
+All arms ran from commit `9f823dd9`, runner digest `09594cef03a1d461…`, and each `compare` against
+the built-in floor returned `compatible: true` over 128 paired slots. Commands:
+`scripts/source_asset_benchmark.py run --track service`, then `compare`. Time is the p50 through the
+benchmark, which sends the whole catalog each time; it is not comparable between arms, and the report
+says `performance_comparable: false`.
+
+| Arm | Top 1 of 116 | Top 3 | Top 8 | Chinese to English, top 3 of 39 | Unrelated prompts with no pick, of 6 | p50 ms |
+| --- | --- | --- | --- | --- | --- | --- |
+| Built-in word floor (`builtin90`) | 48 | 63 | 67 | 0 | 0 | 44 |
+| Guidance word match | 59 | 67 | 71 | 0 | 0 | 278 |
+| Example third party, no model | 59 | 67 | 71 | 0 | 0 | 49 |
+| Guidance, small local keywords | 76 | 88 | 100 | 20 | 0 | 431 |
+| Guidance, local keywords and GLM picker | 110 | 110 | 110 | 35 | 6 | 2385 |
+| Example third party with GLM | 111 | 111 | 111 | 36 | 6 | 3779 |
+| Guidance, GLM keywords and GLM picker | 113 | 114 | 114 | 39 | 6 | 4193 |
+
+No arm chose nothing on the 6 ambiguous cases. An arm with no picker always offers something when any
+word matches, so it never chooses "nothing" on an unrelated prompt.
+
+### Does the real model then load the right skill?
+
+`scripts/guidance_turn_benchmark.py`: real OpenClaw, the real plugin, a real gateway, and GLM through
+a recording proxy. 40 prompts, 10 per lane, chosen by seed `20261105` before any outcome; 279 skills
+installed. The model always had read-only tools. No run failed. "Hint right" means that the hint named
+an accepted skill.
+
+| Arm | Commit | Right skill of 40 | Hint right | Used `skills_search` | Median first input tokens | Median total input tokens |
+| --- | --- | --- | --- | --- | --- | --- |
+| Default OpenClaw | `11d9d1fb` | 33 | none | 32 | 9,487 | 38,344 |
+| Default OpenClaw, repeated | `11d9d1fb` | 32 | none | 32 | 9,489 | 37,820 |
+| Word match | `60c84c10` | 31 | 27 | 8 | 2,868 | 10,783 |
+| Local keywords | `60c84c10` | 37 | 34 | 7 | 2,868 | 12,619 |
+| Local keywords and GLM picker | `9f823dd9` | 38 | 37 | 9 | 2,830 | 11,467 |
+| Example third party with GLM | `9f823dd9` | 36 | 37 | 7 | 2,830 | 11,697 |
+
+Default arms use neither the plugin nor the gateway, so the later commits do not change them.
+
+What this shows and what it does not:
+
+- Context use is about 70% lower, in the first request and over the whole turn. The picker adds its
+  own request to the cheap model: a median of 2,254 input tokens per prompt, not counted above.
+- The right-skill count did not fall. A rise is not proven: against the default arm, the best arm won
+  7 prompts and lost 2, which is a two-sided sign test p of 0.18, and the two identical default arms
+  themselves differ on 9 prompts.
+- Word match alone is not enough for mixed languages: on Chinese prompts for English skills it had 4
+  of 10, and its hint held none of them. The model found those 4 through `skills_search`.
+- Not measured: final answer quality, real channels, pinned routes, unrelated prompts in real turns,
+  and any label not written by the developer.
+
+### Failures found and kept on record
+
+- The first turn run, at `11d9d1fb`, is invalid for its guided arms. The plugin read `fileHost` as
+  meaning another machine unless it was `"gateway"`, but the pinned host leaves it unset for local
+  skills on `agent exec`. All 300 skills reached the gateway with no description, so no Chinese prompt
+  could match a Chinese skill by word match. That run gave right-skill counts of 26, 28, 28 and 19.
+  The preflight had passed because it tried only an English prompt, which can match a skill's name.
+  Commit `ac25a4d6` made this worse, because an unreadable skill became not offered: at that commit
+  the plugin would offer nothing on this route. Fixed in `60c84c10`; the preflight now also tries a
+  Chinese prompt against Chinese skills, and the harness records the hinted names.
+- The picker's 60 output token limit failed on 3 and 4 of 40 prompts in two passes, because GLM's
+  thinking counts against that limit, and the answer dropped back to word match. A limit of 300 gave
+  0 of 40 at about the same p50 (2,553 ms and 2,294 ms). Fixed in `9f823dd9`, along with the example
+  selector, whose 80 and 60 limits had the same fault.
+- The first `example_glm` arm failed 128 of 128 with `invalid_result`, because its production file named
+  a different selector than the example returns. The gateway was right to refuse it. The table above
+  is the re-run with the right name, from the same commit.
+- Earlier runs at `11d9d1fb` and `d188c641`, kept out of the tables, gave similar selector results
+  with the 60 token limit: 108 and 112 top 1 for the two picker arms.
+
+### Small model speed on fewer CPU threads
+
+Keywords for the 39 Chinese to English prompts against 279 skills, through `run_guidance`, one pass.
+This only restricts threads on the M1. It is not a measurement on an old laptop.
+
+| Threads | p50 ms | p95 ms | Max ms | Process memory after the run |
+| --- | --- | --- | --- | --- |
+| 4 | 233 | 350 | 499 | 1.8 GB |
+| 2 | 359 | 529 | 713 | 1.9 GB |
+| 1 | 648 | 926 | 1,310 | 1.9 GB |
+
+Start to ready was about 1 s with the file already in the disk cache, and 13 s in the one earlier cold
+start. Word match needs no model and no index. Through the endpoint it took 8 ms at 412 assets, 84 ms
+at 5,000, and at 20,000 it took 365 ms warm and 1.37 s cold.
+
+### Real host checks at the final plugin
+
+Each used a recording stand-in for the gateway. On both `agent exec` and `chat.send`, the plugin sent
+the description of a visible skill and did not offer a skill with `disable-model-invocation: true`.
+On `chat.send` the hint reached the model in the same turn. An earlier live run, before the fixes above,
+also showed that a skill installed mid-session is offered on the next prompt; that was not repeated.
+
+### Limits
+
+Guidance hides the list and hints; it does not forbid. `skills_read` and a plain `read` of a `SKILL.md`
+still work, which is the safety net. `maxSkillsInPrompt: 0` is host-wide. A hint stays in the session
+history. Tools reach the plugin only through `toolsFile`, because the host keeps its tool list from
+third-party plugins. The word match ranking found only 22 of 39 English cases in its top 40 at 100,000
+assets on synthetic data, and the request limit is 20,000. A third party gets the best 1,000 by word
+match.

@@ -1,0 +1,218 @@
+{
+ "default": {
+  "runs": 40,
+  "failed": 0,
+  "right": 33,
+  "any_skill": 37,
+  "hint_seen": 0,
+  "hint_right": 0,
+  "searched": 32,
+  "median_first_input": 9487.0,
+  "median_total_input": 38344.0,
+  "sum_total_input": 2318109,
+  "median_wall_s": 49.15,
+  "median_hinted": 0.0,
+  "by_lane": {
+   "en_to_en": {
+    "right": 9,
+    "hint_right": 0,
+    "runs": 10
+   },
+   "zh_hans_to_en": {
+    "right": 6,
+    "hint_right": 0,
+    "runs": 10
+   },
+   "zh_hans_to_zh_hans": {
+    "right": 9,
+    "hint_right": 0,
+    "runs": 10
+   },
+   "en_to_zh_hans": {
+    "right": 9,
+    "hint_right": 0,
+    "runs": 10
+   }
+  }
+ },
+ "default_repeat": {
+  "runs": 40,
+  "failed": 0,
+  "right": 32,
+  "any_skill": 35,
+  "hint_seen": 0,
+  "hint_right": 0,
+  "searched": 32,
+  "median_first_input": 9489.0,
+  "median_total_input": 37820.0,
+  "sum_total_input": 2219256,
+  "median_wall_s": 41.15,
+  "median_hinted": 0.0,
+  "by_lane": {
+   "en_to_en": {
+    "right": 7,
+    "hint_right": 0,
+    "runs": 10
+   },
+   "zh_hans_to_en": {
+    "right": 8,
+    "hint_right": 0,
+    "runs": 10
+   },
+   "zh_hans_to_zh_hans": {
+    "right": 8,
+    "hint_right": 0,
+    "runs": 10
+   },
+   "en_to_zh_hans": {
+    "right": 9,
+    "hint_right": 0,
+    "runs": 10
+   }
+  }
+ },
+ "word": {
+  "runs": 40,
+  "failed": 0,
+  "right": 31,
+  "any_skill": 35,
+  "hint_seen": 40,
+  "hint_right": 27,
+  "searched": 8,
+  "median_first_input": 2868.0,
+  "median_total_input": 10783.0,
+  "sum_total_input": 700103,
+  "median_wall_s": 40.05,
+  "median_hinted": 8.0,
+  "by_lane": {
+   "en_to_en": {
+    "right": 10,
+    "hint_right": 10,
+    "runs": 10
+   },
+   "zh_hans_to_zh_hans": {
+    "right": 10,
+    "hint_right": 10,
+    "runs": 10
+   },
+   "zh_hans_to_en": {
+    "right": 4,
+    "hint_right": 0,
+    "runs": 10
+   },
+   "en_to_zh_hans": {
+    "right": 7,
+    "hint_right": 7,
+    "runs": 10
+   }
+  }
+ },
+ "local": {
+  "runs": 40,
+  "failed": 0,
+  "right": 37,
+  "any_skill": 40,
+  "hint_seen": 40,
+  "hint_right": 34,
+  "searched": 7,
+  "median_first_input": 2867.5,
+  "median_total_input": 12619.0,
+  "sum_total_input": 721555,
+  "median_wall_s": 38.05,
+  "median_hinted": 8.0,
+  "by_lane": {
+   "en_to_en": {
+    "right": 10,
+    "hint_right": 10,
+    "runs": 10
+   },
+   "zh_hans_to_zh_hans": {
+    "right": 10,
+    "hint_right": 10,
+    "runs": 10
+   },
+   "zh_hans_to_en": {
+    "right": 8,
+    "hint_right": 7,
+    "runs": 10
+   },
+   "en_to_zh_hans": {
+    "right": 9,
+    "hint_right": 7,
+    "runs": 10
+   }
+  }
+ },
+ "local_external": {
+  "runs": 40,
+  "failed": 0,
+  "right": 38,
+  "any_skill": 40,
+  "hint_seen": 40,
+  "hint_right": 37,
+  "searched": 9,
+  "median_first_input": 2830.0,
+  "median_total_input": 11467.0,
+  "sum_total_input": 1064199,
+  "median_wall_s": 44.75,
+  "median_hinted": 3.0,
+  "by_lane": {
+   "en_to_en": {
+    "right": 10,
+    "hint_right": 10,
+    "runs": 10
+   },
+   "zh_hans_to_zh_hans": {
+    "right": 10,
+    "hint_right": 10,
+    "runs": 10
+   },
+   "zh_hans_to_en": {
+    "right": 9,
+    "hint_right": 9,
+    "runs": 10
+   },
+   "en_to_zh_hans": {
+    "right": 9,
+    "hint_right": 8,
+    "runs": 10
+   }
+  }
+ },
+ "third_party": {
+  "runs": 40,
+  "failed": 0,
+  "right": 36,
+  "any_skill": 39,
+  "hint_seen": 40,
+  "hint_right": 37,
+  "searched": 7,
+  "median_first_input": 2829.5,
+  "median_total_input": 11696.5,
+  "sum_total_input": 986562,
+  "median_wall_s": 44.1,
+  "median_hinted": 3.0,
+  "by_lane": {
+   "en_to_en": {
+    "right": 9,
+    "hint_right": 10,
+    "runs": 10
+   },
+   "zh_hans_to_zh_hans": {
+    "right": 10,
+    "hint_right": 10,
+    "runs": 10
+   },
+   "zh_hans_to_en": {
+    "right": 9,
+    "hint_right": 9,
+    "runs": 10
+   },
+   "en_to_zh_hans": {
+    "right": 8,
+    "hint_right": 8,
+    "runs": 10
+   }
+  }
+ }
+}

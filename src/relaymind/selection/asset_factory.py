@@ -9,8 +9,7 @@ from relaymind.selection.asset_lexical import LexicalAssetSelector
 def build_asset_selector(settings: RecommendationSettings) -> AssetSelector:
     """The separate v2 primary; a lexical primary starts without a generation.
 
-    It reports not_ready until a compatible publication exists. #194/#196 own
-    API attachment and operational compatible-publication readiness.
+    It reports not_ready until a compatible publication exists.
     """
     if settings.primary == "lexical":
         return LexicalAssetSelector(None)

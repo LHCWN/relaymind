@@ -12,6 +12,20 @@
 
 ## Current
 
+- `guidance_selector_server.py` — serve the built-in guidance stages as a selection v2
+  service, so the benchmark compares them like any third-party selector (RM40, RM45).
+- `example_intent_selector.py` — a complete third-party selector with no RelayMind imports,
+  with optional keywords and a picker through any OpenAI-compatible model (RM28, RM45).
+- `guidance_turn_benchmark.py` — real full turns through OpenClaw, the guidance plugin, a
+  gateway and an external model, including similar skills, MCP tools and the strict limit
+  (RM16, RM45, RM46); see `docs/guidance.md`.
+- `guidance_similar_benchmark.py` — the guidance stages or your selector over families of similar
+  skills, with follow-ups, undecided and unrelated prompts (RM16, RM45).
+- `guidance_compare.py` — precision, recall, F1, MRR and more for any selector against a baseline,
+  from reports of either benchmark (RM16, RM40, RM45).
+
+The five guidance scripts above are developer tools. They and the recorded evidence ran on macOS and
+Linux. Their unit tests also run on Windows in CI, but no real benchmark run was made on Windows.
 - `source_asset_benchmark.py` — acquire pinned originals, build offline inputs,
   run identical source-backed skill/MCP cases, compare internal JSON diagnostics
   and emit explicit user-choice stdout receipts (RM34/RM40/RM44). Start with the

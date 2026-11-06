@@ -157,8 +157,9 @@ enabled_workflows = []
 #     A selector that chooses nothing, errs, times out, or proposes what the
 #     gateway does not admit passes to the next one; when none chooses, the run
 #     hands off to the external model with the skill catalog (selection_failed).
-#     An http selector (a table with transport and url) is not available yet and
-#     stops startup.
+#     An http selector is a table in the chain, with no model call of its own:
+#     { transport = "http", name = "my_selector", version = "1", url = "http://127.0.0.1:8051/select" }
+#     Only plain http on a loopback address is accepted (README, spec section 14.3).
 #   timeout_seconds: the time limit of a selector that is not a model; the model
 #     router is bounded by its generation's limits instead.
 #   example_match_score, example_match_margin: numbers in [0, 1]. example_match
@@ -184,9 +185,20 @@ routing = false
 [ui]
 mode = "live"
 
+# Per-prompt guidance (spec section 7.7; RM45, RM46; docs/guidance.md). Disabled by default.
+# Proposes the few assets one prompt needs from the list the host sends. Needs no
+# index and no model. keywords: none, local (needs [local_model]) or external.
+# picker: none or external (needs [external_model]). External stages only run if set.
+# [guidance]
+# enabled = true
+# keywords = "local"
+# picker = "none"
+# total_ms = 12000
+# max_picks = 8    # The most assets to name. A big workflow can need several.
+
 # Independent asset discovery (#192; RM34/AC25). Disabled by default.
-# Enabling starts bounded catalog scans only; recommendation API/lexical readiness
-# is delivered by later issues. At least one model table above is still required.
+# Enabling starts bounded catalog scans and the recommendation API, which is ready
+# with word match alone. At least one model table above is still required.
 # Local/imported assets always have unknown host availability. Installing a skill
 # in a host is a separate manual operation; catalog reads do not execute it.
 # [recommendations]
@@ -197,6 +209,9 @@ mode = "live"
 # primary_ms = 150
 # primary = "lexical"
 # fallback = true
+# To use your own selector (docs/guidance.md): set primary = "http" and all of
+# name, version and url. Without primary = "http" the URL is ignored, with no error.
+# Raise primary_ms and total_ms: 150 ms is too short for any model call.
 #
 # [[assets.sources]]
 # source_id = "installed-skills"

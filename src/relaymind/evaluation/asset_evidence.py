@@ -191,6 +191,8 @@ _GENERATOR_ANCHORS = {
     ),
     "docs/SPECIFICATION.md": frozenset(
         {
+            # 0.69 per-prompt guidance and its strict limit (#284); subject to the owner's review.
+            ("7003b9e3f13621a3ae30713a65d03a507501941dd4cc2925c73af9685d7d8297", 653173),
             # 0.68 editorial reconciliation: evidence links and implemented-operation pointers.
             ("0eaf1b7a94bcc34b9df9ae2444a5b18fd414eb9f05667fcefc6d595e566b7549", 639476),
             # 0.68 adds separately labeled automated host-operation review.
