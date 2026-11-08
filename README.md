@@ -41,7 +41,9 @@ See the [interface guide](docs/asset-selection.md#choose-the-right-interface).
 
 ## Works with OpenClaw
 
-The included provider plugin supports **OpenClaw 2026.10.7**. Select
+The included provider plugin is tested on **OpenClaw 2026.10.7** and loads on
+later 2026 releases (reported as unqualified). Install it with
+`relaymind openclaw install --release <folder>`, then select
 `relaymind/relaymind-client-tools` to use the gateway for inference. OpenClaw
 keeps ownership of sessions, tool execution, permissions and approvals.
 
@@ -51,8 +53,10 @@ observed instruction use; loaded skill use and MCP execution have separate
 gates. See the panel guide in [English](integrations/openclaw/README.md#native-recommendations-and-explicit-actions)
 or [简体中文](integrations/openclaw/README.zh-CN.md).
 
-The [installation guide](integrations/openclaw/README.md#operator-guide-145)
-owns the pinned Node requirements, packaging, token setup and configuration.
+The [install guide](integrations/openclaw/README.md#install-guide) has the
+user steps and the developer steps to prepare the ready-made plugin; the
+[operator guide](integrations/openclaw/README.md#operator-guide-145) owns the
+Node requirements, token setup and configuration.
 
 ## Scope and evidence
 

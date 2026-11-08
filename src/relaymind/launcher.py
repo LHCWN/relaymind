@@ -35,6 +35,7 @@ from typing import Any, NoReturn
 
 from fastapi import FastAPI
 
+from relaymind import openclaw_setup
 from relaymind.adapters import ModelAdapter
 from relaymind.adapters.chat_completions import ChatCompletionsAdapter, ChatCompletionsConfig
 from relaymind.adapters.llamacpp import REQUEST_TIMEOUT_SECONDS, LlamaCppAdapter, LlamaCppConfig
@@ -935,7 +936,10 @@ class _ArgumentParser(argparse.ArgumentParser):
     def error(self, message: str) -> NoReturn:
         # Both this parser and its subparsers use this handler, including
         # errors argparse raises before returning any parsed arguments.
-        super().error("invalid arguments: use relaymind serve --config PATH")
+        super().error(
+            "invalid arguments: use relaymind serve --config PATH,"
+            " relaymind openclaw install --release DIR, or relaymind openclaw token"
+        )
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -947,6 +951,30 @@ def _parser() -> argparse.ArgumentParser:
         "serve", help="start the gateway on a loopback address", allow_abbrev=False
     )
     start.add_argument("--config", required=True, type=Path, help="path of the TOML config file")
+    # The OpenClaw install helper (spec 0.70, section 14.1). `serve` keeps its one setting.
+    host = commands.add_parser(
+        "openclaw", help="install the RelayMind plugin into OpenClaw", allow_abbrev=False
+    )
+    steps = host.add_subparsers(dest="openclaw_command", required=True)
+    install = steps.add_parser(
+        "install", help="install, configure and enable the plugin", allow_abbrev=False
+    )
+    install.add_argument(
+        "--release",
+        required=True,
+        type=Path,
+        help="the directory `npm run pack:release` wrote (tarball, SHA256SUMS, release.json)",
+    )
+    install.add_argument(
+        "--base-url",
+        default=openclaw_setup.DEFAULT_BASE_URL,
+        help="the gateway's loopback /v1 URL (default %(default)s)",
+    )
+    steps.add_parser(
+        "token",
+        help="store the application token from standard input (never as an argument)",
+        allow_abbrev=False,
+    )
     return parser
 
 
@@ -979,6 +1007,12 @@ def main(
     sinks, and model doubles for the adapters.
     """
     args = _parse(argv)
+    if args.command == "openclaw":
+        if args.openclaw_command == "install":
+            return openclaw_setup.install_plugin(
+                args.release, base_url=args.base_url, stdout=stdout, stderr=stderr
+            )
+        return openclaw_setup.store_token(openclaw_setup.read_token(), stdout=stdout, stderr=stderr)
     try:
         config = load_config(args.config)
         launched = build_app(config, local_adapter=local_adapter, external_adapter=external_adapter)

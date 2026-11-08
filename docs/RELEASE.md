@@ -173,8 +173,9 @@ one checkout are the same bytes (`tests/test_openclaw_install.py`). It holds
 the built `dist/*.js`, `openclaw.plugin.json`, the README (the operator
 guide), and `package.json`, and has no runtime dependency (`openclaw` is the
 peer the host provides). It is not published to a registry. CI uploads it
-from each runner. Declared compatibility: OpenClaw 2026.10.7 only
-(`openclaw.compat.pluginApi` and the peer dependency), Node
+from each runner. Declared compatibility (spec 0.70): OpenClaw
+`>=2026.10.7 <2027.0.0-0` (`openclaw.compat.pluginApi` and the peer dependency);
+only 2026.10.7 is qualified, and `release.json` names both. Node
 `>=24.22.1 <25 || >=26.12.1`.
 
 Supported environments. A row says what ran on that environment, never more.

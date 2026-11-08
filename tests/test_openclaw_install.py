@@ -24,6 +24,7 @@ import pytest
 
 from api_helpers import RunningServer, token_of
 from gateway_helpers import text_turn, tool_turn
+from relaymind.openclaw_setup import DECLARED_RANGE as DECLARED
 from test_openclaw_host_transport import PACKAGE, REQUIRED, _missing, _node
 from test_openclaw_plugin import client_gateway, drive_plugin
 from test_openclaw_round_trips import ECHO
@@ -109,7 +110,8 @@ def test_the_lockfile_pins_the_host_and_the_transport_exactly():
     assert root["name"] == package["name"]
     assert root["version"] == package["version"]
     assert root["devDependencies"] == package["devDependencies"]
-    assert root["peerDependencies"] == package["peerDependencies"]
+    assert root["peerDependencies"] == package["peerDependencies"] == {"openclaw": DECLARED}
+    assert package["openclaw"]["compat"]["pluginApi"] == DECLARED
     assert root["engines"] == package["engines"]
     for name in ("openclaw", "@openclaw/ai"):
         entry = lock["packages"][f"node_modules/{name}"]
@@ -173,7 +175,12 @@ def test_the_release_record_names_the_pins_and_the_build(releases):
     assert record["package"] == package["name"]
     assert record["version"] == package["version"]
     assert record["filename"] == "relaymind-openclaw-provider-0.1.0.tgz"
-    assert record["openclaw"] == {"peer": PINNED, "pluginApi": PINNED, "built_with": PINNED}
+    assert record["openclaw"] == {
+        "peer": DECLARED,
+        "pluginApi": DECLARED,
+        "qualified": PINNED,
+        "built_with": PINNED,
+    }
     assert record["engines"] == package["engines"]
     assert record["node"].startswith("v")
     assert record["integrity"].startswith("sha512-")

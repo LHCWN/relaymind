@@ -22,6 +22,7 @@ from relaymind.canonical import canonical_digest
 from relaymind.evaluation import asset_trial_kit as kit
 from relaymind.evaluation.asset_whole_task import plan_host_trial
 from relaymind.evaluation.asset_whole_task_cli import main
+from relaymind.openclaw_setup import DECLARED_RANGE
 from test_asset_whole_task_inputs import Bundle, _bytes
 from whole_task_helpers import ENVIRONMENT, row
 
@@ -104,7 +105,12 @@ def release(tmp_path: Path, payload: bytes = b"ev-package", *, sums: str | None 
         version="1.0.0",
         filename=name,
         sha256=digest,
-        openclaw=dict(peer="2026.10.7", pluginApi="2026.10.7", built_with="2026.10.7"),
+        openclaw=dict(
+            peer=DECLARED_RANGE,
+            pluginApi=DECLARED_RANGE,
+            qualified="2026.10.7",
+            built_with="2026.10.7",
+        ),
     )
     (directory / "release.json").write_text(json.dumps(record), encoding="utf-8")
     return directory / name
@@ -485,6 +491,19 @@ def mutating(calls: list[list[str]]) -> list[list[str]]:
         dict(sums="0" * 64),
         dict(record=dict(sha256="0" * 64)),
         dict(record=dict(openclaw=dict(peer="2026.9.1", pluginApi="2026.9.1"))),
+        # The exact pin must not contradict `qualified` either.
+        dict(
+            record=dict(
+                openclaw=dict(peer="2026.10.7", pluginApi="2026.10.7", qualified="2026.11.1")
+            )
+        ),
+        # A mixed record, and a range that names some other release as qualified.
+        dict(record=dict(openclaw=dict(peer=DECLARED_RANGE, pluginApi="2026.10.7"))),
+        dict(
+            record=dict(
+                openclaw=dict(peer=DECLARED_RANGE, pluginApi=DECLARED_RANGE, qualified="2026.11.1")
+            )
+        ),
         dict(missing=True),
     ],
 )

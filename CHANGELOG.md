@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Specification 0.70 (RM33; section 7.5, section 14.1; AC24): the OpenClaw plugin declares
+  `>=2026.10.7 <2027.0.0-0` to the host instead of exactly `2026.10.7`, so an operator on a later 2026
+  OpenClaw can install it. Only 2026.10.7 stays qualified; any other release is reported as unqualified.
+  New `relaymind openclaw install` and `relaymind openclaw token` commands run the host's own install,
+  configure, enable and token steps with checks before any change. The release record now names the declared
+  range, the qualified release and the build release. Developer release steps and user install steps are
+  rewritten in the OpenClaw README.
+
 ### Documentation
 
 - Reorganize the project overview around model use, skill/tool discovery and

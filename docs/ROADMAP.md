@@ -1863,3 +1863,12 @@ AC25 to AC37.
 Still open: a run on a real old laptop, real channels and pinned routes, final answer quality, and labels
 not written by the developer or by a model. The owner still has to review the spec 0.69 anchor comment in
 `asset_evidence.py` and the v3 re-pin.
+
+## OpenClaw install helper and declared range (spec 0.70; RM33, RM12; AC24)
+
+Implemented: the plugin declares `>=2026.10.7 <2027.0.0-0` to the host (only 2026.10.7 stays qualified),
+and `relaymind openclaw install` and `relaymind openclaw token` run the host's own install, configure,
+enable and token commands with checks before any change. Deterministic tests use a stub host
+(`tests/test_openclaw_setup.py`). The helper also ran once against the real pinned host 2026.10.7 in an
+isolated home on Linux (install loaded, token stored). Not run: Windows, macOS, and any OpenClaw release
+other than 2026.10.7. The owner still has to review the spec 0.70 anchor comment in `asset_evidence.py`.

@@ -5,7 +5,8 @@
 // From a clean dist/ (npm run build), after the pack check, npm pack writes the
 // tarball into the destination with SHA256SUMS and release.json: the package,
 // its version, the tarball's SHA-256 and npm integrity, the packed files, the
-// pinned OpenClaw release, the declared Node range, and the Node that built it.
+// declared OpenClaw range and the qualified release, the declared Node range,
+// and the Node that built it.
 // npm pack fixes file dates and order, and the build is deterministic, so two
 // builds of one checkout are the same bytes (tests/test_openclaw_install.py).
 import { createHash } from "node:crypto";
@@ -58,6 +59,8 @@ const record = {
   openclaw: {
     peer: pkg.peerDependencies.openclaw,
     pluginApi: pkg.openclaw.compat.pluginApi,
+    // The one release the plugin is qualified on; the range above only says it loads.
+    qualified: pkg.openclaw.build.openclawVersion,
     built_with: host.version,
   },
   engines: pkg.engines,

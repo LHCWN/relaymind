@@ -555,6 +555,21 @@ def file_hash_mismatches(rows, root):
     ]
 
 
+def _installed_tree(lock_path):
+    """What the lock installs: every package entry and the root's dependency lists.
+
+    Other root fields (the plugin's own declared peer range, spec 0.70) are metadata
+    that installs nothing, so a lock that differs only there has the same node_modules.
+    """
+    packages = json.loads(lock_path.read_text("utf-8"))["packages"]
+    root = packages[""]
+    installed = {
+        "dependencies": root.get("dependencies"),
+        "devDependencies": root["devDependencies"],
+    }
+    return installed, {name: entry for name, entry in packages.items() if name}
+
+
 def build_recorded_adapter(commit, root):
     """Build the historical adapter in a disposable tree using the pinned compiler."""
     archive = subprocess.run(
@@ -568,9 +583,9 @@ def build_recorded_adapter(commit, root):
     package = root / "integrations/openclaw"
     current = ROOT / "integrations/openclaw"
     # Reuse npm ci's dependencies only when the entire dependency lock agrees.
-    assert (package / "package-lock.json").read_bytes() == (
+    assert _installed_tree(package / "package-lock.json") == _installed_tree(
         current / "package-lock.json"
-    ).read_bytes()
+    )
     modules = package / "node_modules"
     if sys.platform == "win32":
         import _winapi
