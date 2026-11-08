@@ -1,62 +1,74 @@
 # RelayMind
 
-**Get more from your models. Find the right skills and tools for the task.**
+**Show your OpenClaw agent only the skills and tools each prompt needs.**
 
-RelayMind is a local model gateway and skill/tool recommendation service. It
-helps you work with a growing asset library: discover relevant capabilities,
-compare candidates, and choose what to use. It also routes managed tasks between
-local and external models, keeping completed work when a task needs to move.
+A long skill list costs context on every turn. RelayMind runs next to
+[OpenClaw](integrations/openclaw/README.md) on your machine, picks the few skills and MCP tools that fit a prompt, and
+names them to the model. OpenClaw keeps ownership of sessions, tool execution, permissions and approvals.
 
-## Why use RelayMind?
+## What it does for OpenClaw
 
-- **Find useful capabilities in your library.** Search skills and MCP tool
-  metadata with English, Simplified Chinese or mixed-language requests. Bring
-  local skills, import tool metadata, or use a qualified source profile.
-- **Keep control when the match is uncertain.** Low-confidence recommendations
-  ask you to choose. You can select a candidate, decline every option, or cancel.
-  Recommendations never install packages, execute tools or approve changes.
-- **Use local compute when it helps.** Run bounded work locally when the model
-  is suitable; hand off to your configured external model when needed. An
-  external-only setup also works.
-- **Avoid losing work between models.** Carry completed tool results and the
-  remaining budget into a handoff. Optional prefetch and multiple read-only
-  calls can reduce model round trips.
-- **See what happened.** Inspect selection, routing, tool outcomes, timing and
-  reported usage. Unknown costs stay unknown; predictions are labeled.
+| Part | What you get | Start here |
+| --- | --- | --- |
+| **Per-prompt guidance** | The model sees the skills and tools this prompt needs instead of the full list. Works across English and Chinese, and can optionally refuse what was not selected. | [Guidance tutorial](docs/guidance.md) · [简体中文](docs/guidance.zh-CN.md) |
+| **Recommendations** | Search your skill and MCP tool library, compare candidates and choose. Low-confidence results ask you, and a recommendation never installs or runs anything. | [Recommendation setup](docs/asset-selection.md) · [简体中文](docs/asset-selection.zh-CN.md) |
+| **Model gateway** | Use a local model when it is suitable and hand off to an external model when needed, keeping completed tool results and the remaining budget. | [OpenClaw provider setup](integrations/openclaw/README.md#install-guide) |
 
-These are two distinct interfaces: recommendations help you choose assets;
-the managed gateway executes its configured demo skills under gateway rules.
-A recommended asset does not automatically become an executable gateway skill.
-See the [interface guide](docs/asset-selection.md#choose-the-right-interface).
+Turn on only the parts you want. Each one runs through the local `relaymind` gateway.
 
-## Choose your starting point
+## Set up guidance in OpenClaw
+
+After [installing RelayMind](#install), turn guidance on in the gateway's launch file:
+
+```toml
+[guidance]
+enabled = true
+```
+
+Start the gateway in its own terminal and put the application token it prints in `RELAYMIND_APP_TOKEN` for the OpenClaw
+process. The gateway needs one [model table](#configure) to start, but plain word matching never calls it:
+
+```bash
+relaymind serve --config relaymind.toml
+```
+
+Once it is running, run one command. It uses OpenClaw's own commands to install the plugin, stop listing every skill in
+the prompt and, with `--tools-file`, write the list of your MCP tools:
+
+```bash
+relaymind openclaw guidance --tools-file ~/.relaymind/tools.json
+```
+
+If the gateway stops for long, the model sees no skill list and no hint. Give it the list back with
+`openclaw config unset skills.limits.maxSkillsInPrompt`.
+
+[A small local model or a cheap external one](docs/guidance.md#set-it-up) improves mixed-language prompts and similar
+skills. To use your own selection algorithm, see
+[Connect your own algorithm](docs/guidance.md#connect-your-own-algorithm).
+
+## Use RelayMind as the OpenClaw model provider
+
+The included provider plugin is tested on **OpenClaw 2026.10.7** and loads on later 2026 releases (reported as
+unqualified). Install it with `relaymind openclaw install --release <folder>`, then select
+`relaymind/relaymind-client-tools`. The [install guide](integrations/openclaw/README.md#install-guide) has the user and
+developer steps; the [operator guide](integrations/openclaw/README.md#operator-guide-145) owns the Node requirements,
+token setup and configuration.
+
+The optional recommendation panel supports discovery, explicit choices, feedback and qualified native skill selection.
+Selection is distinct from observed instruction use; loaded skill use and MCP execution have separate gates. See the
+[panel guide](integrations/openclaw/README.md#native-recommendations-and-explicit-actions) or
+[简体中文](integrations/openclaw/README.zh-CN.md).
+
+## Other ways to use it
 
 | You want to… | Start here |
 | --- | --- |
-| Find skills and tools in your own library | [Recommendation setup](docs/asset-selection.md) · [简体中文](docs/asset-selection.zh-CN.md) |
-| Use RelayMind from OpenClaw | [OpenClaw setup](integrations/openclaw/README.md#operator-guide-145) |
-| Connect an OpenAI-compatible client | [Gateway quickstart below](#install) |
+| Connect any OpenAI-compatible client | [Gateway quickstart](#install) |
 | Plug in your own recommendation algorithm | [Selector v2 guide](docs/ASSET_BENCHMARK.md#the-skilltool-v2-boundary) |
 | Compare selectors on the same catalog | [Source-backed benchmark](docs/SOURCE_BENCHMARK.md) |
 
-## Works with OpenClaw
-
-The included provider plugin is tested on **OpenClaw 2026.10.7** and loads on
-later 2026 releases (reported as unqualified). Install it with
-`relaymind openclaw install --release <folder>`, then select
-`relaymind/relaymind-client-tools` to use the gateway for inference. OpenClaw
-keeps ownership of sessions, tool execution, permissions and approvals.
-
-The optional recommendation panel supports discovery, explicit choices,
-feedback and qualified native skill selection. Selection is distinct from
-observed instruction use; loaded skill use and MCP execution have separate
-gates. See the panel guide in [English](integrations/openclaw/README.md#native-recommendations-and-explicit-actions)
-or [简体中文](integrations/openclaw/README.zh-CN.md).
-
-The [install guide](integrations/openclaw/README.md#install-guide) has the
-user steps and the developer steps to prepare the ready-made plugin; the
-[operator guide](integrations/openclaw/README.md#operator-guide-145) owns the
-Node requirements, token setup and configuration.
+Recommendations and the managed gateway are distinct interfaces: a recommended asset does not become an executable
+gateway skill. See the [interface guide](docs/asset-selection.md#choose-the-right-interface).
 
 ## Scope and evidence
 
@@ -132,14 +144,6 @@ fast enough for the `[budgets]` stage limit; when it is not, one printed
 line says so and `auto` uses the external model the same way. Set
 `detect = false` in a `[placement]` table to skip that check. Every setting is described in
 [`docs/SPECIFICATION.md`](docs/SPECIFICATION.md), section 14.1.
-
-### Per-prompt guidance
-
-The optional [guidance](docs/guidance.md) feature shows an OpenClaw model only the few
-skills and tools one prompt needs, and can limit it to them. It works with no index, on Chinese
-prompts over English skills, and with no API key; a cheap model tells similar skills apart. Any
-third-party algorithm can replace its selection and be compared with the baseline on precision and
-recall.
 
 ### Loopback HTTP selector
 

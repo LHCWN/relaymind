@@ -26,17 +26,27 @@
    ```
    | 设置 | 需要 | 最终选择方式 |
    | --- | --- | --- |
-   | `keywords = "none"`, `picker = "none"` | 无 | 最多 8 个词匹配较强的项，由 OpenClaw 的模型选择 |
+   | `keywords = "none"`, `picker = "none"` | 无额外要求 | 最多 8 个词匹配较强的项，由 OpenClaw 的模型选择 |
    | `keywords = "local"`, `picker = "none"` | 一个本地模型 | 同上，并且支持跨语言 |
    | `keywords = "local"`, `picker = "external"` | 一个本地模型和一个 API 密钥 | 由便宜的模型选出提示词需要的那一组 |
    | `keywords = "external"`, `picker = "external"` | 一个 API 密钥 | 同上，效果最好，稍慢一些 |
    | `primary = "http"` | 你的选择器 | 由你的选择器选择 |
 
+   网关启动时需要一个 `[local_model]` 或 `[external_model]` 表，即使引导功能从不调用它。
+
    只有提示词中含有拉丁字母以外的文字时才会运行关键词步骤，所以英文提示词依然很快。当选择模型什么也没找到时，任何提示词都会再运行一次关键词步骤，因为提示词可能和正确的技能没有共同的词。像“好的，就这么做”这样简短、自身的词又找不到强匹配的后续提示词，会和用户刚才说的话一起匹配。
 
 2. 在代码仓库根目录启动网关：`relaymind serve --config relaymind.toml`。它会打印一个应用令牌。把它放到 OpenClaw 进程的 `RELAYMIND_APP_TOKEN` 中。
 
-3. 在 OpenClaw 中安装[引导插件](../integrations/openclaw/guidance-plugin/README.md)，并把 `skills.limits.maxSkillsInPrompt` 设为 `0`。
+3. 用一条命令设置 OpenClaw。它运行 OpenClaw 自己的命令来安装[引导插件](../integrations/openclaw/guidance-plugin/README.md)、允许它的钩子并设置网关地址。确认插件已加载后，它才把 `skills.limits.maxSkillsInPrompt` 设为 `0`：
+
+   ```bash
+   relaymind openclaw guidance --tools-file ~/.relaymind/tools.json
+   ```
+
+   只提供技能时可省略 `--tools-file`。需要[严格限制](#把-openclaw-限制在所选范围内)时加上 `--limit strict`。省略的选项会保留之前运行时的设置；要停止提供工具，请运行 `openclaw config unset plugins.entries.relaymind-guidance.config.toolsFile`。
+
+   `maxSkillsInPrompt` 对该 OpenClaw 的所有智能体生效。插件只声明支持 OpenClaw 2026.10.7，该命令会拒绝其他版本。升级 OpenClaw 后主机可能跳过插件，这时请运行 `openclaw config unset skills.limits.maxSkillsInPrompt` 恢复技能列表。
 
    技能很多时，还要调高 `skills.limits.maxSkillsLoadedPerSource`（默认 200）和 `maxCandidatesPerRoot`（默认 300）。超过这些上限的技能 OpenClaw 不会加载，因此既不能被选择，也无法通过搜索找到。当会话达到第一个上限时，插件会记录一条警告。
 
@@ -139,9 +149,28 @@ total_ms = 12000
 
 主机资产超过 1,000 项时，你的选择器会收到词匹配最好的 1,000 项；内置步骤最多处理 20,000 项。托管服务前面需要一个小型本地进程，因为 URL 必须在环回地址上。
 
+## 在第一个提示词之前做准备
+
+插件随每个提示词发送主机的列表，所以没有索引的选择器无需任何准备。需要建立索引的选择器不必等到第一个提示词：OpenClaw 无需会话就能用它自己的发现、优先级和上限规则列出同样的技能，所以不要自己遍历技能目录。
+
+```bash
+openclaw skills list --eligible --json    # 保留 modelVisible 为 true 的技能；用 --agent <id> 指定智能体
+openclaw skills info <name> --json        # filePath 是该技能的 SKILL.md，包含完整正文
+```
+
+请求中不包含技能正文，请从 `filePath` 读取。`source_locator` 只是标签 `host://skill/<name>`，不是路径。`skills list` 不输出路径，所以每个技能都要调用一次 `skills info`，每次需要几秒钟，请在后台运行。
+
+这只是预热。能选哪些由每个请求中的列表决定，它可能因智能体和会话而不同。用技能名 `identity.package_id` 匹配已索引的记录。`content_hash` 只覆盖发送的描述（经过截断和脱敏），技能正文变化时哈希可能不变，所以还要检查文件。
+
+对于 MCP 工具，请求中的 `input_schema` 是占位符 `{"type":"object"}`，因为 OpenClaw 的 `mcp probe` 只列出名称。需要真实 schema 的选择器要自己用 `tools/list` 询问服务器；`openclaw mcp show` 会显示如何连接它们。
+
 ## 添加 MCP 工具
 
-OpenClaw 的 Tool Search 默认已把 MCP 工具的 schema 排除在请求之外，所以工具占用的上下文很少。OpenClaw 只允许官方插件读取它的工具列表，所以引导功能从插件的 `toolsFile` 获取工具，它是一个 `{"name","description"}` 的 JSON 列表。
+OpenClaw 的 Tool Search 默认已把 MCP 工具的 schema 排除在请求之外，所以工具占用的上下文很少。插件可以拒绝工具调用，但 OpenClaw 的插件 API 不向它提供主机的工具列表，所以引导功能从插件的 `toolsFile` 获取工具，它是一个 `{"name","description"}` 的 JSON 列表。
+
+`relaymind openclaw guidance --tools-file PATH` 根据 `openclaw mcp probe --json` 写入这个文件，该命令会连接 `mcp.servers` 中的每个服务器并应用其工具过滤器。服务器变化后请重新运行。如果有服务器没有响应，则不做任何更改，因为列表不完整会让缺失的工具不受严格限制。
+
+OpenClaw 的列表只有名称，例如 `weather__get_weather`，这样的工具只按名称中的词匹配。在文件中添加 `description` 可以提高匹配效果，重新运行时会保留。来自其他地方（例如 mcporter）的工具不在 `mcp.servers` 中，需要手动添加，不要带命令写入的 `generated` 字段，这样重新运行时也会保留。
 
 推荐目录中的工具通过元数据导入进入。`content_hash` 是 `original_path` 处文件的 SHA-256，`schema_hash` 是 `input_schema` 的规范摘要（[schema](../src/relaymind/assets/schemas/asset_metadata_import.v1.json)）：
 

@@ -6,7 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Specification 0.71 (RM45, RM46; AC41; sections 7.7 and 14.1): `relaymind openclaw guidance` sets up per-prompt
+  guidance with the host's own commands. It installs the plugin, empties the listed skill catalog and, with
+  `--tools-file`, writes the plugin's tool list from `openclaw mcp probe`. A partial list changes nothing, and
+  descriptions an operator wrote are kept. The tutorial now says how a selector can prepare before the first prompt.
+
 ### Changed
+
+- Correct the guidance documents: the plugin API gives an ordinary plugin no tool list, which is not a rule about
+  official plugins. Lead the README and the repository description with OpenClaw.
 
 - Specification 0.70 (RM33; section 7.5, section 14.1; AC24): the OpenClaw plugin declares
   `>=2026.10.7 <2027.0.0-0` to the host instead of exactly `2026.10.7`, so an operator on a later 2026
