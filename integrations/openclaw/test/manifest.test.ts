@@ -11,6 +11,12 @@ const manifest = read("openclaw.plugin.json");
 const pkg = read("package.json");
 const host = read("node_modules/openclaw/package.json");
 
+// What the package declares to the host (spec 0.70, section 7.5). It is kept out of the shipped
+// source on purpose: the native adapter revision hashes the shipped JavaScript, so changing it
+// would drop the reviewed native qualification. Keep it equal to DECLARED_RANGE in
+// src/relaymind/openclaw_setup.py (tests/test_openclaw_setup.py checks that one).
+const DECLARED_RANGE = ">=2026.10.7 <2027.0.0-0";
+
 describe("openclaw.plugin.json", () => {
   it("declares the relaymind provider", () => {
     expect(manifest.id).toBe(PROVIDER_ID);
@@ -82,22 +88,23 @@ describe("package.json", () => {
     expect(pkg.files).toEqual(expect.arrayContaining(["dist", "openclaw.plugin.json", "README.md"]));
   });
 
-  it("pins the qualified OpenClaw release and declares its compatibility", () => {
+  it("builds against the qualified OpenClaw release and declares a range from it", () => {
+    // The build and the captured fixtures stay on the one qualified release.
     expect(pkg.openclaw.build.openclawVersion).toBe(PINNED_OPENCLAW);
     expect(pkg.openclaw.build.pluginSdkVersion).toBe(PINNED_OPENCLAW);
-    // Only the qualified release is declared compatible (section 7.5): a later
-    // host is a new qualification (#135 capture), not an assumption.
-    expect(pkg.openclaw.compat.pluginApi).toBe(PINNED_OPENCLAW);
-    expect(pkg.openclaw.compat.minGatewayVersion).toBe(PINNED_OPENCLAW);
     expect(pkg.devDependencies.openclaw).toBe(PINNED_OPENCLAW);
     expect(pkg.devDependencies["@openclaw/ai"]).toBe(PINNED_OPENCLAW);
     expect(host.version).toBe(PINNED_OPENCLAW);
+    // What the host is told (section 7.5, spec 0.70): loadable from the qualified
+    // release to the end of the year. Loading is not qualification.
+    expect(pkg.openclaw.compat.pluginApi).toBe(DECLARED_RANGE);
+    expect(pkg.openclaw.compat.minGatewayVersion).toBe(PINNED_OPENCLAW);
     // The host provides openclaw/plugin-sdk at runtime.
-    expect(pkg.peerDependencies.openclaw).toBe(PINNED_OPENCLAW);
+    expect(pkg.peerDependencies.openclaw).toBe(DECLARED_RANGE);
     expect(pkg.engines.node).toBe(host.engines.node);
   });
 
-  it("is accepted by the pinned host's own range check only on the qualified release", async () => {
+  it("is accepted by the host's own range check from the qualified release to the end of 2026", async () => {
     // The host's package-compat module decides whether a plugin loads.
     const dist = new URL("node_modules/openclaw/dist/", root);
     const [file] = readdirSync(dist).filter((name) => /^package-compat-.*\.mjs$/.test(name));
@@ -105,13 +112,25 @@ describe("package.json", () => {
     const compat = await import(new URL(file!, dist).href);
     const satisfies = compat.n as (version: string, range: string) => boolean;
     const range = pkg.openclaw.compat.pluginApi as string;
-    expect(satisfies(PINNED_OPENCLAW, range)).toBe(true);
-    // A numeric correction of the same release is the same release.
-    expect(satisfies(`${PINNED_OPENCLAW}-1`, range)).toBe(true);
-    for (const later of ["2026.10.8", "2026.11.1", "2027.1.1"]) {
-      expect(satisfies(later, range)).toBe(false);
+    // The qualified release, a numeric correction of it, and later 2026 releases load.
+    for (const ok of [
+      PINNED_OPENCLAW,
+      `${PINNED_OPENCLAW}-1`,
+      // The host drops a pre-release suffix before it compares, so it loads these. The install
+      // helper follows SemVer and is stricter for a pre-release of the lower bound (refused
+      // before any host change); it is never looser than the host.
+      `${PINNED_OPENCLAW}-beta.2`,
+      "2026.11.1-rc.1",
+      "2026.10.8",
+      "2026.11.1",
+      "2026.12.31",
+    ]) {
+      expect(satisfies(ok, range), ok).toBe(true);
     }
-    expect(satisfies("2026.10.6", range)).toBe(false);
+    // An earlier release and the next year (pre-releases of it too) are refused.
+    for (const refused of ["2026.10.6", "2026.10.6-beta.1", "2026.9.30", "2025.12.1", "2027.0.0", "2027.0.0-beta.1", "2027.1.1"]) {
+      expect(satisfies(refused, range), refused).toBe(false);
+    }
   });
 
   it("has no runtime dependency the host would have to install", () => {

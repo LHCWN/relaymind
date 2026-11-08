@@ -1424,6 +1424,14 @@ pass it.
   on the three runners with Node 24.22.1 and `RELAYMIND_OPENCLAW_NODE=1`,
   builds the release, runs the install check, never runs live tests, and
   lists every `tests/test_openclaw_*.py` module.
+- `tests/test_openclaw_setup.py`: the `relaymind openclaw install` and `token` helper against a stub
+  host that logs every call (RM33, RM12; spec 0.70). Steps and their order; the host release read as a
+  whole token (a fourth part, `+local` or an unknown suffix is refused) and checked against the range in
+  the release folder's own `release.json`; the unqualified note for a later 2026 release; the checksum
+  and an incomplete folder; the plugin's own `baseUrl` rules (no `/v1`, a user name, a query); a failing
+  step and a plugin that is not enabled; a token that is read without echo at a terminal, goes to the host
+  on standard input only and is never printed; and the check that the helper's range equals
+  `package.json`.
 - `tests/test_openclaw_install_check.py`: the install check against a stub
   host with the pinned host's command forms and observed behavior (the key
   in a SQLite state file, the call ID replayed without underscores,

@@ -191,6 +191,8 @@ _GENERATOR_ANCHORS = {
     ),
     "docs/SPECIFICATION.md": frozenset(
         {
+            # 0.70 OpenClaw plugin declared range and install helper; subject to the owner's review.
+            ("3f586a301b4e264f584511f034d484bdf4b17fdeee25c51a035b2027836024bf", 657114),
             # 0.69 per-prompt guidance and its strict limit (#284); subject to the owner's review.
             ("7003b9e3f13621a3ae30713a65d03a507501941dd4cc2925c73af9685d7d8297", 653173),
             # 0.68 editorial reconciliation: evidence links and implemented-operation pointers.

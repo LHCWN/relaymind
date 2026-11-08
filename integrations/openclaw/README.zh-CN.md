@@ -2,7 +2,7 @@
 
 [English](README.md#native-recommendations-and-explicit-actions) · [目录配置](../../docs/asset-selection.zh-CN.md)
 
-需要固定的 OpenClaw2026.10.7 和包内声明的 Node 版本。推理提供方仍使用
+已验证的 OpenClaw 版本是 2026.10.7；声明的兼容范围是 `>=2026.10.7 <2027.0.0-0`（范围内较新的版本可加载，但未经验证）。另需包内声明的 Node 版本。推理提供方仍使用
 `relaymind-client-tools`；OpenClaw 继续负责工具、权限和审批。
 
 固定2026.10.7 的 `direct_actions` 资格现已启用：普通安装入口支持个人发现推荐、
@@ -12,6 +12,16 @@
 沙箱数据，不代表真人／模型质量或完整平台验收。
 
 ## 安装和配置
+
+已有现成的发行目录（含 tgz、SHA256SUMS、release.json）时，只需三步（详见[英文安装指南](README.md#install-guide)）：
+
+```bash
+relaymind openclaw install --release /path/to/release-folder   # 校验、安装、配置、启用
+relaymind serve --config relaymind.toml                        # 启动网关，会打印应用令牌
+relaymind openclaw token                                       # 从标准输入粘贴令牌
+```
+
+网关每次启动都会生成新令牌，重启后需再次运行最后一步。以下为从源码构建的方式：
 
 ```bash
 cd integrations/openclaw

@@ -69,12 +69,22 @@ selection, prefetch, or skill stage, and no managed device-aware placement
 (client-owned execution has none, section 7.5); usage is unknown. The
 gateway's run trace is authoritative for the model calls.
 
-Declared compatibility is the qualified release only: `openclaw.compat.pluginApi`
-and the `openclaw` peer dependency are both exactly `2026.10.7`, so the host's
-own range check refuses to load the plugin on any other release (a numeric
-correction such as `2026.10.7-1` is the same release). A later release is
-declared only after it is qualified again: the #135 capture rerun against it,
-its fixtures recorded under `test/fixtures/v<release>/`, and the pins moved.
+Two different things are kept apart (spec 0.70):
+
+- **Qualified** release: `2026.10.7`. The plugin is built, tested and recorded
+  against this one release, and the build pins it exactly.
+- **Declared** range: `openclaw.compat.pluginApi` and the `openclaw` peer
+  dependency are `>=2026.10.7 <2027.0.0-0`. The host loads the plugin on any
+  release in that range (a numeric correction such as `2026.10.7-1` is the
+  same release). It refuses an earlier release and a 2027 release.
+
+So an operator on a later 2026 release can install the plugin. Loading is not
+qualification: on such a release the install helper prints that it is
+**unqualified**, and nothing in this repository calls it supported. A release
+becomes qualified only after the #135 capture rerun against it, its fixtures
+under `test/fixtures/v<release>/`, and the pins moved. The reviewed native
+actions table is keyed by the host release, so those actions stay off on every
+release other than `2026.10.7`.
 
 The compatibility table, the SDK seams found at the pin, and the frozen
 baseline are in
@@ -106,6 +116,91 @@ baseline are in
 | `scripts/pack-check.mjs` | checks the packed tarball: built entry, manifest, README, and public SDK imports only |
 | `scripts/release-pack.mjs` | `npm run pack:release -- <dir>`: the release artifact from a clean build, with `SHA256SUMS` and `release.json` (#145) |
 
+## Install guide
+
+### For users: install the ready-made plugin
+
+You need: OpenClaw `2026.10.7` or a later 2026 release, RelayMind installed
+(`pip install -e .`), and a **release folder** from the people who build the
+plugin. The folder holds three files: `relaymind-openclaw-provider-<version>.tgz`,
+`SHA256SUMS` and `release.json`. You build nothing, and you need no Node or npm
+beyond what OpenClaw already uses.
+
+```bash
+# 1. Install, configure and enable the plugin in OpenClaw (one command).
+relaymind openclaw install --release /path/to/release-folder
+
+# 2. Start the gateway. It prints an application token. Needs an external
+#    model in relaymind.toml (copy relaymind.example.toml first).
+relaymind serve --config relaymind.toml
+
+# 3. In a second terminal, give the token to OpenClaw (paste it, press Enter).
+relaymind openclaw token
+```
+
+Then choose the model `relaymind/relaymind-client-tools` in OpenClaw. The
+gateway makes a new token at every start, so after each restart run step 3
+again with the new token.
+
+What step 1 does: it checks the tarball against `SHA256SUMS`, reads the
+OpenClaw release, runs `plugins install`, `config set` (the gateway address,
+default `http://127.0.0.1:8080/v1`; change it with `--base-url`),
+`plugins enable` and `plugins inspect`, and stops at the first problem. It
+changes nothing when the checksum is wrong, when OpenClaw is not on PATH, when
+the OpenClaw release is outside the range, or when the address is not
+loopback. It never starts the gateway and never touches the token. The token
+goes to OpenClaw on standard input only, so it is not in your shell history
+or in the process list.
+
+If OpenClaw is a release other than `2026.10.7` inside the range, you get one
+line saying it is unqualified, and the install goes on. A pre-release of the lower bound (for example
+`2026.10.7-beta.2`) ranks below `2026.10.7`, so the helper refuses it before it
+changes anything.
+
+### For developers: prepare the ready-made plugin
+
+You need Node `>=24.22.1 <25` (or `>=26.12.1`) and a clean checkout of the
+commit you are releasing.
+
+```bash
+cd integrations/openclaw
+npm ci                                              # the pinned build tools and host
+npm run typecheck && npm test                       # must pass
+npm run pack:release -- ../../release/openclaw      # build the release folder
+```
+
+1. `pack:release` builds from a clean `dist/`, checks the package, and writes
+   the three files into `release/openclaw/`.
+2. Open `release.json` and check it: `pluginApi` and `peer` are the declared
+   range, `qualified` and `built_with` are `2026.10.7`, and `sha256` equals the
+   line in `SHA256SUMS`. Two builds of one commit give the same bytes, so you
+   can compare your `sha256` with the one the CI job uploaded.
+3. Smoke test on a machine with OpenClaw, ideally with an isolated host home
+   (`OPENCLAW_HOME`, `OPENCLAW_STATE_DIR`, `OPENCLAW_CONFIG_PATH` set to an
+   empty folder): `relaymind openclaw install --release release/openclaw`
+   must end with "installed and loaded".
+4. Hand over the **whole folder**, never the tarball alone. Users need
+   `SHA256SUMS` and `release.json` for the checks above. The package is not
+   published to a registry; CI uploads the folder as a build artifact.
+
+Rules to remember:
+
+- **Do not edit `src/` casually.** The reviewed native-actions table is pinned
+  to the hash of the shipped JavaScript (`nativeAdapterRevision`). Any change
+  to `src/` changes the hash and switches those actions off until they are
+  qualified again. Changes to `package.json` and docs do not change it.
+- **The declared range lives in three places** that must agree: `package.json`
+  (`openclaw.compat.pluginApi` and `peerDependencies.openclaw`), the
+  `DECLARED_RANGE` constant in `test/manifest.test.ts`, and `DECLARED_RANGE` in
+  `src/relaymind/openclaw_setup.py`. Tests fail when they drift. The install
+  helper reads the range from the `release.json` it installs, not from its own
+  copy, so an older release folder is checked against what it declared.
+- **Qualifying a newer OpenClaw release:** rerun the capture against it,
+  record its fixtures under `test/fixtures/v<release>/`, then move the build
+  pins (`devDependencies`, `openclaw.build`, `PINNED_OPENCLAW`),
+  `QUALIFIED_RELEASE` in `openclaw_setup.py` and the native table. The
+  declared range normally needs no change until the year ends.
+
 ## Operator guide (#145)
 
 RM12, RM18, RM19, RM33; AC24; spec sections 7.5, 12.5, and 14. The steps use
@@ -122,11 +217,12 @@ approvals; RelayMind owns the inference, its checks, and its run trace.
 
 ### 1. Requirements
 
-- OpenClaw 2026.10.7 exactly (`openclaw --version`): the package declares no
-  other release, and the host's own range check refuses it on another one.
+- OpenClaw `2026.10.7` (qualified) or a later 2026 release (loads, unqualified)
+  (`openclaw --version`): the package declares `>=2026.10.7 <2027.0.0-0`, and the
+  host's own range check refuses any other release.
 - Node `>=24.22.1 <25 || >=26.12.1`, the pinned host's engine range.
-- A RelayMind checkout with its Python install (`pip install -e .`), to start
-  the gateway.
+- RelayMind installed (`pip install -e .`), to start the gateway and to run
+  `relaymind openclaw install`.
 - The host and the gateway on the same machine: the plugin sends only to a
   loopback `baseUrl` (`localhost`, `127.0.0.0/8`, `[::1]`), and the gateway
   serves only loopback (section 7.1). A host in a container, a VM, or WSL2
@@ -176,7 +272,8 @@ The local context stays 8192 (no runtime, manifest, or spec change).
 
 ### 3. Get the release artifact
 
-Build it from a checkout (or take the CI job's uploaded artifact):
+Most operators are handed the release folder (see "For developers" above).
+To build it yourself from a checkout (or take the CI job's uploaded artifact):
 
 ```bash
 cd integrations/openclaw
@@ -194,6 +291,10 @@ tests compare repeated builds from one checkout; cross-platform identity needs
 matching recorded artifacts. An earlier Windows build packed CRLF and differed.
 
 ### 4. Install, configure, enable
+
+`relaymind openclaw install --release <folder>` runs exactly the commands
+below, with checks before the first change (see "For users"). Run them by
+hand when you need to see or change one:
 
 ```bash
 openclaw plugins install npm-pack:release/openclaw/relaymind-openclaw-provider-0.1.0.tgz \
@@ -293,9 +394,10 @@ provider are not a measurement (unified usage is unknown).
 
 ### 10. Update and roll back
 
-The package declares exactly one OpenClaw release. A host update to another
-release makes the host refuse the plugin until a release qualified on it is
-installed. Update by installing the new artifact over the old one, and roll
+The package declares the range `>=2026.10.7 <2027.0.0-0`. A host update inside
+it keeps the plugin loading (unqualified, unless it is `2026.10.7`); a host
+update outside it makes the host refuse the plugin until a release that
+declares it is installed. Update by installing the new artifact over the old one, and roll
 back by installing the previous tarball the same way. Check its SHA-256
 against the `SHA256SUMS` you kept:
 

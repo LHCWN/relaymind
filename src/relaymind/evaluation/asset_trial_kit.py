@@ -61,8 +61,9 @@ from relaymind.evaluation.asset_whole_task import (
     verify_host_tasks,
 )
 from relaymind.evaluation.plugin_base_url import check_base_url
+from relaymind.openclaw_setup import DECLARED_RANGE, DEFAULT_BASE_URL, QUALIFIED_RELEASE_TEXT
 
-PINNED_OPENCLAW = "2026.10.7"
+PINNED_OPENCLAW = QUALIFIED_RELEASE_TEXT
 TARGET_OS, TARGET_ARCHITECTURE, TARGET_CPU = "Darwin", "arm64", "Apple M1"
 TARGET_RAM_BYTES = 8 * 1024**3
 PREFLIGHT_CHECKS = (
@@ -77,9 +78,6 @@ PREFLIGHT_CHECKS = (
 QUALIFICATIONS = ("fixture", "provisional")
 HOST_TIMEOUT_SECONDS = 120
 PLUGIN_ID = "relaymind"
-# The gateway's default loopback listener (relaymind.example.toml) and the
-# operator guide's ``baseUrl``; the plugin refuses a non-loopback URL itself.
-DEFAULT_BASE_URL = "http://127.0.0.1:8080/v1"
 # A whole version token: a pre-release, build or fourth part stays attached, so
 # ``2026.10.7-beta.2`` or ``2026.10.7.1`` is never read as the pinned version.
 _VERSION = re.compile(r"(?<![\d.])\d{4}\.\d{1,2}\.\d{1,2}(?:[-+.\w][0-9A-Za-z.+-]*)?(?<!\.)")
@@ -241,6 +239,17 @@ def host_version(host_command: Sequence[str]) -> tuple[str | None, str]:
     return version, _sha256(output)
 
 
+def _declares_the_pinned_release(openclaw: Mapping) -> bool:
+    """A release before spec 0.70 declared the pin itself; later ones declare the range.
+
+    Either way ``qualified``, when present, must name the pin. The range form needs it.
+    """
+    declared, qualified = openclaw.get("pluginApi"), openclaw.get("qualified")
+    if declared == PINNED_OPENCLAW:
+        return qualified in (None, PINNED_OPENCLAW)
+    return declared == DECLARED_RANGE and qualified == PINNED_OPENCLAW
+
+
 def release_identity(tarball: Path) -> dict:
     """The tarball against the ``SHA256SUMS`` and ``release.json`` beside it."""
     tarball = Path(tarball)
@@ -277,8 +286,8 @@ def release_identity(tarball: Path) -> dict:
         named == [digest]
         and record.get("filename") == tarball.name
         and record.get("sha256") == digest
-        and openclaw.get("peer") == PINNED_OPENCLAW
-        and openclaw.get("pluginApi") == PINNED_OPENCLAW
+        and openclaw.get("peer") == openclaw.get("pluginApi")
+        and _declares_the_pinned_release(openclaw)
     )
     return identity
 
