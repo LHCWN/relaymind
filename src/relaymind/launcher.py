@@ -938,7 +938,8 @@ class _ArgumentParser(argparse.ArgumentParser):
         # errors argparse raises before returning any parsed arguments.
         super().error(
             "invalid arguments: use relaymind serve --config PATH,"
-            " relaymind openclaw install --release DIR, or relaymind openclaw token"
+            " relaymind openclaw install --release DIR, relaymind openclaw guidance,"
+            " or relaymind openclaw token"
         )
 
 
@@ -969,6 +970,32 @@ def _parser() -> argparse.ArgumentParser:
         "--base-url",
         default=openclaw_setup.DEFAULT_BASE_URL,
         help="the gateway's loopback /v1 URL (default %(default)s)",
+    )
+    guidance = steps.add_parser(
+        "guidance",
+        help="install the per-prompt guidance plugin and prepare the host for it",
+        allow_abbrev=False,
+    )
+    guidance.add_argument(
+        "--plugin",
+        type=Path,
+        default=openclaw_setup.GUIDANCE_PLUGIN_DIR,
+        help="the guidance plugin's folder (default: the one in this source checkout)",
+    )
+    guidance.add_argument(
+        "--base-url",
+        help="the gateway's loopback /v1 URL (default: keep the one set earlier, else "
+        f"{openclaw_setup.DEFAULT_BASE_URL})",
+    )
+    guidance.add_argument(
+        "--tools-file",
+        type=Path,
+        help="also offer MCP tools: write the host's tool list to this file",
+    )
+    guidance.add_argument(
+        "--limit",
+        choices=openclaw_setup.GUIDANCE_LIMITS,
+        help="set the plugin's limit (default: leave it as it is)",
     )
     steps.add_parser(
         "token",
@@ -1012,6 +1039,17 @@ def main(
             return openclaw_setup.install_plugin(
                 args.release, base_url=args.base_url, stdout=stdout, stderr=stderr
             )
+        if args.openclaw_command == "guidance":
+            return openclaw_setup.setup_guidance(
+                plugin=args.plugin,
+                base_url=args.base_url,
+                tools_file=args.tools_file,
+                limit=args.limit,
+                stdout=stdout,
+                stderr=stderr,
+            )
+        if not openclaw_setup.host_available(stderr):  # Before the operator pastes a secret.
+            return 2
         return openclaw_setup.store_token(openclaw_setup.read_token(), stdout=stdout, stderr=stderr)
     try:
         config = load_config(args.config)

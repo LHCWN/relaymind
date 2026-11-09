@@ -1381,7 +1381,7 @@ binding. For the current MCP-use and interactive-approval disposition, see the
 
 This provider plugin forwards the host's prompt and tools unchanged and narrows
 nothing. To show the model only the few skills a prompt needs, use the separate
-[guidance plugin](guidance-plugin/README.md) and [its tutorial](../../docs/guidance.md). It can also
+[guidance plugin](guidance-plugin/README.md) and [its tutorial](../../docs/guidance.md); `relaymind openclaw guidance` sets it up. It can also
 limit a turn to those skills and tools.
 
 ## Native recommendations and explicit actions

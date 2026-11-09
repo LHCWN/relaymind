@@ -1853,7 +1853,7 @@ future positive qualification. The original withdrawn claim is unchanged.
 
 ## Per-prompt guidance (spec 0.69; #284)
 
-RM45, RM46 and AC38 to AC40 are implemented on the branch `per-prompt-assets-284`, which is not merged:
+RM45, RM46 and AC38 to AC40 are implemented and merged (#285):
 the stateless gateway endpoint, the separate `relaymind-guidance` plugin with its optional strict limit, the
 third-party path with a standard-library example, the benchmark wrapper, the full-turn harness, the
 similar-asset data and harness, the metrics tool, and the re-pinned v3 data. Development results are in
@@ -1872,3 +1872,12 @@ enable and token commands with checks before any change. Deterministic tests use
 (`tests/test_openclaw_setup.py`). The helper also ran once against the real pinned host 2026.10.7 in an
 isolated home on Linux (install loaded, token stored). Not run: Windows, macOS, and any OpenClaw release
 other than 2026.10.7. The owner still has to review the spec 0.70 anchor comment in `asset_evidence.py`.
+
+## OpenClaw guidance setup helper (spec 0.71; RM45, RM46; AC41)
+
+Implemented: `relaymind openclaw guidance` runs the host side of guidance and writes the plugin's tool list from
+`openclaw mcp probe --json`. Deterministic tests use a stub host (`tests/test_openclaw_setup.py`). It also ran
+twice against the real host 2026.10.7 in an isolated home on Linux, with a fake MCP server: after the second run the
+plugin was loaded with no diagnostics and the configuration held one load path and the expected settings. This is a functional check, not platform qualification. Not run:
+Windows, macOS, a full guided turn after this setup, and any OpenClaw release other than 2026.10.7. The host's list has
+names only, so tools have no description until an operator adds one.

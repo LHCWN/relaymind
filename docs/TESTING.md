@@ -1432,6 +1432,12 @@ pass it.
   step and a plugin that is not enabled; a token that is read without echo at a terminal, goes to the host
   on standard input only and is never printed; and the check that the helper's range equals
   `package.json`.
+- `tests/test_openclaw_setup.py`: `relaymind openclaw guidance` against a stub host (RM45, RM46, AC41; spec
+  0.71). Steps and their order; no MCP connection without `--tools-file`; a whole tools file with operator descriptions
+  and hand-added tools kept; a stored address kept on a new run; the skill list emptied only after the plugin loaded; no
+  change at all on a partial or unreadable probe, an unreadable tools file, an undeclared host release, a wrong plugin
+  folder or base URL; a failed step; a hung host call, with the whole process tree ended on Windows (with a double); and
+  that the tutorials stay true to the command.
 - `tests/test_openclaw_install_check.py`: the install check against a stub
   host with the pinned host's command forms and observed behavior (the key
   in a SQLite state file, the call ID replayed without underscores,

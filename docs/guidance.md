@@ -36,11 +36,13 @@ goes on without a hint and without a limit, and OpenClaw's own search still work
 
    | Setup | Needs | How the final choice is made |
    | --- | --- | --- |
-   | `keywords = "none"`, `picker = "none"` | Nothing | Up to 8 strong word matches; OpenClaw's model chooses |
+   | `keywords = "none"`, `picker = "none"` | Nothing more | Up to 8 strong word matches; OpenClaw's model chooses |
    | `keywords = "local"`, `picker = "none"` | A local model | The same, and it also works across languages |
    | `keywords = "local"`, `picker = "external"` | A local model and an API key | A cheap model chooses the set the prompt needs |
    | `keywords = "external"`, `picker = "external"` | An API key | The same, with the best results and a little slower |
    | `primary = "http"` | Your selector | Your selector chooses |
+
+   The gateway needs one `[local_model]` or `[external_model]` table to start, even when guidance never calls it.
 
    Keywords run only for a prompt with letters outside the Latin script, so English prompts stay fast. When
    the picker finds nothing, keywords run once more for any prompt, because the prompt may share no word
@@ -50,8 +52,21 @@ goes on without a hint and without a limit, and OpenClaw's own search still work
 2. Start the gateway from the repository root: `relaymind serve --config relaymind.toml`. It prints an
    application token. Put it in `RELAYMIND_APP_TOKEN` for the OpenClaw process.
 
-3. Install the [guidance plugin](../integrations/openclaw/guidance-plugin/README.md) in OpenClaw, and set
-   `skills.limits.maxSkillsInPrompt` to `0`.
+3. Set up OpenClaw with one command. It runs OpenClaw's own commands to install the
+   [guidance plugin](../integrations/openclaw/guidance-plugin/README.md), allow its hook and set the gateway address.
+   After checking that the plugin loaded, it sets `skills.limits.maxSkillsInPrompt` to `0`:
+
+   ```bash
+   relaymind openclaw guidance --tools-file ~/.relaymind/tools.json
+   ```
+
+   Leave out `--tools-file` to offer skills only. Add `--limit strict` for the
+   [strict limit](#limit-openclaw-to-the-selection). An option you leave out keeps what an earlier run set; to stop
+   offering tools, run `openclaw config unset plugins.entries.relaymind-guidance.config.toolsFile`.
+
+   `maxSkillsInPrompt` applies to every agent of that OpenClaw. The plugin declares OpenClaw 2026.10.7 exactly, and the
+   command refuses any other release. After you upgrade OpenClaw, the host may skip the plugin, so give the model its
+   list back with `openclaw config unset skills.limits.maxSkillsInPrompt`.
 
    With many skills, also raise `skills.limits.maxSkillsLoadedPerSource` (default 200) and
    `maxCandidatesPerRoot` (default 300). OpenClaw does not load a skill past these caps, so it cannot be
@@ -172,11 +187,42 @@ The rules:
 Above 1,000 host assets your selector gets the best 1,000 by word match; the built-in stages take up to
 20,000. A hosted service needs a small local process in front of it, because the URL must be on loopback.
 
+## Prepare before the first prompt
+
+The plugin sends the host's list with each prompt, so a selector with no index has nothing to prepare. One that
+builds an index need not wait for the first prompt: OpenClaw prints the same skills with no session, using its own
+discovery, precedence and caps, so do not walk the skill folders yourself.
+
+```bash
+openclaw skills list --eligible --json    # keep skills with modelVisible true; --agent <id> for one agent
+openclaw skills info <name> --json        # filePath is the skill's SKILL.md, with the full body
+```
+
+A request carries no skill body, so read it from `filePath`. `source_locator` is only the label
+`host://skill/<name>`, not a path. `skills list` prints no paths, so this takes one `skills info` call per skill,
+a few seconds each: run it in the background.
+
+Treat this as a warm-up. Each request's list decides what may be picked, and it can differ per agent and session.
+Match an indexed record by `identity.package_id`, the skill's name. `content_hash` covers only the description as
+sent, shortened and redacted, so a skill's body can change while the hash stays the same: check the file as well.
+
+For MCP tools the request's `input_schema` is the placeholder `{"type":"object"}`, because OpenClaw's `mcp probe`
+lists names only. A selector that needs real schemas asks the servers itself with `tools/list`; `openclaw mcp show`
+prints how to reach them.
+
 ## Add MCP tools
 
 OpenClaw's Tool Search already keeps MCP tool schemas out of the request by default, so tools cost little
-context. OpenClaw lets only official plugins read its tool list, so guidance gets tools from the plugin's
-`toolsFile`, a JSON list of `{"name","description"}`.
+context. A plugin can refuse a tool call, but OpenClaw's plugin API gives it no list of the host's tools, so
+guidance gets tools from the plugin's `toolsFile`, a JSON list of `{"name","description"}`.
+
+`relaymind openclaw guidance --tools-file PATH` writes that file from `openclaw mcp probe --json`, which connects to
+each server in `mcp.servers` and applies its tool filter. Run it again when your servers change. If a server does not
+answer, nothing is changed, because a short list would leave the missing tools outside a strict limit.
+
+OpenClaw's list has names only, such as `weather__get_weather`. Such a tool matches on the words of its name. Add a
+`description` in the file for better matches: a new run keeps it. Tools from elsewhere, such as mcporter, are not in
+`mcp.servers`; add them by hand, without the `generated` field the command writes, and a new run keeps them too.
 
 For the recommendation catalog, tools arrive through a metadata import. `content_hash` is the SHA-256 of the
 file at `original_path`, and `schema_hash` is the canonical digest of `input_schema`

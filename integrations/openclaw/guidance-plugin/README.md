@@ -5,6 +5,8 @@ adds one labeled hint to that turn. With `limit: "strict"` it also refuses what 
 selected. It grants nothing. If anything fails it adds no hint and no limit, and the turn goes on.
 See [the tutorial](../../../docs/guidance.md).
 
+The quickest setup is `relaymind openclaw guidance`, which runs the host commands for everything below. By hand:
+
 ```json5
 {
   plugins: {
@@ -44,6 +46,7 @@ prints a new token at each start.
 It is a separate plugin on purpose. The native qualification pins the provider plugin's built
 bytes, so a change there would turn its approved direct actions off until they are qualified again.
 
-Tools: OpenClaw lets only official plugins read the host's tool list, so tools come from the
-optional `toolsFile`. OpenClaw's Tool Search already keeps MCP tool schemas out of the request by
+Tools: OpenClaw's plugin API gives a plugin no list of the host's tools, so tools come from the
+optional `toolsFile`. `relaymind openclaw guidance --tools-file PATH` writes it from the host's MCP
+servers. OpenClaw's Tool Search already keeps MCP tool schemas out of the request by
 default, so skills are the main context cost.
