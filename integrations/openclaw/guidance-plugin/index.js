@@ -532,6 +532,11 @@ export function fitBody(body, limit = MAX_BODY_BYTES) {
     room = Math.floor(room / 2);
     json = JSON.stringify({ ...body, assets: body.assets.map((a) => ({ ...a, description: clip(a.description, room) })) });
   }
+  // Long paths can still keep it too large: the file fields go last, since a hint needs none of them.
+  if (Buffer.byteLength(json) > limit) {
+    const bare = ({ content_hash, path, size_bytes, ...rest }) => ({ ...rest, description: clip(rest.description, room) });
+    json = JSON.stringify({ ...body, assets: body.assets.map(bare) });
+  }
   return json;
 }
 

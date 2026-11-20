@@ -566,6 +566,16 @@ describe("the request size (review of PR 285)", () => {
     expect(body.assets[0].description.length).toBeGreaterThan(0);
   });
 
+  it("drops the skill file fields last when short descriptions still do not fit (spec 0.72)", () => {
+    const file = { content_hash: "a".repeat(64), path: `/${"p".repeat(1500)}/SKILL.md`, size_bytes: 10 };
+    const assets = Array.from({ length: 30 }, (_, i) => ({ name: `s${i}`, kind: "skill", description: "d", ...file }));
+    const json = fitBody({ schema_version: 1, task_text: "x", assets }, 40_000);
+    expect(Buffer.byteLength(json)).toBeLessThanOrEqual(40_000);
+    const body = JSON.parse(json);
+    expect(body.assets).toHaveLength(30);
+    expect(body.assets[0]).toEqual({ name: "s0", kind: "skill", description: "d" });
+  });
+
   it("leaves a request that already fits alone", () => {
     const body = { schema_version: 1, task_text: "x", assets: [{ name: "a", kind: "skill", description: "short" }] };
     expect(JSON.parse(fitBody(body, 40_000))).toEqual(body);

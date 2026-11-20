@@ -17,6 +17,7 @@ import uuid
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, fields
 from itertools import islice, zip_longest
+from pathlib import PurePosixPath, PureWindowsPath
 
 from relaymind.assets.catalog import MAX_OFFER_RECORDS
 from relaymind.canonical import canonical_digest
@@ -208,9 +209,21 @@ def parse_guidance_request(value: object) -> dict:
 
 
 def _file_fields_ok(item: Mapping) -> bool:
-    """The schema keeps the three file fields together and on a skill; this checks the path."""
+    """The schema keeps the three file fields together and on a skill; this checks the path.
+
+    An absolute POSIX or Windows path to a `SKILL.md`, with no `..` step and no NUL (spec 0.72).
+    The selector still decides which roots it reads from; this only refuses what is never a skill.
+    """
     path = item.get("path")
-    return path is None or (path.startswith("/") and len(path.encode("utf-8")) <= MAX_PATH_BYTES)
+    if path is None:
+        return True
+    if "\0" in path or len(path.encode("utf-8")) > MAX_PATH_BYTES:
+        return False
+    for flavour in (PurePosixPath, PureWindowsPath):
+        parsed = flavour(path)
+        if parsed.is_absolute():
+            return parsed.name == "SKILL.md" and ".." not in parsed.parts
+    return False
 
 
 def validate_guidance_result(value: object) -> dict:

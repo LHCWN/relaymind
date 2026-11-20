@@ -19,7 +19,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   changes. A failed sync waits 30 s, doubling up to 10 minutes. Each exchange has its own `guidance.sync_ms`
   (60 s by default). `GET /relay/v1/guidance/sync` reports the last sync's counts with no asset names or paths.
   New schemas: `AssetSyncRequestV1`, `AssetSyncResponseV1` and `GuidanceSyncStatusV1`. Recommendations are
-  unchanged; their sync is a follow-up.
+  unchanged; their sync is a follow-up. Upgrade the gateway before the plugin: an older gateway refuses the
+  plugin's new file fields, and the turn then gets no hint.
 
 - Specification 0.71 (RM45, RM46; AC41; sections 7.7 and 14.1): `relaymind openclaw guidance` sets up per-prompt
   guidance with the host's own commands. It installs the plugin, empties the listed skill catalog and, with
