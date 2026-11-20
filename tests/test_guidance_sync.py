@@ -167,6 +167,10 @@ def test_the_plugins_skill_hash_is_the_offered_content_hash():
         dict(TOOL, content_hash=SKILL_HASH, path="/tmp/t.json", size_bytes=1),
         {k: v for k, v in SKILL.items() if k != "size_bytes"},
         dict(SKILL, path="relative/SKILL.md"),
+        dict(SKILL, path="/home/user/.openclaw/skills/../../.ssh/id_ed25519"),
+        dict(SKILL, path="/home/user/.openclaw/skills/pdf-merge/../x/SKILL.md"),
+        dict(SKILL, path="/home/user/notes.txt"),
+        dict(SKILL, path="/home/user/skills/a\x00/SKILL.md"),
         dict(SKILL, content_hash="A" * 64),
         dict(SKILL, size_bytes=1024 * 1024 + 1),
     ],
@@ -176,6 +180,15 @@ def test_a_skill_file_must_come_whole_and_only_on_a_skill(asset):
     answer = client(Router()).post("/relay/v1/guidance", json=body, headers=AUTH)
     assert answer.status_code == 400
     assert answer.json()["error"]["code"] == "invalid_request"
+
+
+def test_a_windows_skill_path_is_accepted_and_synced():
+    path = "C:\\Users\\u\\.openclaw\\skills\\pdf-merge\\SKILL.md"
+    body = dict(BODY, assets=[dict(SKILL, path=path), TOOL])
+    router = Router(outcome="not_ready", missing=lambda sent: sent)
+    answer = client(router, SYNCING).post("/relay/v1/guidance", json=body, headers=AUTH)
+    assert answer.status_code == 200
+    assert uploads(router)[0]["assets"][0]["content"]["path"] == path
 
 
 def pairs(select: dict) -> list[dict]:

@@ -49,7 +49,8 @@ bytes, so a change there would turn its approved direct actions off until they a
 For each skill it offers, the plugin sends the name, the description and, for a `SKILL.md` of at most
 1 MiB, that file's SHA-256, absolute path and size (spec 0.72). It never sends the body. The gateway passes the
 hash on as the skill's `content_hash`, and the path only to a selector that syncs (see
-[the tutorial](../../../docs/guidance.md#keep-your-selector-in-sync)).
+[the tutorial](../../../docs/guidance.md#keep-your-selector-in-sync)). Upgrade the gateway first: a gateway older
+than spec 0.72 refuses these fields, and the turn then gets no hint.
 
 Tools: OpenClaw's plugin API gives a plugin no list of the host's tools, so tools come from the
 optional `toolsFile`. `relaymind openclaw guidance --tools-file PATH` writes it from the host's MCP
