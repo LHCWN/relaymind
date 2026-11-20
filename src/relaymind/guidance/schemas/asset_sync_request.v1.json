@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://relaymind.local/schemas/asset_sync_request.v1.json",
+  "description": "AssetSyncRequestV1 (spec 0.72 section 7.7; RM47). find_missing sends asset pairs; upload sends the exact select records with an optional skill file.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "operation", "feeder_id", "assets"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "operation": {"enum": ["find_missing", "upload"]},
+    "feeder_id": {"const": "guidance"},
+    "assets": {"type": "array", "maxItems": 1000}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"operation": {"const": "find_missing"}}},
+      "then": {"properties": {"assets": {"items": {"$ref": "#/$defs/pair"}}}},
+      "else": {"properties": {"assets": {"items": {"$ref": "#/$defs/upload"}}}}
+    }
+  ],
+  "$defs": {
+    "pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset_id", "content_hash"],
+      "properties": {
+        "asset_id": {"type": "string", "minLength": 1},
+        "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "upload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["record", "content"],
+      "properties": {
+        "record": {"type": "object", "description": "The exact AssetRecordV1 of the select request."},
+        "content": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "path", "size_bytes"],
+              "properties": {
+                "kind": {"const": "file"},
+                "path": {"type": "string", "minLength": 1},
+                "size_bytes": {"type": "integer", "minimum": 0, "maximum": 1048576}
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

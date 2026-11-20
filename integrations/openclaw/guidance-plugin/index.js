@@ -1,4 +1,4 @@
-// Optional per-prompt guidance for OpenClaw (RM45, RM46, AC39, AC40; spec 0.69 section 7.7).
+// Optional per-prompt guidance for OpenClaw (RM45 to RM47, AC39, AC40; spec 0.69/0.72 section 7.7).
 //
 // A before_prompt_build hook reads the session's own skill snapshot, asks the gateway which few
 // assets this prompt needs, and adds one labeled hint to the turn. With limit = "strict" a
@@ -20,6 +20,10 @@ const MAX_NAME_BYTES = 128;
 const MAX_DESCRIPTION_BYTES = 2048;
 const MAX_ASSETS = 20_000;
 const MAX_FRONT_BYTES = 32_768;
+// A skill file up to this size is read whole, so its SHA-256 tells a selector when the body changed
+// (spec 0.72). The gateway forwards only the hash, the path and the size, never the body.
+const MAX_SKILL_FILE_BYTES = 1024 * 1024;
+const MAX_PATH_BYTES = 2048;
 // The gateway refuses a body above 32 MiB; 20,000 long descriptions can pass that, so keep a margin.
 const MAX_BODY_BYTES = 31 * 1024 * 1024;
 // Letters and digits of any language, with . _ : - inside. No spaces, so a name cannot be a sentence.
@@ -125,15 +129,23 @@ export function readSkillInfo(entry) {
     const { mtimeMs, size } = statSync(path);
     const cached = fileCache.get(path);
     if (cached && cached.mtimeMs === mtimeMs && cached.size === size) return cached.info;
-    const head = readHead(path, MAX_FRONT_BYTES).toString("utf8");
+    // A small file is read once, whole: its hash and its frontmatter come from the same bytes.
+    const whole = size <= MAX_SKILL_FILE_BYTES ? readFileSync(path) : null;
+    const head = (whole ? whole.subarray(0, MAX_FRONT_BYTES) : readHead(path, MAX_FRONT_BYTES)).toString("utf8");
     // Frontmatter that does not close within the bytes read may still hide the skill further on,
     // so it counts as unknown, and an unknown skill is never offered.
     if (size > MAX_FRONT_BYTES && /^\ufeff?---\r?\n/.test(head) && !/^\ufeff?---\r?\n[\s\S]*?\r?\n---/.test(head)) {
       return UNKNOWN;
     }
     const parsed = parseFrontmatter(head);
+    // Only an offered skill is hashed, and only with a path the gateway accepts.
+    const absolute = resolve(path);
+    const file =
+      !parsed.hidden && whole && whole.length <= MAX_SKILL_FILE_BYTES && Buffer.byteLength(absolute) <= MAX_PATH_BYTES
+        ? { content_hash: createHash("sha256").update(whole).digest("hex"), path: absolute, size_bytes: whole.length }
+        : null;
     // Only the part that is ever sent is kept, so the cache stays small.
-    const info = { ...parsed, description: clip(parsed.description, MAX_DESCRIPTION_BYTES) };
+    const info = { ...parsed, description: clip(parsed.description, MAX_DESCRIPTION_BYTES), file };
     if (fileCache.size > 50_000) fileCache.clear();
     fileCache.set(path, { mtimeMs, size, info });
     return info;
@@ -490,15 +502,17 @@ function readTools(path) {
 function hostAssets(snapshot, toolsFile, logger) {
   const assets = [];
   const seen = new Set();
-  const add = (name, kind, description) => {
+  const add = (name, kind, description, file) => {
     const key = `${kind}:${name}`;
     if (typeof name !== "string" || !name || Buffer.byteLength(name) > MAX_NAME_BYTES || seen.has(key) || assets.length >= MAX_ASSETS) return;
     seen.add(key);
-    assets.push({ name, kind, description: clip(typeof description === "string" ? description : "", MAX_DESCRIPTION_BYTES) });
+    const asset = { name, kind, description: clip(typeof description === "string" ? description : "", MAX_DESCRIPTION_BYTES) };
+    if (file) Object.assign(asset, file);
+    assets.push(asset);
   };
   for (const entry of snapshot?.skills ?? []) {
     const info = readSkillInfo(entry);
-    if (!info.hidden) add(entry.name, "skill", info.description);
+    if (!info.hidden) add(entry.name, "skill", info.description, info.file);
   }
   if (toolsFile) {
     try {

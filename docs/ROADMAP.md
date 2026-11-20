@@ -1881,3 +1881,11 @@ twice against the real host 2026.10.7 in an isolated home on Linux, with a fake 
 plugin was loaded with no diagnostics and the configuration held one load path and the expected settings. This is a functional check, not platform qualification. Not run:
 Windows, macOS, a full guided turn after this setup, and any OpenClaw release other than 2026.10.7. The host's list has
 names only, so tools have no description until an operator adds one.
+
+## Guidance selector sync (spec 0.72; RM47; AC42)
+
+Implemented for guidance (#290): the plugin sends each skill's SHA-256, path and size; a `not_ready` selector
+answer falls back to word match and, with `guidance.sync_url`, starts a `find_missing` then `upload` sync after
+the answer, with a result for each asset, a growing wait after failures, its own `guidance.sync_ms` and a status
+route. Deterministic tests use a fake router (`tests/test_guidance_sync.py`). Not done: the same sync for
+recommendations, the router side in asset-router, and any run against a real router or host.

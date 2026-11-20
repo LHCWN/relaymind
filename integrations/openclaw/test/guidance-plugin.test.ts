@@ -2,6 +2,7 @@
 //
 // A host double supplies the session's real skill snapshot and a gateway double
 // answers. The real host and real model runs are in scripts/guidance_turn_benchmark.py.
+import { createHash } from "node:crypto";
 import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, sep } from "node:path";
@@ -18,6 +19,12 @@ const logger = {
   error: (m: string) => logs.push(`error ${m}`),
   debug: (m: string) => logs.push(`debug ${m}`),
 };
+
+/** What the plugin reports for a skill file (spec 0.72): SHA-256 of its bytes, its path and size. */
+function fileOf(path: string) {
+  const bytes = readFileSync(path);
+  return { content_hash: createHash("sha256").update(bytes).digest("hex"), path, size_bytes: bytes.length };
+}
 
 function skill(name: string, description: string, extra = ""): string {
   const folder = join(dir, name);
@@ -109,8 +116,9 @@ describe("the guidance hook", () => {
     expect(JSON.parse(String(init.body))).toEqual({
       schema_version: 1,
       task_text: "merge two pdf files",
-      assets: [{ name: "pdf-merge", kind: "skill", description: "Merge pdf documents" }],
+      assets: [{ name: "pdf-merge", kind: "skill", description: "Merge pdf documents", ...fileOf(path) }],
     });
+    // Spec 0.72: the file's hash, path and size go to the gateway, never its body.
     expect(String(init.body)).not.toContain("BODY-TEXT");
   });
 
@@ -333,7 +341,7 @@ describe("reading SKILL.md", () => {
   it("reads a local skill when the host leaves its file host unset", () => {
     // Without remote skill access the pinned host records no file host, and the file is on this machine.
     const path = skill("local", "Local text");
-    expect(readSkillInfo({ name: "local", source: { filePath: path }, skillKey: "local" })).toEqual({ description: "Local text", hidden: false });
+    expect(readSkillInfo({ name: "local", source: { filePath: path }, skillKey: "local" })).toEqual({ description: "Local text", hidden: false, file: fileOf(path) });
   });
 
   it("decodes YAML escapes in a double-quoted value", () => {

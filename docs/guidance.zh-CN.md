@@ -2,7 +2,7 @@
 
 [English](guidance.md)
 
-用户在 OpenClaw 中输入提示词后，RelayMind 只提议该提示词需要的少量技能和工具，让模型看到这几项，而不是一长串列表。如果你愿意，也可以把 OpenClaw 限制在这几项之内。需求 RM45 和 RM46，规范第 7.7 节。
+用户在 OpenClaw 中输入提示词后，RelayMind 只提议该提示词需要的少量技能和工具，让模型看到这几项，而不是一长串列表。如果你愿意，也可以把 OpenClaw 限制在这几项之内。需求 RM45 至 RM47，规范第 7.7 节。
 
 网关只做提议。它不会运行任何东西，也不会授予权限。如果它很慢或失败，本轮对话会在没有提示、也没有限制的情况下继续，OpenClaw 自己的搜索仍然可用。
 
@@ -123,7 +123,7 @@ total_ms = 12000
  "deadline_ms":7990,"candidate_limit":10,
  "catalog":[{"schema_version":1,"asset_id":"host:skill:pdf-merge","kind":"skill","source_id":"host",
    "source_locator":"host://skill/pdf-merge","source_version":null,"captured_at":"1970-01-01T00:00:00Z",
-   "content_hash":"<sha256 of the description>","description":"Merge pdf documents","language_tags":[],
+   "content_hash":"<sha256 of SKILL.md>","description":"Merge pdf documents","language_tags":[],
    "dependencies":[],"availability":"unknown","stale":false,
    "identity":{"package_id":"pdf-merge","package_version":null}}]}
 ```
@@ -144,7 +144,7 @@ total_ms = 12000
 - 用 HTTP 200 和 `application/json` 响应，最大 1 MiB。不能有重复的 JSON 键或非有限数字。
 - `mechanism` 是你自己的标签。不要使用 `lexical_overlap`、`gateway_lexical_fallback` 或内置选择器的名称，它们会被拒绝。
 - 没有合适项时，响应 `"outcome":"no_match","decision":"no_match","candidates":[]`。
-- 失败或无效的响应会退回到词匹配并标记 `degraded: true`，除非设置 `fallback = false`。
+- 失败、无效的响应或 `"outcome":"not_ready"` 会退回到词匹配并标记 `degraded: true`，除非设置 `fallback = false`。
 - 选择器只做提议。网关只接受所提供的准确记录，提议本身不会运行任何东西。
 
 主机资产超过 1,000 项时，你的选择器会收到词匹配最好的 1,000 项；内置步骤最多处理 20,000 项。托管服务前面需要一个小型本地进程，因为 URL 必须在环回地址上。
@@ -160,9 +160,21 @@ openclaw skills info <name> --json        # filePath 是该技能的 SKILL.md，
 
 请求中不包含技能正文，请从 `filePath` 读取。`source_locator` 只是标签 `host://skill/<name>`，不是路径。`skills list` 不输出路径，所以每个技能都要调用一次 `skills info`，每次需要几秒钟，请在后台运行。
 
-这只是预热。能选哪些由每个请求中的列表决定，它可能因智能体和会话而不同。用技能名 `identity.package_id` 匹配已索引的记录。`content_hash` 只覆盖发送的描述（经过截断和脱敏），技能正文变化时哈希可能不变，所以还要检查文件。
+这只是预热。能选哪些由每个请求中的列表决定，它可能因智能体和会话而不同。用技能名 `identity.package_id` 匹配已索引的记录。插件会发送每个技能的 SHA-256，所以技能的 `content_hash` 是其 `SKILL.md` 的哈希，正文变化时它也会变化。文件大于 1 MiB 的技能没有这个哈希，其 `content_hash` 只覆盖发送的描述（经过截断和脱敏）。
 
 对于 MCP 工具，请求中的 `input_schema` 是占位符 `{"type":"object"}`，因为 OpenClaw 的 `mcp probe` 只列出名称。需要真实 schema 的选择器要自己用 `tools/list` 询问服务器；`openclaw mcp show` 会显示如何连接它们。
+
+## 让选择器保持同步
+
+为技能正文建立索引的选择器可以让网关告诉它哪些内容变了（规范 0.72，RM47）。在上面的 `[guidance]` 表中加入
+`sync_url = "http://127.0.0.1:8940/sync"`。当你的选择器响应 `"outcome":"not_ready"` 时，网关在这一轮退回到词匹配，并在作答之后向该 URL 发送两个 POST：
+
+1. `{"schema_version":1,"operation":"find_missing","feeder_id":"guidance","assets":[{"asset_id","content_hash"}]}`，包含所有提供的记录。用 `{"schema_version":1,"operation":"find_missing","inference":"local","missing":[...],"results":null}` 响应，列出你尚未索引的配对。
+2. `{"schema_version":1,"operation":"upload","feeder_id":"guidance","assets":[{"record","content"}]}`，只包含这些配对。`record` 是选择请求中的原样记录。技能的 `content` 是 `{"kind":"file","path":"/abs/SKILL.md","size_bytes":812}`，工具或没有文件的技能为 `null`。用 `"missing":null` 响应，并为每个配对给出一个结果：接收并准备建立索引时为 `{"asset_id","content_hash","status":"accepted","reason":null}`，否则为 `"status":"rejected"`，`"reason"` 取 `hash_mismatch`、`size_mismatch`、`outside_roots`、`too_large`、`unreadable` 或 `invalid_record` 之一。
+
+由你自己读取文件，只读取运维人员允许的目录，并用 `size_bytes` 和 `content_hash` 核对大小和 SHA-256。按准确的 `asset_id` 和 `content_hash` 为每个资产建立索引；如果选择请求提供了你尚未索引的配对，就响应 `not_ready`。如果你的嵌入模型或标签模型不在本机，请返回 `"inference":"remote"`：此时网关不发送路径，除非运维人员设置 `sync_allow_remote = true`。网关从不读取或发送技能正文，同一时间最多运行一次同步。
+
+带文件时被你拒绝的技能会再发送一次，但不带文件，这样你可以只根据记录为它建立索引。不带文件时被你拒绝的配对在其哈希变化之前不会再次发送。同步失败后，下一次同步要等待 30 秒，此后每连续失败一次等待时间加倍，最多 10 分钟。每次交换使用 `sync_ms`（默认 60 秒），与本轮自身的时间分开；同步失败不会改变任何响应。用应用令牌调用 `GET /relay/v1/guidance/sync` 可以查看上一次同步的计数和等待时间，其中不包含资产名称或路径。
 
 ## 添加 MCP 工具
 

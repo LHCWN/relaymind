@@ -2782,6 +2782,9 @@ Deterministic, with model doubles: `tests/test_guidance.py`, `tests/test_guidanc
 `tests/test_guidance_turn_benchmark.py`, `tests/test_matrix_benchmark_v3.py`, and in
 `integrations/openclaw`, `test/guidance-plugin.test.ts`.
 
+Selector sync (spec 0.72; RM47, AC42): `tests/test_guidance_sync.py` drives the guidance endpoint against a fake
+router that answers select and sync, and once against a real loopback server through the launched gateway.
+
 Live and separate, because they spend on a real model:
 `scripts/guidance_similar_benchmark.py` runs the stages or a third-party selector over families of similar
 skills, and `scripts/guidance_turn_benchmark.py` runs real full turns, with `--similar` for similar skills,
