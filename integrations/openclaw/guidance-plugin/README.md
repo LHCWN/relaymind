@@ -46,6 +46,11 @@ prints a new token at each start.
 It is a separate plugin on purpose. The native qualification pins the provider plugin's built
 bytes, so a change there would turn its approved direct actions off until they are qualified again.
 
+For each skill it offers, the plugin sends the name, the description and, for a `SKILL.md` of at most
+1 MiB, that file's SHA-256, absolute path and size (spec 0.72). It never sends the body. The gateway passes the
+hash on as the skill's `content_hash`, and the path only to a selector that syncs (see
+[the tutorial](../../../docs/guidance.md#keep-your-selector-in-sync)).
+
 Tools: OpenClaw's plugin API gives a plugin no list of the host's tools, so tools come from the
 optional `toolsFile`. `relaymind openclaw guidance --tools-file PATH` writes it from the host's MCP
 servers. OpenClaw's Tool Search already keeps MCP tool schemas out of the request by

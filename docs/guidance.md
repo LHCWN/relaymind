@@ -4,7 +4,7 @@
 
 A user writes a prompt in OpenClaw. RelayMind proposes the few skills and tools that prompt needs, and
 the model sees those instead of a long list. If you choose, OpenClaw can also be limited to them.
-Requirements RM45 and RM46, specification section 7.7.
+Requirements RM45 to RM47, specification section 7.7.
 
 The gateway proposes only. It never runs anything or grants a permission. If it is slow or fails, the turn
 goes on without a hint and without a limit, and OpenClaw's own search still works.
@@ -159,7 +159,7 @@ A request looks like this (shortened):
  "deadline_ms":7990,"candidate_limit":10,
  "catalog":[{"schema_version":1,"asset_id":"host:skill:pdf-merge","kind":"skill","source_id":"host",
    "source_locator":"host://skill/pdf-merge","source_version":null,"captured_at":"1970-01-01T00:00:00Z",
-   "content_hash":"<sha256 of the description>","description":"Merge pdf documents","language_tags":[],
+   "content_hash":"<sha256 of SKILL.md>","description":"Merge pdf documents","language_tags":[],
    "dependencies":[],"availability":"unknown","stale":false,
    "identity":{"package_id":"pdf-merge","package_version":null}}]}
 ```
@@ -181,7 +181,8 @@ The rules:
 - `mechanism` is your own label. Do not use `lexical_overlap`, `gateway_lexical_fallback` or the built-in
   selector names; they are refused.
 - If nothing fits, answer `"outcome":"no_match","decision":"no_match","candidates":[]`.
-- A failure or an invalid answer falls back to word match with `degraded: true`, unless `fallback = false`.
+- A failure, an invalid answer or `"outcome":"not_ready"` falls back to word match with `degraded: true`,
+  unless `fallback = false`.
 - A selector proposes. The gateway admits only exact offered records, and nothing runs because of a pick.
 
 Above 1,000 host assets your selector gets the best 1,000 by word match; the built-in stages take up to
@@ -203,12 +204,43 @@ A request carries no skill body, so read it from `filePath`. `source_locator` is
 a few seconds each: run it in the background.
 
 Treat this as a warm-up. Each request's list decides what may be picked, and it can differ per agent and session.
-Match an indexed record by `identity.package_id`, the skill's name. `content_hash` covers only the description as
-sent, shortened and redacted, so a skill's body can change while the hash stays the same: check the file as well.
+Match an indexed record by `identity.package_id`, the skill's name. The plugin sends each skill's SHA-256, so a
+skill's `content_hash` is the hash of its `SKILL.md` and changes with the body. A skill whose file is larger than
+1 MiB has no such hash: its `content_hash` covers only the description as sent, shortened and redacted.
 
 For MCP tools the request's `input_schema` is the placeholder `{"type":"object"}`, because OpenClaw's `mcp probe`
 lists names only. A selector that needs real schemas asks the servers itself with `tools/list`; `openclaw mcp show`
 prints how to reach them.
+
+## Keep your selector in sync
+
+A selector that indexes skill bodies can let the gateway tell it what changed (spec 0.72, RM47). Add
+`sync_url = "http://127.0.0.1:8940/sync"` to the `[guidance]` table above. When your selector answers
+`"outcome":"not_ready"`, the gateway falls back to word match for that turn and, after it answers, sends two
+POSTs to that URL:
+
+1. `{"schema_version":1,"operation":"find_missing","feeder_id":"guidance","assets":[{"asset_id","content_hash"}]}`
+   with every offered record. Answer `{"schema_version":1,"operation":"find_missing","inference":"local",
+   "missing":[...],"results":null}` with the pairs you have not indexed.
+2. `{"schema_version":1,"operation":"upload","feeder_id":"guidance","assets":[{"record","content"}]}` with only
+   those. `record` is the exact record of the select request. `content` is
+   `{"kind":"file","path":"/abs/SKILL.md","size_bytes":812}` for a skill, and `null` for a tool or a skill with
+   no file. Answer `"missing":null` and one result for each pair:
+   `{"asset_id","content_hash","status":"accepted","reason":null}` once you have taken it for indexing, or
+   `"status":"rejected"` with `"reason"` one of `hash_mismatch`, `size_mismatch`, `outside_roots`, `too_large`,
+   `unreadable` or `invalid_record`.
+
+Read the file yourself, only under folders your operator allowed, and check its size and SHA-256 against
+`size_bytes` and `content_hash`. Index each asset by its exact `asset_id` and `content_hash`, and answer
+`not_ready` to a select that offers a pair you have not indexed. Say `"inference":"remote"` if your embedding or
+tag model is not on this machine: the gateway then sends no paths, unless the operator sets
+`sync_allow_remote = true`. The gateway never reads or sends a skill body, and at most one sync runs at a time.
+
+A skill you rejected with its file is sent once more without it, so you can index it from its record. A pair you
+rejected without a file is not sent again until its hash changes. A sync that fails waits 30 s before the next one,
+twice as long after each further failure, up to 10 minutes. Each exchange gets `sync_ms`, 60 s by default, apart from
+the turn's own time, and a failed sync changes no answer. `GET /relay/v1/guidance/sync` with the application token
+shows the last sync's counts and the wait, with no asset names or paths.
 
 ## Add MCP tools
 
