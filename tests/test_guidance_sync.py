@@ -529,3 +529,55 @@ def test_the_launched_gateway_syncs_with_a_real_loopback_router(tmp_path):
         server.shutdown()
     assert answer.json()["chosen_by"] == "word_match"
     assert [s["operation"] for s in router.syncs] == ["find_missing"]
+
+
+def test_a_sync_is_not_reported_as_synced_while_its_upload_runs():
+    """AC42: `synced` means a sync with missing pairs finished (review of PR 291)."""
+    router = Router(outcome="not_ready", missing=lambda sent: sent)
+    seen = []
+    sync = GuidanceSync(SYNCING, transport_factory=lambda: httpx.MockTransport(handler))
+
+    def handler(request):
+        if json.loads(request.content)["operation"] == "upload":
+            seen.append(sync.status())
+        return router.handler(request)
+
+    http = client(router, SYNCING, sync=sync)
+    http.post("/relay/v1/guidance", json=BODY, headers=AUTH)
+    assert seen and seen[0]["running"] is True and seen[0]["last_outcome"] == "none"
+    assert status(http)["last_outcome"] == "synced" and status(http)["missing"] == 2
+
+
+def test_a_sync_whose_upload_fails_reports_the_counts_of_its_find_missing():
+    """AC42: the counts are those of the last sync whose find_missing was answered."""
+    router = Router(outcome="not_ready", missing=lambda sent: sent)
+
+    def handler(request):
+        if json.loads(request.content)["operation"] == "upload":
+            return httpx.Response(500)
+        return router.handler(request)
+
+    sync = GuidanceSync(SYNCING, transport_factory=lambda: httpx.MockTransport(handler))
+    http = client(router, SYNCING, sync=sync)
+    http.post("/relay/v1/guidance", json=BODY, headers=AUTH)
+    body = status(http)
+    assert body["last_outcome"] == "failed" and body["missing"] == 2 and body["accepted"] == 0
+
+
+def test_each_sync_exchange_uses_the_injected_clock(monkeypatch):
+    """RM47: the sync passes its own clock to the selector transport."""
+    import relaymind.guidance.sync as sync_module
+
+    clocks = []
+    real = sync_module.post_json
+
+    async def spy(url, payload, context, **kwargs):
+        clocks.append(context.clock)
+        return await real(url, payload, context, **kwargs)
+
+    monkeypatch.setattr(sync_module, "post_json", spy)
+    router = Router(outcome="not_ready")
+    clock = Clock()
+    sync = GuidanceSync(SYNCING, transport_factory=router.transport, clock=clock)
+    client(router, SYNCING, sync=sync).post("/relay/v1/guidance", json=BODY, headers=AUTH)
+    assert clocks and all(c is clock for c in clocks)

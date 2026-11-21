@@ -216,8 +216,8 @@ prints how to reach them.
 
 A selector that indexes skill bodies can let the gateway tell it what changed (spec 0.72, RM47). Add
 `sync_url = "http://127.0.0.1:8940/sync"` to the `[guidance]` table above. When your selector answers
-`"outcome":"not_ready"`, the gateway falls back to word match for that turn and, after it answers, sends two
-POSTs to that URL:
+`"outcome":"not_ready"`, the gateway falls back to word match for that turn and, after it answers, sends up to
+three POSTs to that URL:
 
 1. `{"schema_version":1,"operation":"find_missing","feeder_id":"guidance","assets":[{"asset_id","content_hash"}]}`
    with every offered record. Answer `{"schema_version":1,"operation":"find_missing","inference":"local",

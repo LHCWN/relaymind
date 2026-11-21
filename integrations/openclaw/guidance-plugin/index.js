@@ -126,11 +126,15 @@ export function readSkillInfo(entry) {
   const host = entry?.source?.fileHost;
   if (typeof path !== "string" || (host !== undefined && host !== "gateway")) return UNKNOWN;
   try {
-    const { mtimeMs, size } = statSync(path);
+    const stat = statSync(path);
+    // A device or pipe may report size 0 and never end, and opening a pipe can block the hook.
+    if (!stat.isFile()) return UNKNOWN;
+    const { mtimeMs, size } = stat;
     const cached = fileCache.get(path);
     if (cached && cached.mtimeMs === mtimeMs && cached.size === size) return cached.info;
-    // A small file is read once, whole: its hash and its frontmatter come from the same bytes.
-    const whole = size <= MAX_SKILL_FILE_BYTES ? readFileSync(path) : null;
+    // A small file is read once, whole: its hash and its frontmatter come from the same bytes. The
+    // read stops one byte past the limit, so a file that grew after stat is never hashed.
+    const whole = size <= MAX_SKILL_FILE_BYTES ? readHead(path, MAX_SKILL_FILE_BYTES + 1) : null;
     const head = (whole ? whole.subarray(0, MAX_FRONT_BYTES) : readHead(path, MAX_FRONT_BYTES)).toString("utf8");
     // Frontmatter that does not close within the bytes read may still hide the skill further on,
     // so it counts as unknown, and an unknown skill is never offered.

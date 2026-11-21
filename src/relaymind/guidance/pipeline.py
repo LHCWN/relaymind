@@ -219,11 +219,12 @@ def _file_fields_ok(item: Mapping) -> bool:
         return True
     if "\0" in path or len(path.encode("utf-8")) > MAX_PATH_BYTES:
         return False
-    for flavour in (PurePosixPath, PureWindowsPath):
-        parsed = flavour(path)
-        if parsed.is_absolute():
-            return parsed.name == "SKILL.md" and ".." not in parsed.parts
-    return False
+    # A path is read the way of the one flavour it is absolute in: "/..." is never a Windows drive
+    # path, and a POSIX-absolute "//server/share/..." is judged as POSIX on the host that sent it.
+    parsed = next(
+        (p for p in (PurePosixPath(path), PureWindowsPath(path)) if p.is_absolute()), None
+    )
+    return parsed is not None and parsed.name == "SKILL.md" and ".." not in parsed.parts
 
 
 def validate_guidance_result(value: object) -> dict:

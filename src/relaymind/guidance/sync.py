@@ -57,6 +57,8 @@ class GuidanceSync:
         self._not_before = 0.0
         self._rejected: OrderedDict[tuple[str, str], None] = OrderedDict()
         # The last sync whose find_missing was answered: counts only, never an asset (RM16, RM47).
+        # A running sync fills `_current`; the status shows it only once that sync ends.
+        self._current: dict | None = None
         self._last = dict(
             last_outcome="none",
             last_inference=None,
@@ -84,18 +86,19 @@ class GuidanceSync:
         Never raises (a cancellation goes through)."""
         if self._running or self._clock() < self._not_before:
             return
-        self._running = True
+        self._running, self._current = True, None
         try:
             await self._sync(catalog, files)
         except Exception:  # The answer is already sent; a failed sync changes nothing.
-            self._last["last_outcome"] = "failed"
+            self._last = dict(self._current or self._last, last_outcome="failed")
             self._failures += 1
             wait = min(MAX_WAIT_S, FIRST_WAIT_S * 2 ** min(self._failures - 1, 10))
             self._not_before = self._clock() + wait
         else:
+            self._last = self._current
             self._failures, self._not_before = 0, 0.0
         finally:
-            self._running = False
+            self._running, self._current = False, None
 
     async def _sync(self, catalog: Sequence[Mapping], files: Mapping[str, Mapping]) -> None:
         offered = {_key(record) for record in catalog}
@@ -108,7 +111,7 @@ class GuidanceSync:
         if len(chosen) != len(missing) or not chosen <= offered:
             raise ValueError("invalid_sync_response")
         known = chosen & self._rejected.keys()
-        self._last.update(
+        self._current = current = dict(
             last_outcome="nothing_missing" if not chosen else "synced",
             last_inference=found["inference"],
             missing=len(chosen),
@@ -132,7 +135,7 @@ class GuidanceSync:
             for record in catalog
             if _key(record) in chosen
         ]
-        self._last["files_sent"] = sum(1 for item in uploads if item["content"])
+        current["files_sent"] = sum(1 for item in uploads if item["content"])
         rejected = await self._upload(uploads)
         # A pair the selector could not take with its file may still be indexed from its record.
         again = [
@@ -143,7 +146,7 @@ class GuidanceSync:
         final = (rejected - {_key(i["record"]) for i in again}) | (
             await self._upload(again) if again else set()
         )
-        self._last.update(accepted=len(chosen) - len(final), rejected=len(known) + len(final))
+        current.update(accepted=len(chosen) - len(final), rejected=len(known) + len(final))
         for pair in final:
             self._rejected[pair] = None
         while len(self._rejected) > MAX_REJECTED:
@@ -170,7 +173,7 @@ class GuidanceSync:
             post_json(
                 self.url,
                 payload,
-                SelectorContext(time.monotonic, lambda: None),
+                SelectorContext(self._clock, lambda: None),
                 transport_factory=self._transport_factory,
             ),
             self.exchange_s,

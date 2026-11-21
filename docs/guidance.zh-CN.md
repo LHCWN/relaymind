@@ -167,7 +167,7 @@ openclaw skills info <name> --json        # filePath 是该技能的 SKILL.md，
 ## 让选择器保持同步
 
 为技能正文建立索引的选择器可以让网关告诉它哪些内容变了（规范 0.72，RM47）。在上面的 `[guidance]` 表中加入
-`sync_url = "http://127.0.0.1:8940/sync"`。当你的选择器响应 `"outcome":"not_ready"` 时，网关在这一轮退回到词匹配，并在作答之后向该 URL 发送两个 POST：
+`sync_url = "http://127.0.0.1:8940/sync"`。当你的选择器响应 `"outcome":"not_ready"` 时，网关在这一轮退回到词匹配，并在作答之后向该 URL 发送最多三个 POST：
 
 1. `{"schema_version":1,"operation":"find_missing","feeder_id":"guidance","assets":[{"asset_id","content_hash"}]}`，包含所有提供的记录。用 `{"schema_version":1,"operation":"find_missing","inference":"local","missing":[...],"results":null}` 响应，列出你尚未索引的配对。
 2. `{"schema_version":1,"operation":"upload","feeder_id":"guidance","assets":[{"record","content"}]}`，只包含这些配对。`record` 是选择请求中的原样记录。技能的 `content` 是 `{"kind":"file","path":"/abs/SKILL.md","size_bytes":812}`，工具或没有文件的技能为 `null`。用 `"missing":null` 响应，并为每个配对给出一个结果：接收并准备建立索引时为 `{"asset_id","content_hash","status":"accepted","reason":null}`，否则为 `"status":"rejected"`，`"reason"` 取 `hash_mismatch`、`size_mismatch`、`outside_roots`、`too_large`、`unreadable` 或 `invalid_record` 之一。

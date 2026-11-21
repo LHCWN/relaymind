@@ -559,6 +559,14 @@ describe("the plugin's own maxPicks", () => {
 });
 
 describe("reading a skill file (review of PR 285)", () => {
+  it.skipIf(process.platform === "win32")("does not read a SKILL.md that is not a regular file (review of PR 291)", () => {
+    // /dev/zero reports size 0 and never ends: a whole-file read would not stop.
+    const path = join(dir, "device", "SKILL.md");
+    mkdirSync(dirname(path), { recursive: true });
+    symlinkSync("/dev/zero", path);
+    expect(readSkillInfo(entry("device", path))).toEqual({ description: "", hidden: true });
+  });
+
   it("reads only the head of a large file and still finds its frontmatter", () => {
     const path = skill("big", "Big skill", "") ;
     writeFileSync(path, "---\nname: big\ndescription: Big skill\n---\n" + "x".repeat(5_000_000));
