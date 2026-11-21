@@ -141,7 +141,8 @@ export function readSkillInfo(entry) {
     // Only an offered skill is hashed, and only with a path the gateway accepts.
     const absolute = resolve(path);
     const file =
-      !parsed.hidden && whole && whole.length <= MAX_SKILL_FILE_BYTES && Buffer.byteLength(absolute) <= MAX_PATH_BYTES
+      !parsed.hidden && whole && whole.length <= MAX_SKILL_FILE_BYTES
+        && basename(absolute) === "SKILL.md" && Buffer.byteLength(absolute) <= MAX_PATH_BYTES
         ? { content_hash: createHash("sha256").update(whole).digest("hex"), path: absolute, size_bytes: whole.length }
         : null;
     // Only the part that is ever sent is kept, so the cache stays small.

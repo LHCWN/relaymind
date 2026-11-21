@@ -122,6 +122,22 @@ describe("the guidance hook", () => {
     expect(String(init.body)).not.toContain("BODY-TEXT");
   });
 
+  // RM47, AC42: file metadata is optional and must use a path the gateway accepts.
+  it.each(["Skill.md", "instructions.md"])("offers %s by description without file metadata", async (filename) => {
+    const path = join(dir, filename);
+    writeFileSync(path, "---\nname: alternate\ndescription: Alternate instructions\n---\n");
+    const standard = skill("pdf-merge", "Merge pdf documents");
+    const fetcher = gateway(picks(["pdf-merge"]));
+    vi.stubGlobal("fetch", fetcher);
+    const { handlers } = load({}, [entry("alternate", path), entry("pdf-merge", standard)]);
+    await handlers.before_prompt_build(EVENT, CTX);
+    const body = JSON.parse(String(fetcher.mock.calls[0]![1].body));
+    expect(body.assets).toEqual([
+      { name: "alternate", kind: "skill", description: "Alternate instructions" },
+      { name: "pdf-merge", kind: "skill", description: "Merge pdf documents", ...fileOf(standard) },
+    ]);
+  });
+
   it("never offers a skill hidden from the model", async () => {
     const shown = skill("shown", "Visible");
     const hidden = skill("hidden", "Secret helper", "disable-model-invocation: true\n");
