@@ -7,6 +7,7 @@ exported report must grade with the offline grader. Fixture-qualified only.
 """
 
 import asyncio
+from datetime import UTC, datetime
 
 import pytest
 
@@ -35,7 +36,7 @@ def corpus(tmp_path):
     return resolve_corpus(*companions(expanded_release(tmp_path / "release")))
 
 
-def setup(tmp_path, episode_count=1):
+def setup(tmp_path, episode_count=1, *, clock=None):
     from relaymind.assets.embedding_backends import EmbeddingEngine
     from relaymind.selection.adaptation_stage import AdaptationStage
 
@@ -88,13 +89,15 @@ def setup(tmp_path, episode_count=1):
         fixture_production().recommendations,
         tmp_path / "work",
         adaptation_stage=stage,
-        clock=FakeClock(),
+        clock=clock if clock is not None else FakeClock(),
     )
     return release, freeze, episodes, arms
 
 
-def run(tmp_path, *, interrupted=lambda: False, episode_count=1, qualification="fixture"):
-    release, freeze, episodes, arms = setup(tmp_path, episode_count)
+def run(
+    tmp_path, *, interrupted=lambda: False, episode_count=1, qualification="fixture", clock=None
+):
+    release, freeze, episodes, arms = setup(tmp_path, episode_count, clock=clock)
     report, evidence = asyncio.run(
         run_adaptation_episodes(
             episodes,
@@ -111,7 +114,10 @@ def run(tmp_path, *, interrupted=lambda: False, episode_count=1, qualification="
 
 
 def test_an_episode_runs_through_the_real_lifecycle_and_grades(tmp_path):
-    release, freeze, episodes, report, evidence = run(tmp_path)
+    # RM42, AC33: the episode honors its injected clock for corrections and reset.
+    clock = FakeClock()
+    clock.now = datetime(2000, 1, 1, tzinfo=UTC)
+    release, freeze, episodes, report, evidence = run(tmp_path, clock=clock)
     result = report["episodes"][0]
     assert result["status"] == "completed", result["reason"]
     assert [c["status"] for c in result["corrections"]] == ["accepted"] * 3

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://relaymind.local/schemas/guidance_sync_status.v1.json",
+  "description": "GuidanceSyncStatusV1 (spec 0.72 section 7.7; RM47). Counts of the last sync that reached the selector; no asset ID, path or text.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "enabled", "running", "last_outcome", "last_inference", "missing",
+    "accepted", "rejected", "files_sent", "consecutive_failures", "retry_after_ms"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "enabled": {"type": "boolean"},
+    "running": {"type": "boolean"},
+    "last_outcome": {"enum": ["none", "nothing_missing", "synced", "failed"]},
+    "last_inference": {"enum": ["local", "remote", null]},
+    "missing": {"type": "integer", "minimum": 0},
+    "accepted": {"type": "integer", "minimum": 0},
+    "rejected": {"type": "integer", "minimum": 0},
+    "files_sent": {"type": "integer", "minimum": 0},
+    "consecutive_failures": {"type": "integer", "minimum": 0},
+    "retry_after_ms": {"type": "integer", "minimum": 0}
+  }
+}

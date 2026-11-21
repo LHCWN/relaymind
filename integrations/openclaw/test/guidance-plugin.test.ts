@@ -2,6 +2,7 @@
 //
 // A host double supplies the session's real skill snapshot and a gateway double
 // answers. The real host and real model runs are in scripts/guidance_turn_benchmark.py.
+import { createHash } from "node:crypto";
 import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, sep } from "node:path";
@@ -18,6 +19,12 @@ const logger = {
   error: (m: string) => logs.push(`error ${m}`),
   debug: (m: string) => logs.push(`debug ${m}`),
 };
+
+/** What the plugin reports for a skill file (spec 0.72): SHA-256 of its bytes, its path and size. */
+function fileOf(path: string) {
+  const bytes = readFileSync(path);
+  return { content_hash: createHash("sha256").update(bytes).digest("hex"), path, size_bytes: bytes.length };
+}
 
 function skill(name: string, description: string, extra = ""): string {
   const folder = join(dir, name);
@@ -109,9 +116,26 @@ describe("the guidance hook", () => {
     expect(JSON.parse(String(init.body))).toEqual({
       schema_version: 1,
       task_text: "merge two pdf files",
-      assets: [{ name: "pdf-merge", kind: "skill", description: "Merge pdf documents" }],
+      assets: [{ name: "pdf-merge", kind: "skill", description: "Merge pdf documents", ...fileOf(path) }],
     });
+    // Spec 0.72: the file's hash, path and size go to the gateway, never its body.
     expect(String(init.body)).not.toContain("BODY-TEXT");
+  });
+
+  // RM47, AC42: file metadata is optional and must use a path the gateway accepts.
+  it.each(["Skill.md", "instructions.md"])("offers %s by description without file metadata", async (filename) => {
+    const path = join(dir, filename);
+    writeFileSync(path, "---\nname: alternate\ndescription: Alternate instructions\n---\n");
+    const standard = skill("pdf-merge", "Merge pdf documents");
+    const fetcher = gateway(picks(["pdf-merge"]));
+    vi.stubGlobal("fetch", fetcher);
+    const { handlers } = load({}, [entry("alternate", path), entry("pdf-merge", standard)]);
+    await handlers.before_prompt_build(EVENT, CTX);
+    const body = JSON.parse(String(fetcher.mock.calls[0]![1].body));
+    expect(body.assets).toEqual([
+      { name: "alternate", kind: "skill", description: "Alternate instructions" },
+      { name: "pdf-merge", kind: "skill", description: "Merge pdf documents", ...fileOf(standard) },
+    ]);
   });
 
   it("never offers a skill hidden from the model", async () => {
@@ -333,7 +357,7 @@ describe("reading SKILL.md", () => {
   it("reads a local skill when the host leaves its file host unset", () => {
     // Without remote skill access the pinned host records no file host, and the file is on this machine.
     const path = skill("local", "Local text");
-    expect(readSkillInfo({ name: "local", source: { filePath: path }, skillKey: "local" })).toEqual({ description: "Local text", hidden: false });
+    expect(readSkillInfo({ name: "local", source: { filePath: path }, skillKey: "local" })).toEqual({ description: "Local text", hidden: false, file: fileOf(path) });
   });
 
   it("decodes YAML escapes in a double-quoted value", () => {
@@ -556,6 +580,16 @@ describe("the request size (review of PR 285)", () => {
     const body = JSON.parse(json);
     expect(body.assets).toHaveLength(50);
     expect(body.assets[0].description.length).toBeGreaterThan(0);
+  });
+
+  it("drops the skill file fields last when short descriptions still do not fit (spec 0.72)", () => {
+    const file = { content_hash: "a".repeat(64), path: `/${"p".repeat(1500)}/SKILL.md`, size_bytes: 10 };
+    const assets = Array.from({ length: 30 }, (_, i) => ({ name: `s${i}`, kind: "skill", description: "d", ...file }));
+    const json = fitBody({ schema_version: 1, task_text: "x", assets }, 40_000);
+    expect(Buffer.byteLength(json)).toBeLessThanOrEqual(40_000);
+    const body = JSON.parse(json);
+    expect(body.assets).toHaveLength(30);
+    expect(body.assets[0]).toEqual({ name: "s0", kind: "skill", description: "d" });
   });
 
   it("leaves a request that already fits alone", () => {

@@ -8,6 +8,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Specification 0.72 (#290; RM47; AC42; section 7.7): guidance can keep a third-party selector's index in step
+  with the host's skills. The plugin sends each skill's SHA-256, absolute path and size, so a skill's
+  `content_hash` now changes with its body. A selector answer `not_ready` now falls back to word match. With
+  `guidance.sync_url` set, the gateway then asks the selector which offered records it is missing
+  (`find_missing`) and uploads only those (`upload`), after the answer is sent. A skill body reaches the
+  selector only as a file path it reads itself, and no path is sent to a selector that reports remote inference
+  unless `guidance.sync_allow_remote = true`. The upload answer gives a result for each asset: a skill rejected
+  with its file is sent once more without it, and a pair rejected without a file is not sent again until its hash
+  changes. A failed sync waits 30 s, doubling up to 10 minutes. Each exchange has its own `guidance.sync_ms`
+  (60 s by default). `GET /relay/v1/guidance/sync` reports the last sync's counts with no asset names or paths.
+  New schemas: `AssetSyncRequestV1`, `AssetSyncResponseV1` and `GuidanceSyncStatusV1`. Recommendations are
+  unchanged; their sync is a follow-up. Upgrade the gateway before the plugin: an older gateway refuses the
+  plugin's new file fields, and the turn then gets no hint.
+
 - Specification 0.71 (RM45, RM46; AC41; sections 7.7 and 14.1): `relaymind openclaw guidance` sets up per-prompt
   guidance with the host's own commands. It installs the plugin, empties the listed skill catalog and, with
   `--tools-file`, writes the plugin's tool list from `openclaw mcp probe`. A partial list changes nothing, and

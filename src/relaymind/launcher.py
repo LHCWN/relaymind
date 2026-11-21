@@ -555,6 +555,7 @@ def _install_guidance(app, config: LauncherConfig, orchestrator) -> None:
     """The stateless guidance route with the configured stages (section 7.7). No connection now."""
     from relaymind.api.guidance import install_guidance_routes
     from relaymind.guidance.models import external_client, local_keyword_client
+    from relaymind.guidance.sync import GuidanceSync
     from relaymind.selection.asset_http import HttpAssetSelector
 
     settings = config.guidance
@@ -567,12 +568,14 @@ def _install_guidance(app, config: LauncherConfig, orchestrator) -> None:
     selector = None
     if settings.primary == "http":
         selector = HttpAssetSelector(name=settings.name, version=settings.version, url=settings.url)
+    sync = GuidanceSync(settings) if settings.sync_url is not None else None
     install_guidance_routes(
         app,
         settings,
         keywords=keywords,
         picker=picker,
         selector=selector,
+        sync=sync,
         redact=lambda text: redact_prompt(orchestrator.redactor, text),
     )
 
