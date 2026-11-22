@@ -18,11 +18,13 @@ import socket
 import subprocess
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import httpx
+import pytest
 
 ROUTER_DIR_ENV = "RELAYMIND_ASSET_ROUTER_DIR"
 ROUTER_REV_ENV = "RELAYMIND_ASSET_ROUTER_REV"
@@ -38,37 +40,83 @@ def free_port() -> int:
         return sock.getsockname()[1]
 
 
+def poll(check: Callable[[], object], timeout: float, message: Callable[[], str] | str):
+    """Call `check` until it returns something truthy, and return that; fail after `timeout` s."""
+    deadline = time.monotonic() + timeout
+    while not (result := check()):
+        if time.monotonic() > deadline:
+            pytest.fail(message() if callable(message) else message)
+        time.sleep(0.1)
+    return result
+
+
+def require_checkout() -> Path:
+    """The router checkout named by RELAYMIND_ASSET_ROUTER_DIR, or a skip without one."""
+    value = os.environ.get(ROUTER_DIR_ENV)
+    if not value:
+        pytest.skip(f"set {ROUTER_DIR_ENV} to an asset-router checkout with node_modules")
+    path = Path(value).resolve()
+    if not (path / "node_modules" / ".bin" / "tsx").exists():
+        pytest.skip(f"{path} has no installed dependencies (run npm ci there)")
+    return path
+
+
 def router_revision(checkout: Path) -> str:
     """The exact commit of the router checkout, refused when its tracked files changed."""
-    head = subprocess.run(
-        ["git", "-C", str(checkout), "rev-parse", "HEAD"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    dirty = subprocess.run(
-        ["git", "-C", str(checkout), "status", "--porcelain", "--untracked-files=no"],
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.strip()
-    if dirty:
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ["git", "-C", str(checkout), *args], capture_output=True, text=True, check=True
+        ).stdout.strip()
+
+    if git("status", "--porcelain", "--untracked-files=no"):
         raise RuntimeError(f"router checkout {checkout} has local changes; use a clean revision")
-    return head
+    return git("rev-parse", "HEAD")
 
 
 class _Server(ThreadingHTTPServer):
     daemon_threads = True
 
 
-def _serve(handler: type[BaseHTTPRequestHandler]) -> tuple[_Server, str]:
-    server = _Server(("127.0.0.1", 0), handler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    return server, f"http://127.0.0.1:{server.server_port}"
+class _QuietHandler(BaseHTTPRequestHandler):
+    def log_message(self, *args):
+        pass
+
+    def reply(self, status: int, body: bytes = b"", content_type: str = "application/json"):
+        self.send_response(status)
+        if body:
+            self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+
+class _Loopback:
+    """A threaded loopback HTTP server owned by a test double."""
+
+    _server: _Server | None = None
+
+    def _serve(self, handler: type[BaseHTTPRequestHandler]) -> None:
+        self._server = _Server(("127.0.0.1", 0), handler)
+        # A short poll interval keeps shutdown() quick: the default waits up to 0.5 s.
+        threading.Thread(
+            target=self._server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True
+        ).start()
+
+    @property
+    def url(self) -> str:
+        assert self._server is not None, "not started"
+        return f"http://127.0.0.1:{self._server.server_port}"
+
+    def stop(self) -> None:
+        if self._server:
+            self._server.shutdown()
+            self._server.server_close()
+            self._server = None
 
 
 @dataclass
-class EmbeddingDouble:
+class EmbeddingDouble(_Loopback):
     """Deterministic bag-of-words vectors. Inference is the only part that is not production code.
 
     `fail_marker`: an input containing it gets HTTP 500, as a failing embedding endpoint would.
@@ -78,8 +126,6 @@ class EmbeddingDouble:
     fail_marker: str | None = None
     seed: str = "v1"
     calls: int = 0
-    url: str = ""
-    _server: _Server | None = None
 
     def vector(self, text: str) -> list[float]:
         vec = [0.0] * DIMENSIONS
@@ -92,34 +138,18 @@ class EmbeddingDouble:
     def start(self) -> EmbeddingDouble:
         double = self
 
-        class Handler(BaseHTTPRequestHandler):
-            def log_message(self, *args):
-                pass
-
+        class Handler(_QuietHandler):
             def do_POST(self):
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 double.calls += 1
                 text = body.get("input", "")
                 if double.fail_marker and double.fail_marker in text:
-                    self.send_response(500)
-                    self.send_header("Content-Length", "0")
-                    self.end_headers()
-                    return
-                data = json.dumps(
-                    {"data": [{"embedding": double.vector(text)}], "model": body.get("model")}
-                ).encode()
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
+                    return self.reply(500)
+                answer = {"data": [{"embedding": double.vector(text)}], "model": body.get("model")}
+                self.reply(200, json.dumps(answer).encode())
 
-        self._server, self.url = _serve(Handler)
+        self._serve(Handler)
         return self
-
-    def stop(self) -> None:
-        if self._server:
-            self._server.shutdown()
 
 
 @dataclass
@@ -131,28 +161,25 @@ class Exchange:
 
 
 @dataclass
-class RecordingProxy:
+class RecordingProxy(_Loopback):
     """Forwards POST /select and /sync to the router unchanged and records both sides."""
 
-    target: str
+    target: str = ""
     exchanges: list[Exchange] = field(default_factory=list)
-    url: str = ""
-    _server: _Server | None = None
+    _client: httpx.Client | None = None
 
     def start(self) -> RecordingProxy:
         proxy = self
+        # One client for every forwarded request; httpx clients are thread-safe.
+        self._client = httpx.Client(timeout=30)
 
-        class Handler(BaseHTTPRequestHandler):
-            def log_message(self, *args):
-                pass
-
+        class Handler(_QuietHandler):
             def do_POST(self):
                 raw = self.rfile.read(int(self.headers["Content-Length"]))
-                answer = httpx.post(
+                answer = proxy._client.post(
                     proxy.target + self.path,
                     content=raw,
                     headers={"Content-Type": self.headers.get("Content-Type", "")},
-                    timeout=30,
                 )
                 try:
                     decoded: object = answer.json()
@@ -161,18 +188,18 @@ class RecordingProxy:
                 proxy.exchanges.append(
                     Exchange(self.path, json.loads(raw), answer.status_code, decoded)
                 )
-                self.send_response(answer.status_code)
-                self.send_header("Content-Type", answer.headers.get("content-type", ""))
-                self.send_header("Content-Length", str(len(answer.content)))
-                self.end_headers()
-                self.wfile.write(answer.content)
+                self.reply(
+                    answer.status_code, answer.content, answer.headers.get("content-type", "")
+                )
 
-        self._server, self.url = _serve(Handler)
+        self._serve(Handler)
         return self
 
     def stop(self) -> None:
-        if self._server:
-            self._server.shutdown()
+        super().stop()
+        if self._client:
+            self._client.close()
+            self._client = None
 
     def of(self, path: str, operation: str | None = None) -> list[Exchange]:
         return [
@@ -226,25 +253,29 @@ class RouterProcess:
     def start(self, timeout: float = 60.0) -> RouterProcess:
         self.port = self.port or free_port()
         self.write_config()
-        log = open(self.workdir / "router.log", "ab")  # noqa: SIM115 - closed with the process
+        log_path = self.workdir / "router.log"
         tsx = self.checkout / "node_modules" / ".bin" / "tsx"
-        self.process = subprocess.Popen(
-            [str(tsx), str(self.checkout / "src" / "apps" / "server" / "main.ts")],
-            cwd=self.workdir,
-            stdout=log,
-            stderr=log,
-            env={**os.environ, "NO_COLOR": "1"},
-        )
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
+        # The child keeps its own copy of the log descriptor, so ours closes at once.
+        with open(log_path, "ab") as log:
+            self.process = subprocess.Popen(
+                [str(tsx), str(self.checkout / "src" / "apps" / "server" / "main.ts")],
+                cwd=self.workdir,
+                stdout=log,
+                stderr=log,
+                env={**os.environ, "NO_COLOR": "1"},
+            )
+
+        def listening() -> bool:
             if self.process.poll() is not None:
-                raise RuntimeError(f"router exited early; see {self.workdir / 'router.log'}")
+                pytest.fail(f"router exited early; see {log_path}")
             try:
                 with socket.create_connection(("127.0.0.1", self.port), timeout=0.2):
-                    return self
+                    return True
             except OSError:
-                time.sleep(0.1)
-        raise RuntimeError(f"router did not listen within {timeout} s")
+                return False
+
+        poll(listening, timeout, f"router did not listen within {timeout} s; see {log_path}")
+        return self
 
     def stop(self) -> None:
         if self.process and self.process.poll() is None:
@@ -256,9 +287,12 @@ class RouterProcess:
                 self.process.wait(10)
         self.process = None
 
-    def log(self) -> str:
-        path = self.workdir / "router.log"
-        return path.read_text(errors="replace") if path.exists() else ""
+    def restart(self, **changes) -> None:
+        """Stop, change settings such as `embedding_source`, and start on the same store."""
+        self.stop()
+        for name, value in changes.items():
+            setattr(self, name, value)
+        self.start()
 
 
 def skill_file(root: Path, name: str, description: str, body: str) -> dict:

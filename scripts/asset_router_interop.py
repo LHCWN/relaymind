@@ -48,10 +48,6 @@ def prepare(repo: str, rev: str, cache: Path) -> Path:
         rev,
         cwd=checkout,
     )
-    if run("git", "status", "--porcelain", "--untracked-files=no", cwd=checkout):
-        sys.exit(f"{checkout} has local changes; remove it and run again")
-    if run("git", "rev-parse", "HEAD", cwd=checkout) != rev:
-        sys.exit(f"{checkout} is not at {rev}")
     if not (checkout / "node_modules" / ".bin" / "tsx").exists():
         subprocess.run(["npm", "ci", "--no-audit", "--no-fund"], cwd=checkout, check=True)
     return checkout

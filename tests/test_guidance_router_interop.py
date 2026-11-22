@@ -34,21 +34,22 @@ from fastapi.testclient import TestClient
 
 from relaymind.api.guidance import install_guidance_routes
 from relaymind.guidance import GuidanceSettings
-from relaymind.guidance.pipeline import _record
 from relaymind.guidance.sync import GuidanceSync
 from relaymind.schema_util import StrictValidator, first_schema_error, load_packaged_schema
 from relaymind.selection.asset_http import HttpAssetSelector
 from router_interop import (
-    ROUTER_DIR_ENV,
     ROUTER_NAME,
     ROUTER_REV_ENV,
     ROUTER_VERSION,
     EmbeddingDouble,
     RecordingProxy,
     RouterProcess,
+    poll,
+    require_checkout,
     router_revision,
     skill_file,
 )
+from test_guidance_sync import sync_request
 
 pytestmark = pytest.mark.interop
 
@@ -65,13 +66,7 @@ TASK = "merge these pdf files into one document"
 
 @pytest.fixture(scope="module")
 def checkout() -> Path:
-    value = os.environ.get(ROUTER_DIR_ENV)
-    if not value:
-        pytest.skip(f"set {ROUTER_DIR_ENV} to an asset-router checkout with node_modules")
-    path = Path(value).resolve()
-    if not (path / "node_modules" / ".bin" / "tsx").exists():
-        pytest.skip(f"{path} has no installed dependencies (run npm ci there)")
-    return path
+    return require_checkout()
 
 
 @pytest.fixture(scope="module")
@@ -95,6 +90,16 @@ class Clock:
         return time.monotonic() + self.offset
 
 
+def name_of(record: dict) -> str:
+    """The host name an offered record stands for; the gateway's asset ID format is its own."""
+    identity = record["identity"]
+    return identity.get("package_id") or identity["tool_name"]
+
+
+def pairs(records: list[dict]) -> list[dict]:
+    return [dict(asset_id=r["asset_id"], content_hash=r["content_hash"]) for r in records]
+
+
 @dataclass
 class Stack:
     router: RouterProcess
@@ -103,8 +108,8 @@ class Stack:
     http: TestClient
     sync: GuidanceSync
     clock: Clock
+    client: httpx.Client
     root: Path
-    outside: Path
 
     def ask(self, assets: list[dict], task: str = TASK) -> dict:
         body = dict(schema_version=1, task_text=task, assets=assets)
@@ -121,79 +126,71 @@ class Stack:
     def finds(self):
         return self.proxy.of("/sync", "find_missing")
 
-    def until_ranked(self, assets: list[dict], task: str = TASK, timeout: float = 30) -> dict:
-        """Ask until the router itself answers; fail with what the router said otherwise."""
-        deadline = time.monotonic() + timeout
-        while True:
-            answer = self.ask(assets, task)
-            if answer["chosen_by"] == "third_party":
-                assert_from_router(self, answer)
-                return answer
-            if time.monotonic() > deadline:
-                last = self.selects()[-1] if self.selects() else None
-                pytest.fail(
-                    "the router never ranked: last select "
-                    f"{last and (last.status, last.response)}; status {self.status()}"
-                )
-            time.sleep(0.2)
-
     def status(self) -> dict:
         return self.http.get("/relay/v1/guidance/sync", headers=AUTH).json()
 
-    def not_ready_select(self, index: int = 0):
-        """The router's select answer, which must be a valid not_ready."""
-        select = self.selects()[index]
-        assert select.status == 200, f"router refused the select: {select.response}"
-        assert select.response["outcome"] == "not_ready", select.response
-        return select
+    def offered(self) -> list[dict]:
+        """The catalog the gateway itself built for its last select."""
+        return self.selects()[-1].request["catalog"]
 
-    def wait_missing(self, assets: list[dict], expected: list[str], timeout: float = 20) -> None:
-        """Wait until the router itself reports exactly these assets missing."""
-        deadline = time.monotonic() + timeout
-        while self.router_missing(assets) != expected:
-            assert time.monotonic() < deadline, f"router never reported {expected} missing"
-            time.sleep(0.2)
+    def id_of(self, name: str) -> str:
+        return next(r["asset_id"] for r in self.offered() if name_of(r) == name)
+
+    def diagnostics(self) -> str:
+        last = self.selects()[-1] if self.selects() else None
+        finds = self.finds()
+        return (
+            f"last select {last and (last.status, last.response)}; "
+            f"last find_missing {finds and finds[-1].response}; sync status {self.status()}"
+        )
+
+    def pass_sync_wait(self) -> None:
+        """Move the gateway's clock past its current sync wait, as long as that wait is."""
+        wait_ms = self.status()["retry_after_ms"]
+        if wait_ms:
+            self.clock.offset += wait_ms / 1000 + 0.001
 
     def until_router_answers(self, assets: list[dict], task: str = TASK, timeout: float = 30):
         """Ask until the router answers with something other than not_ready."""
-        deadline = time.monotonic() + timeout
-        while True:
+
+        def answered():
             answer = self.ask(assets, task)
             last = self.selects()[-1]
             if last.status == 200 and last.response.get("outcome") not in (None, "not_ready"):
                 return answer, last.response
-            assert time.monotonic() < deadline, f"router kept answering {last.response}"
-            time.sleep(0.2)
+            self.pass_sync_wait()
+            return None
+
+        return poll(answered, timeout, lambda: f"the router never answered: {self.diagnostics()}")
+
+    def until_ranked(self, assets: list[dict], task: str = TASK, timeout: float = 30) -> dict:
+        """Ask until the router itself ranks; the gateway's picks must be its candidates."""
+        answer, _ = self.until_router_answers(assets, task, timeout)
+        assert answer["chosen_by"] == "third_party", self.diagnostics()
+        assert_from_router(self, answer)
+        return answer
 
     def require_uploads(self, count: int = 1):
         """At least `count` uploads, or a failure that says where the sync stopped."""
         uploads = self.uploads()
         if len(uploads) < count:
-            finds = self.finds()
-            pytest.fail(
-                f"{len(uploads)} uploads, expected {count}; last select "
-                f"{self.selects() and (self.selects()[-1].status, self.selects()[-1].response)}; "
-                f"last find_missing {finds and finds[-1].response}; sync status {self.status()}"
-            )
+            pytest.fail(f"{len(uploads)} uploads, expected {count}; {self.diagnostics()}")
         return uploads
 
-    def router_missing(self, assets: list[dict]) -> list[str]:
-        """The router's own find_missing for these assets, asked directly."""
-        pairs = [
-            dict(asset_id=r["asset_id"], content_hash=r["content_hash"]) for r in records(assets)
-        ]
-        answer = httpx.post(
-            self.router.url + "/sync",
-            json=dict(
-                schema_version=1, operation="find_missing", feeder_id="guidance", assets=pairs
-            ),
-            timeout=10,
+    def router_missing(self, records: list[dict]) -> list[str]:
+        """The router's own find_missing for these records, asked directly."""
+        answer = self.client.post(
+            self.router.url + "/sync", json=sync_request("find_missing", pairs(records))
         )
         return [p["asset_id"] for p in answer.json()["missing"]]
 
-
-def records(assets: list[dict]) -> list[dict]:
-    return [_record(a, lambda text: text) for a in assets]
+    def wait_missing(self, records: list[dict], expected: list[str], timeout: float = 20) -> None:
+        """Wait until the router itself reports exactly these asset IDs missing."""
+        poll(
+            lambda: self.router_missing(records) == expected,
+            timeout,
+            f"router never reported {expected} missing",
+        )
 
 
 def assert_from_router(stack: Stack, answer: dict) -> None:
@@ -201,7 +198,8 @@ def assert_from_router(stack: Stack, answer: dict) -> None:
     last = stack.selects()[-1]
     assert last.status == 200 and last.response["outcome"] == "ranked", last.response
     assert first_schema_error(SELECT_RESULT, last.response) is None
-    names = [c["asset_id"].split(":", 2)[2] for c in last.response["candidates"]]
+    offered = {r["asset_id"]: r for r in last.request["catalog"]}
+    names = [name_of(offered[c["asset_id"]]) for c in last.response["candidates"]]
     assert [p["name"] for p in answer["picks"]] == names[: len(answer["picks"])]
     assert answer["mechanism"] == last.response["mechanism"]
     assert answer["degraded"] is False
@@ -217,14 +215,13 @@ def assert_valid_sync(exchange) -> None:
 
 @pytest.fixture
 def stack(checkout, revision, tmp_path) -> Iterator[Stack]:
-    root, outside = tmp_path / "skills", tmp_path / "elsewhere"
+    root = tmp_path / "skills"
     root.mkdir()
-    outside.mkdir()
     embedder = EmbeddingDouble().start()
     router = RouterProcess(checkout, tmp_path / "router", embedder.url, [root])
     router.workdir.mkdir()
     router.start()
-    proxy = RecordingProxy(router.url).start()
+    proxy = RecordingProxy(target=router.url).start()
     clock = Clock()
     settings = GuidanceSettings(
         enabled=True,
@@ -242,8 +239,8 @@ def stack(checkout, revision, tmp_path) -> Iterator[Stack]:
     selector = HttpAssetSelector(name=ROUTER_NAME, version=ROUTER_VERSION, url=settings.url)
     install_guidance_routes(app, settings, selector=selector, sync=sync)
     try:
-        with TestClient(app) as http:
-            yield Stack(router, embedder, proxy, http, sync, clock, root, outside)
+        with TestClient(app) as http, httpx.Client(timeout=10) as client:
+            yield Stack(router, embedder, proxy, http, sync, clock, client, root)
     finally:
         proxy.stop()
         router.stop()
@@ -268,18 +265,21 @@ def notes_skill(stack: Stack) -> dict:
 def test_the_gateway_sync_and_the_router_agree_on_the_sync_wire_format(stack):
     """find_missing and upload answers satisfy AssetSyncResponseV1, as the gateway validates it."""
     assets = [pdf_skill(stack), TOOL]
-    catalog = records(assets)
-    files = {
-        r["asset_id"]: dict(path=a["path"], size_bytes=a["size_bytes"])
-        for r, a in zip(catalog, assets, strict=True)
-        if "path" in a
-    }
-    asyncio.run(stack.sync.run(catalog, files))
+    stack.ask(assets)
+    if not stack.finds():
+        # The select did not reach not_ready, so sync the catalog the gateway built directly.
+        catalog = stack.offered()
+        by_name = {a["name"]: a for a in assets}
+        files = {
+            r["asset_id"]: dict(path=a["path"], size_bytes=a["size_bytes"])
+            for r in catalog
+            if "path" in (a := by_name[name_of(r)])
+        }
+        asyncio.run(stack.sync.run(catalog, files))
     assert stack.finds(), "the gateway sent no find_missing"
     assert_valid_sync(stack.finds()[0])
-    assert stack.uploads(), f"nothing was uploaded; sync status {stack.sync.status()}"
-    assert_valid_sync(stack.uploads()[0])
-    assert stack.sync.status()["last_outcome"] == "synced"
+    assert_valid_sync(stack.require_uploads()[0])
+    assert stack.status()["last_outcome"] == "synced"
 
 
 def test_a_fractional_deadline_from_the_real_request_is_accepted(stack):
@@ -287,7 +287,7 @@ def test_a_fractional_deadline_from_the_real_request_is_accepted(stack):
     stack.ask([pdf_skill(stack), TOOL])
     first = stack.selects()[0]
     deadline = first.request["deadline_ms"]
-    assert isinstance(deadline, float) and deadline != int(deadline), deadline
+    assert deadline != int(deadline), deadline
     assert first.status == 200, f"router refused deadline_ms={deadline}: {first.response}"
     assert first_schema_error(SELECT_RESULT, first.response) is None
 
@@ -299,48 +299,43 @@ def test_a_cold_router_is_synced_until_its_own_ranking_answers(stack):
     assets = [pdf_skill(stack), notes_skill(stack), TOOL]
     first = stack.ask(assets)
     assert first["chosen_by"] == "word_match" and first["degraded"] is True
-    stack.not_ready_select()
+    select = stack.selects()[0]
+    assert select.status == 200, f"router refused the select: {select.response}"
+    assert select.response["outcome"] == "not_ready", select.response
     find = stack.finds()[0]
     assert_valid_sync(find)
-    offered = [
-        dict(asset_id=r["asset_id"], content_hash=r["content_hash"])
-        for r in stack.selects()[0].request["catalog"]
-    ]
-    assert find.request["assets"] == offered
+    assert find.request["assets"] == pairs(select.request["catalog"])
     upload = stack.require_uploads()[0]
     assert_valid_sync(upload)
-    sent = {i["record"]["asset_id"]: i["content"] for i in upload.request["assets"]}
-    assert sent["host:skill:pdf-merge"]["path"] == assets[0]["path"]
-    assert sent["host:mcp_tool:weather"] is None
+    sent = {name_of(i["record"]): i["content"] for i in upload.request["assets"]}
+    assert sent["pdf-merge"]["path"] == assets[0]["path"]
+    assert sent["weather"] is None
 
     answer = stack.until_ranked(assets)
     assert answer["picks"][0]["name"] == "pdf-merge"
 
 
-def test_a_mixed_upload_is_answered_pair_by_pair_and_a_refused_file_is_retried_without_it(stack):
-    refused = skill_file(stack.outside, "outside", "Merge pdf pages", "Outside every root.")
+def test_a_mixed_upload_is_answered_pair_by_pair_and_a_refused_file_is_retried_without_it(
+    stack, tmp_path
+):
+    refused = skill_file(tmp_path / "elsewhere", "outside", "Merge pdf pages", "Outside the roots.")
     assets = [pdf_skill(stack), refused, TOOL]
     stack.ask(assets)
     first, *rest = stack.require_uploads()
     assert_valid_sync(first)
-    results = {r["asset_id"]: (r["status"], r["reason"]) for r in first.response["results"]}
+    records = {r["asset_id"]: r for r in (i["record"] for i in first.request["assets"])}
+    results = {
+        name_of(records[r["asset_id"]]): (r["status"], r["reason"])
+        for r in first.response["results"]
+    }
     assert results == {
-        "host:skill:pdf-merge": ("accepted", None),
-        "host:skill:outside": ("rejected", "outside_roots"),
-        "host:mcp_tool:weather": ("accepted", None),
+        "pdf-merge": ("accepted", None),
+        "outside": ("rejected", "outside_roots"),
+        "weather": ("accepted", None),
     }
     # The gateway sends the refused skill once more, without its file.
     assert rest, "no second upload without the file"
-    assert rest[0].request["assets"] == [
-        dict(
-            record=next(
-                i["record"]
-                for i in first.request["assets"]
-                if i["record"]["asset_id"] == "host:skill:outside"
-            ),
-            content=None,
-        )
-    ]
+    assert rest[0].request["assets"] == [dict(record=records[stack.id_of("outside")], content=None)]
     assert_valid_sync(rest[0])
     assert rest[0].response["results"][0]["status"] == "accepted"
     stack.until_ranked(assets)
@@ -357,16 +352,16 @@ def test_an_indexing_failure_after_acceptance_is_reconciled_again(stack):
     upload = stack.require_uploads()[0]
     assert_valid_sync(upload)
     assert upload.response["results"][0]["status"] == "accepted"
-    stack.wait_missing(assets, ["host:skill:pdf-merge"])
+    catalog, pdf = stack.offered(), stack.id_of("pdf-merge")
+    stack.wait_missing(catalog, [pdf])
     stack.ask(assets)  # not_ready again: missing again, uploaded again, and the gateway waits.
     assert len(stack.require_uploads(2)) == 2
     assert stack.status()["consecutive_failures"] == 1
     stack.ask(assets)  # Within the wait: no third upload.
     assert len(stack.uploads()) == 2
-    stack.wait_missing(assets, ["host:skill:pdf-merge"])  # The retry failed too.
+    stack.wait_missing(catalog, [pdf])  # The retry failed too.
     stack.embedder.fail_marker = None
-    stack.clock.offset += 31  # Past the gateway's wait.
-    stack.until_ranked(assets, task="join pdf files")
+    stack.until_ranked(assets, task="join pdf files")  # Passes the wait, then syncs again.
     assert len(stack.uploads()) == 3
 
 
@@ -378,8 +373,8 @@ def test_an_unchanged_source_is_reused_across_different_offers(stack):
     assert len(stack.uploads()) == uploads
     extra = skill_file(stack.root, "pdf-split", "Split pdf documents", "Cut a PDF into pages.")
     stack.until_ranked([pdf, extra])
-    new = [i["record"]["asset_id"] for u in stack.uploads()[uploads:] for i in u.request["assets"]]
-    assert new == ["host:skill:pdf-split"]  # The unchanged pdf-merge is never sent again.
+    new = [name_of(i["record"]) for u in stack.uploads()[uploads:] for i in u.request["assets"]]
+    assert new == ["pdf-split"]  # The unchanged pdf-merge is never sent again.
 
 
 def test_identical_requests_follow_the_router_after_a_feature_recipe_is_published(stack):
@@ -389,9 +384,7 @@ def test_identical_requests_follow_the_router_after_a_feature_recipe_is_publishe
     full-body recipe is published on the same store, the same request gets its ranked answer. The
     gateway asks the selector on every request, so each answer is the router's answer at that time.
     """
-    stack.router.stop()
-    stack.router.embedding_source = "description"
-    stack.router.start()
+    stack.router.restart(embedding_source="description")
     assets = [pdf_skill(stack), notes_skill(stack)]
     before, result = stack.until_router_answers(assets)
     assert result["outcome"] == "no_match", result
@@ -399,35 +392,31 @@ def test_identical_requests_follow_the_router_after_a_feature_recipe_is_publishe
     assert {"stage": "third_party", "outcome": "ok"} in [
         {k: s[k] for k in ("stage", "outcome")} for s in before["stages"]
     ]
-    revision_before = result["index_revision"]
+    revision_before, offered = result["index_revision"], stack.offered()
     uploads = len(stack.uploads())
     # Same sources, same store: only the recipe is new. A router may derive the new feature from
     # inputs it stored, or answer not_ready until the pairs are synced again.
-    stack.router.stop()
-    stack.router.embedding_source = "full"
-    stack.router.start()
-    stack.clock.offset += 31  # A re-upload of pairs accepted before waits like a failure.
+    stack.router.restart(embedding_source="full")
     after = stack.until_ranked(assets)
     assert after["picks"][0]["name"] == "pdf-merge"
     assert stack.selects()[-1].response["index_revision"] != revision_before
-    resent = {
-        (i["record"]["asset_id"], i["record"]["content_hash"])
+    resent = [
+        p
         for u in stack.uploads()[uploads:]
-        for i in u.request["assets"]
-    }
+        for p in pairs([i["record"] for i in u.request["assets"]])
+    ]
     # Anything sent again is the same source identity: the recipe never changes content_hash.
-    assert resent <= {(r["asset_id"], r["content_hash"]) for r in records(assets)}
+    assert all(p in pairs(offered) for p in resent)
 
 
 def test_a_restarted_router_reuses_its_persisted_inputs(stack):
     assets = [pdf_skill(stack), notes_skill(stack), TOOL]
     stack.until_ranked(assets)
     syncs = len(stack.proxy.of("/sync"))
-    stack.router.stop()
-    stack.router.start()
+    stack.router.restart()
     calls = stack.embedder.calls
     answer = stack.ask(assets)
-    assert answer["chosen_by"] == "third_party", stack.selects()[-1].response
+    assert answer["chosen_by"] == "third_party", stack.diagnostics()
     assert_from_router(stack, answer)
     assert len(stack.proxy.of("/sync")) == syncs  # Nothing re-sent after the restart.
     assert stack.embedder.calls - calls <= 1  # Only the query is embedded, never a body again.
@@ -449,8 +438,9 @@ def test_a_new_description_for_the_same_file_is_ranked_as_offered(stack):
         dict(alpha, description=beta["description"]),
         dict(beta, description=alpha["description"]),
     ]
-    stack.clock.offset += 31  # Re-sending a pair accepted before waits like a failure.
     after = stack.until_ranked(swapped, task=task)
     assert after["picks"][0]["name"] == "beta"
-    offered = stack.selects()[-1].request["catalog"]
-    assert {r["content_hash"] for r in offered} == {alpha["content_hash"], beta["content_hash"]}
+    assert {r["content_hash"] for r in stack.offered()} == {
+        alpha["content_hash"],
+        beta["content_hash"],
+    }

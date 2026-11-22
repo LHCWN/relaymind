@@ -4,6 +4,7 @@ A fake router answers select and sync on loopback. Each test reads what the rout
 """
 
 import asyncio
+import itertools
 import json
 import threading
 from dataclasses import replace
@@ -707,19 +708,11 @@ def test_an_unknown_inference_in_find_missing_uploads_nothing():
 # --- the reference selector: scripts/guidance_selector_server.py --sync-root ----------------
 
 
-def skill_file(folder, text="---\nname: pdf-merge\ndescription: Merge pdf documents\n---\nBody\n"):
-    import hashlib
+def skill_file(folder):
+    """The pdf-merge skill as a real SKILL.md, with the file fields the plugin sends."""
+    from router_interop import skill_file as write_skill
 
-    path = folder / "pdf-merge" / "SKILL.md"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, "utf-8")
-    data = path.read_bytes()
-    return dict(
-        SKILL,
-        content_hash=hashlib.sha256(data).hexdigest(),
-        path=str(path),
-        size_bytes=len(data),
-    )
+    return write_skill(folder, "pdf-merge", "Merge pdf documents", "Body")
 
 
 def reference_server():
@@ -830,17 +823,11 @@ def test_the_real_selection_request_carries_a_fractional_deadline():
     from relaymind.guidance import parse_guidance_request, run_guidance
 
     sent: list[bytes] = []
+    router = Router()
 
     def handler(request: httpx.Request) -> httpx.Response:
         sent.append(request.content)
-        return Router().handler(request)
-
-    class Ticking:
-        now = 1000.0
-
-        def __call__(self):
-            Ticking.now += 0.0001234
-            return Ticking.now
+        return router.handler(request)
 
     selector = HttpAssetSelector(
         name="router",
@@ -849,13 +836,14 @@ def test_the_real_selection_request_carries_a_fractional_deadline():
         transport_factory=lambda: httpx.MockTransport(handler),
     )
     settings = replace(SETTINGS, total_ms=7777)
+    clock = itertools.count(1000.0, 0.0001234).__next__
     answer = asyncio.run(
-        run_guidance(parse_guidance_request(BODY), settings, selector=selector, clock=Ticking())
+        run_guidance(parse_guidance_request(BODY), settings, selector=selector, clock=clock)
     )
     assert answer["chosen_by"] == "third_party"
     request = json.loads(sent[0])
     deadline = request["deadline_ms"]
-    assert isinstance(deadline, float) and deadline != int(deadline) and 0 < deadline < 7777
+    assert deadline != int(deadline) and 0 < deadline < 7777
     schema = StrictValidator(
         load_packaged_schema("relaymind.selection", "selection_request.v2.json")
     )
@@ -863,10 +851,11 @@ def test_the_real_selection_request_carries_a_fractional_deadline():
     assert f'"deadline_ms":{deadline!r}'.encode() in sent[0]  # Not rounded on the wire.
 
 
-def test_the_guidance_route_sends_the_deadline_as_a_number_not_an_integer():
+def test_the_guidance_route_sends_the_deadline_with_its_fraction():
     router = Router()
     client(router).post("/relay/v1/guidance", json=BODY, headers=AUTH)
-    assert isinstance(router.selects[0]["deadline_ms"], float)
+    deadline = router.selects[0]["deadline_ms"]
+    assert deadline != int(deadline)  # Never rounded to whole milliseconds on the way.
 
 
 def test_an_unchanged_asset_keeps_its_identity_whatever_the_request():
