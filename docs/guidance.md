@@ -240,10 +240,12 @@ tag model is not on this machine: the gateway then sends no paths, unless the op
 
 A skill you rejected with its file is sent once more without it, so you can index it from its record. A pair you
 rejected without a file is not sent again until its hash changes. A sync that fails waits 30 s before the next one,
-twice as long after each further failure, up to 10 minutes. A sync that uploads only pairs you accepted before
-waits the same way, because you took them and did not index them. Each exchange gets `sync_ms`, 60 s by default, apart from
+twice as long after each further failure, up to 10 minutes. A sync that only sends you again records you accepted
+before waits the same way, because you took them and did not index them; a changed record, such as a new
+description for the same file, is new. A sync whose missing pairs you all rejected before waits too. Each exchange gets `sync_ms`, 60 s by default, apart from
 the turn's own time, and a failed sync changes no answer. `GET /relay/v1/guidance/sync` with the application token
-shows the counts of the last sync that ended and the wait, with no asset names or paths.
+shows the counts of the last sync that ended and the wait, with no asset names or paths. A sync whose
+`find_missing` failed shows `failed` with zero counts.
 
 Two costs come with this design. `not_ready` answers the whole select, so one pair you have not indexed sends every
 turn to word match until a sync gets it indexed. And a sync that hangs holds the one sync slot for up to three
@@ -269,9 +271,9 @@ description, so it shows the protocol, not a better ranking.
 - The gateway does not cache your rankings. It asks you on every request, so identical requests may get a new
   answer after you publish new features.
 - Rank with the description of the current select. The same file hash can come with a description shortened or
-  redacted differently than before. asset-router `b54416b` answers `not_ready` to such an offer and reports the
-  pair in `find_missing`, so the gateway uploads the current record. The gateway counts that re-upload of an
-  accepted pair as no progress and waits before its next sync; this is an open finding.
+  redacted differently than before. asset-router `b54416b` and later answer `not_ready` to such an offer and
+  report the pair in `find_missing`, so the gateway uploads the current record, which counts as progress. Offers
+  that keep alternating between descriptions are still an open finding.
 - A tool record's `input_schema` is the placeholder `{"type":"object"}` and its `schema_hash` is fixed, so it
   does not tell you when a real tool's schema changed. Real MCP schemas need a separate contract extension.
 

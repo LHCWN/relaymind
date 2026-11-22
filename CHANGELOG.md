@@ -36,6 +36,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   file is handled. `scripts/asset_router_interop.py --rev <commit>` runs the gateway against the real asset-router
   at one exact commit with deterministic inference (`pytest -m interop`): all nine cases pass at `853dada` and
   `b54416b`; at `c3cc835` none did (a refused fractional `deadline_ms`, and `/sync` answers without `results`).
+  The gateway now remembers each accepted pair with a digest of the record it sent, so re-sending a changed record
+  (a new description for the same file) is progress, while the same record again still waits. A sync whose
+  missing pairs were all rejected before now waits too, instead of asking again on every `not_ready`. A sync whose
+  `find_missing` failed reports zero counts. The plugin reads at most 64 MiB of skill files whole in one turn; a
+  skill past that is offered by its description and read on a later turn.
 
 - Specification 0.71 (RM45, RM46; AC41; sections 7.7 and 14.1): `relaymind openclaw guidance` sets up per-prompt
   guidance with the host's own commands. It installs the plugin, empties the listed skill catalog and, with

@@ -56,6 +56,8 @@ but selector sync needs a gateway of 0.72 or later, so upgrade the gateway too a
 
 The plugin reads a skill file again only when its size, modification time or change time changed. Of a hidden
 skill it reads only the frontmatter, and it reads no more files once it has 20,000 assets, the gateway's limit.
+Beyond the first 32 KiB of each file, it reads at most 64 MiB of skill files whole in one turn; a skill past that
+is offered by its description and read on a later turn, when its `content_hash` changes once to the file's hash.
 When the request would pass the gateway's body limit, it leaves out the file fields first and shortens
 descriptions only after that.
 
