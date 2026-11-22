@@ -230,17 +230,28 @@ three POSTs to that URL:
    `"status":"rejected"` with `"reason"` one of `hash_mismatch`, `size_mismatch`, `outside_roots`, `too_large`,
    `unreadable` or `invalid_record`.
 
-Read the file yourself, only under folders your operator allowed, and check its size and SHA-256 against
-`size_bytes` and `content_hash`. Index each asset by its exact `asset_id` and `content_hash`, and answer
-`not_ready` to a select that offers a pair you have not indexed. Say `"inference":"remote"` if your embedding or
+Read the file yourself, only when its real path, with every symbolic link resolved, is under folders your
+operator allowed, and check its size and SHA-256 against `size_bytes` and `content_hash`. Index each asset by its
+exact `asset_id` and `content_hash`, and answer `not_ready` to a select that offers a pair you have not indexed.
+Report a pair as missing when you have neither indexed it nor are indexing it, so a pair whose indexing failed is
+missing again. Say `"inference":"remote"` if your embedding or
 tag model is not on this machine: the gateway then sends no paths, unless the operator sets
 `sync_allow_remote = true`. The gateway never reads or sends a skill body, and at most one sync runs at a time.
 
 A skill you rejected with its file is sent once more without it, so you can index it from its record. A pair you
 rejected without a file is not sent again until its hash changes. A sync that fails waits 30 s before the next one,
-twice as long after each further failure, up to 10 minutes. Each exchange gets `sync_ms`, 60 s by default, apart from
+twice as long after each further failure, up to 10 minutes. A sync that uploads only pairs you accepted before
+waits the same way, because you took them and did not index them. Each exchange gets `sync_ms`, 60 s by default, apart from
 the turn's own time, and a failed sync changes no answer. `GET /relay/v1/guidance/sync` with the application token
-shows the last sync's counts and the wait, with no asset names or paths.
+shows the counts of the last sync that ended and the wait, with no asset names or paths.
+
+Two costs come with this design. `not_ready` answers the whole select, so one pair you have not indexed sends every
+turn to word match until a sync gets it indexed. And a sync that hangs holds the one sync slot for up to three
+`sync_ms` (3 minutes by default), and every other sync is skipped meanwhile.
+
+`scripts/guidance_selector_server.py --sync-root DIR` is a reference selector for this protocol: it serves `/sync`,
+reads files only under its roots and answers `not_ready` until it has every offered pair. It still ranks by
+description, so it shows the protocol, not a better ranking.
 
 ## Add MCP tools
 

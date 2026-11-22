@@ -19,8 +19,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   changes. A failed sync waits 30 s, doubling up to 10 minutes. Each exchange has its own `guidance.sync_ms`
   (60 s by default). `GET /relay/v1/guidance/sync` reports the last sync's counts with no asset names or paths.
   New schemas: `AssetSyncRequestV1`, `AssetSyncResponseV1` and `GuidanceSyncStatusV1`. Recommendations are
-  unchanged; their sync is a follow-up. Upgrade the gateway before the plugin: an older gateway refuses the
-  plugin's new file fields, and the turn then gets no hint.
+  unchanged; their sync is a follow-up. A plugin whose file fields an older gateway refuses (HTTP 400) sends
+  the request once more without them, and then sends none for the rest of the process, so the turn keeps its hint
+  without sync; upgrade the gateway too to get sync. Sections 4.6.2 and 12.6.4 now say that this sync is a separate
+  protocol and not preparation. `find_missing` reports a pair whose indexing failed as missing again, and the gateway
+  remembers accepted pairs: a sync that only uploads pairs accepted before waits like a failed one. A selector checks
+  its roots against the real path of the file. To keep under the body limit, the plugin drops the file fields before
+  shortening descriptions. It reads only the frontmatter of a hidden skill, stops reading at 20,000 assets, and
+  re-reads a file when its change time changes. `scripts/guidance_selector_server.py --sync-root DIR` serves the
+  sync protocol as a reference selector.
 
 - Specification 0.71 (RM45, RM46; AC41; sections 7.7 and 14.1): `relaymind openclaw guidance` sets up per-prompt
   guidance with the host's own commands. It installs the plugin, empties the listed skill catalog and, with

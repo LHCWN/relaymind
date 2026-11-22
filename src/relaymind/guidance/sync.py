@@ -25,6 +25,8 @@ FEEDER_ID = "guidance"
 _THREAD_ABOVE = 200
 # Pairs a selector rejected without a file; the oldest is dropped first (spec 0.72).
 MAX_REJECTED = 10_000
+# Pairs a selector accepted; one that is missing again was taken and not indexed (spec 0.72).
+MAX_ACCEPTED = 10_000
 # After a failed sync none starts for this long, doubled for each failure in a row, up to the cap.
 FIRST_WAIT_S = 30.0
 MAX_WAIT_S = 600.0
@@ -56,6 +58,7 @@ class GuidanceSync:
         self._failures = 0
         self._not_before = 0.0
         self._rejected: OrderedDict[tuple[str, str], None] = OrderedDict()
+        self._accepted: OrderedDict[tuple[str, str], None] = OrderedDict()
         # The last sync whose find_missing was answered: counts only, never an asset (RM16, RM47).
         # A running sync fills `_current`; the status shows it only once that sync ends.
         self._current: dict | None = None
@@ -88,19 +91,26 @@ class GuidanceSync:
             return
         self._running, self._current = True, None
         try:
-            await self._sync(catalog, files)
+            progress = await self._sync(catalog, files)
         except Exception:  # The answer is already sent; a failed sync changes nothing.
             self._last = dict(self._current or self._last, last_outcome="failed")
-            self._failures += 1
-            wait = min(MAX_WAIT_S, FIRST_WAIT_S * 2 ** min(self._failures - 1, 10))
-            self._not_before = self._clock() + wait
+            self._wait()
         else:
             self._last = self._current
-            self._failures, self._not_before = 0, 0.0
+            if progress:
+                self._failures, self._not_before = 0, 0.0
+            else:  # Only pairs accepted before: asking on every not_ready would not help.
+                self._wait()
         finally:
             self._running, self._current = False, None
 
-    async def _sync(self, catalog: Sequence[Mapping], files: Mapping[str, Mapping]) -> None:
+    def _wait(self) -> None:
+        self._failures += 1
+        wait = min(MAX_WAIT_S, FIRST_WAIT_S * 2 ** min(self._failures - 1, 10))
+        self._not_before = self._clock() + wait
+
+    async def _sync(self, catalog: Sequence[Mapping], files: Mapping[str, Mapping]) -> bool:
+        """One sync; False when every pair it uploaded was accepted before and is missing again."""
         offered = {_key(record) for record in catalog}
         found = await self._exchange(
             "find_missing",
@@ -122,7 +132,9 @@ class GuidanceSync:
         # A pair rejected without a file would be rejected again; a new hash is a new pair.
         chosen -= known
         if not chosen:
-            return
+            return True
+        # A selector reports a pair whose indexing failed as missing again (spec 0.72).
+        progress = not chosen <= self._accepted.keys()
         # A selector that sends text to remote inference gets no file unless the operator allows it.
         send_files = found["inference"] == "local" or self.allow_remote
         uploads = [
@@ -149,8 +161,15 @@ class GuidanceSync:
         current.update(accepted=len(chosen) - len(final), rejected=len(known) + len(final))
         for pair in final:
             self._rejected[pair] = None
+            self._accepted.pop(pair, None)
+        for pair in chosen - final:
+            self._accepted[pair] = None
+            self._accepted.move_to_end(pair)
         while len(self._rejected) > MAX_REJECTED:
             self._rejected.popitem(last=False)
+        while len(self._accepted) > MAX_ACCEPTED:
+            self._accepted.popitem(last=False)
+        return progress
 
     async def _upload(self, uploads: list[dict]) -> set[tuple[str, str]]:
         """Upload, and return the pairs the selector rejected. One result for each pair sent."""

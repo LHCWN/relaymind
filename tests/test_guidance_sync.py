@@ -581,3 +581,242 @@ def test_each_sync_exchange_uses_the_injected_clock(monkeypatch):
     sync = GuidanceSync(SYNCING, transport_factory=router.transport, clock=clock)
     client(router, SYNCING, sync=sync).post("/relay/v1/guidance", json=BODY, headers=AUTH)
     assert clocks and all(c is clock for c in clocks)
+
+
+# --- review of PR 291 (seiko-iwasawa) -------------------------------------------------------
+
+
+def test_the_sync_request_schema_holds_the_exact_asset_record():
+    """AC42: `record` is AssetRecordV1, so a third party can validate it; a path is bounded."""
+    schema = load_packaged_schema("relaymind.guidance", "asset_sync_request.v1.json")
+    upload = schema["$defs"]["upload"]["properties"]
+    assert upload["record"] == load_packaged_schema("relaymind.store", "asset_record.v1.json")
+    file = next(o for o in upload["content"]["oneOf"] if o.get("type") == "object")
+    assert file["properties"]["path"]["maxLength"] == 2048
+
+
+def test_a_sync_whose_uploads_were_all_accepted_before_waits_like_a_failure():
+    """RM47: a pair accepted and missing again was not indexed; it is offered again after a wait."""
+    router = Router(outcome="not_ready", missing=lambda sent: sent)
+    clock = Clock()
+    sync = GuidanceSync(SYNCING, transport_factory=router.transport, clock=clock)
+    http = client(router, SYNCING, sync=sync)
+
+    def ask(after=0.0, body=BODY):
+        clock.now += after
+        http.post("/relay/v1/guidance", json=body, headers=AUTH)
+        return len(uploads(router))
+
+    assert ask() == 1  # Both pairs are new: accepted, and the sync completes.
+    assert status(http)["consecutive_failures"] == 0
+    assert ask() == 2  # Missing again after they were accepted: uploaded once more...
+    body = status(http)
+    assert body["last_outcome"] == "synced" and body["accepted"] == 2
+    assert body["consecutive_failures"] == 1 and body["retry_after_ms"] == 30000
+    assert ask(29) == 2  # ...and then only after the wait.
+    assert ask(2) == 3
+    assert status(http)["retry_after_ms"] == 60000
+    # A new pair is progress: that sync completes and ends the wait.
+    changed = dict(BODY, assets=[dict(SKILL, content_hash="3" * 64), TOOL])
+    assert ask(61, changed) == 4
+    assert status(http)["consecutive_failures"] == 0 and status(http)["retry_after_ms"] == 0
+
+
+def test_not_ready_without_the_fallback_is_a_degraded_no_match_and_still_syncs():
+    router = Router(outcome="not_ready")
+    settings = replace(SYNCING, fallback=False)
+    answer = client(router, settings).post("/relay/v1/guidance", json=BODY, headers=AUTH)
+    body = answer.json()
+    assert answer.status_code == 200
+    assert body["decision"] == "no_match" and body["degraded"] is True and body["picks"] == []
+    assert [s["operation"] for s in router.syncs] == ["find_missing"]
+
+
+def test_a_sync_wanted_while_one_runs_is_skipped():
+    router = SlowSync(0.2, outcome="not_ready", missing=lambda sent: [])
+    sync = GuidanceSync(SYNCING, transport_factory=router.transport)
+    catalog = [dict(asset_id="host:skill:a", content_hash=SKILL_HASH)]
+
+    async def both():
+        first = asyncio.create_task(sync.run(catalog, {}))
+        await asyncio.sleep(0.05)
+        assert sync.status()["running"] is True
+        await sync.run(catalog, {})  # Returns at once: one sync at a time.
+        await first
+
+    asyncio.run(both())
+    assert len(router.syncs) == 1
+    assert sync.status()["last_outcome"] == "nothing_missing"
+
+
+def test_the_rejected_pairs_are_capped_with_the_oldest_dropped_first(monkeypatch):
+    import relaymind.guidance.sync as sync_module
+
+    assert sync_module.MAX_REJECTED == 10_000
+    monkeypatch.setattr(sync_module, "MAX_REJECTED", 1)
+    router = Router(
+        outcome="not_ready",
+        missing=lambda sent: [p for p in sent if p["asset_id"].endswith("pdf-merge")],
+        reject=lambda item: "invalid_record",
+    )
+    http = client(router, SYNCING)
+
+    def ask(content_hash):
+        body = dict(BODY, assets=[dict(SKILL, content_hash=content_hash)])
+        http.post("/relay/v1/guidance", json=body, headers=AUTH)
+        return len(uploads(router))
+
+    assert ask("4" * 64) == 2  # Rejected with its file, then without: remembered.
+    assert ask("4" * 64) == 2  # Not sent again.
+    assert ask("5" * 64) == 4  # A new pair, remembered instead of the first.
+    assert ask("4" * 64) == 6  # The first was dropped, so it is sent again.
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        lambda body: dict(body, operation="find_missing"),
+        lambda body: dict(body, inference="cloud"),
+        lambda body: {k: v for k, v in body.items() if k != "inference"},
+    ],
+)
+def test_an_invalid_upload_answer_fails_the_sync_and_changes_no_answer(change):
+    router = Router(outcome="not_ready", missing=lambda sent: sent)
+
+    def handler(request):
+        answer = router.handler(request)
+        if json.loads(request.content)["operation"] == "upload":
+            return reply(change(json.loads(answer.read())))
+        return answer
+
+    sync = GuidanceSync(SYNCING, transport_factory=lambda: httpx.MockTransport(handler))
+    http = client(router, SYNCING, sync=sync)
+    answer = http.post("/relay/v1/guidance", json=BODY, headers=AUTH)
+    assert answer.status_code == 200 and answer.json()["chosen_by"] == "word_match"
+    assert status(http)["last_outcome"] == "failed" and status(http)["accepted"] == 0
+
+
+def test_an_unknown_inference_in_find_missing_uploads_nothing():
+    router = Router(outcome="not_ready", missing=lambda sent: sent, inference="cloud")
+    http = client(router, SYNCING)
+    http.post("/relay/v1/guidance", json=BODY, headers=AUTH)
+    assert uploads(router) == []
+    assert status(http)["last_outcome"] == "failed"
+
+
+# --- the reference selector: scripts/guidance_selector_server.py --sync-root ----------------
+
+
+def skill_file(folder, text="---\nname: pdf-merge\ndescription: Merge pdf documents\n---\nBody\n"):
+    import hashlib
+
+    path = folder / "pdf-merge" / "SKILL.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, "utf-8")
+    data = path.read_bytes()
+    return dict(
+        SKILL,
+        content_hash=hashlib.sha256(data).hexdigest(),
+        path=str(path),
+        size_bytes=len(data),
+    )
+
+
+def reference_server():
+    from helpers import load_script_module
+
+    return load_script_module("guidance_selector_server")
+
+
+def upload_item(record_hash, path, size, asset_id="host:skill:pdf-merge"):
+    from test_asset_catalog import record
+
+    content = None if path is None else dict(kind="file", path=str(path), size_bytes=size)
+    return dict(
+        record=record(asset_id=asset_id, kind="skill", content_hash=record_hash), content=content
+    )
+
+
+def sync_request(operation, assets):
+    return dict(schema_version=1, operation=operation, feeder_id="guidance", assets=assets)
+
+
+def test_the_reference_selector_reads_only_real_paths_under_its_roots(tmp_path):
+    """RM47 spec 0.72: the selector checks size, SHA-256 and roots against the real path."""
+    import os
+
+    server = reference_server()
+    root, outside = tmp_path / "skills", tmp_path / "elsewhere"
+    good = skill_file(root)
+    away = skill_file(outside)
+    linked = root / "linked" / "SKILL.md"
+    linked.parent.mkdir()
+    os.symlink(away["path"], linked)
+    index = server.SyncIndex([root])
+    items = [
+        upload_item(good["content_hash"], good["path"], good["size_bytes"]),
+        upload_item(away["content_hash"], away["path"], away["size_bytes"], "a:outside"),
+        upload_item(away["content_hash"], linked, away["size_bytes"], "a:link"),
+        upload_item("0" * 64, good["path"], good["size_bytes"], "a:hash"),
+        upload_item(good["content_hash"], good["path"], good["size_bytes"] + 1, "a:size"),
+        upload_item(good["content_hash"], root / "gone" / "SKILL.md", 1, "a:gone"),
+        upload_item("6" * 64, None, None, "a:record"),
+    ]
+    answer = index.handle(sync_request("upload", items))
+    assert answer["missing"] is None and answer["inference"] == "local"
+    assert [(r["asset_id"], r["status"], r["reason"]) for r in answer["results"]] == [
+        ("host:skill:pdf-merge", "accepted", None),
+        ("a:outside", "rejected", "outside_roots"),
+        ("a:link", "rejected", "outside_roots"),
+        ("a:hash", "rejected", "hash_mismatch"),
+        ("a:size", "rejected", "size_mismatch"),
+        ("a:gone", "rejected", "unreadable"),
+        ("a:record", "accepted", None),
+    ]
+    pairs = [
+        dict(asset_id=i["record"]["asset_id"], content_hash=i["record"]["content_hash"])
+        for i in items
+    ]
+    found = index.handle(sync_request("find_missing", pairs))
+    assert found["results"] is None
+    missing = [p["asset_id"] for p in found["missing"]]
+    assert missing == ["a:outside", "a:link", "a:hash", "a:size", "a:gone"]
+
+
+def test_the_launched_gateway_syncs_the_reference_selector_until_it_ranks(tmp_path):
+    """AC42: not_ready -> find_missing -> upload with the file -> the next select is ranked."""
+    server = reference_server()
+    asset = skill_file(tmp_path / "skills")
+    body = dict(BODY, assets=[asset, TOOL])
+    index = server.SyncIndex([tmp_path / "skills"])
+    settings = GuidanceSettings(enabled=True)
+    seen = []
+
+    def answer(value):
+        seen.append(value["catalog"])
+        return asyncio.run(server.select(value, settings, name="router", version="1", index=index))
+
+    def sync(value):
+        seen.append(value["operation"])
+        return index.handle(value)
+
+    http_server = ThreadingHTTPServer(("127.0.0.1", 0), server.make_handler(answer, sync))
+    threading.Thread(target=http_server.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{http_server.server_port}"
+    table = http_table(base) + f"sync_url = '{base}/sync'\n"
+    try:
+        config = load_config(write_config(tmp_path, table))
+        launched = build_app(config, local_adapter=ScriptedAdapter(turns=[]), external_adapter=None)
+        auth = {"Authorization": f"Bearer {launched.app.state.application_token}"}
+        with TestClient(launched.app) as http:
+            first = http.post("/relay/v1/guidance", json=body, headers=auth).json()
+            synced = http.get("/relay/v1/guidance/sync", headers=auth).json()
+            second = http.post("/relay/v1/guidance", json=body, headers=auth).json()
+    finally:
+        http_server.shutdown()
+    assert first["chosen_by"] == "word_match" and first["degraded"] is True
+    assert [s for s in seen if isinstance(s, str)] == ["find_missing", "upload"]
+    assert synced["last_outcome"] == "synced" and synced["files_sent"] == 1
+    assert synced["accepted"] == 2 and synced["rejected"] == 0
+    assert second["chosen_by"] == "third_party" and second["degraded"] is False
+    assert [p["name"] for p in second["picks"]] == ["pdf-merge"]

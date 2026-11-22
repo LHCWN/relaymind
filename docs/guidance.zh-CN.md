@@ -172,9 +172,13 @@ openclaw skills info <name> --json        # filePath 是该技能的 SKILL.md，
 1. `{"schema_version":1,"operation":"find_missing","feeder_id":"guidance","assets":[{"asset_id","content_hash"}]}`，包含所有提供的记录。用 `{"schema_version":1,"operation":"find_missing","inference":"local","missing":[...],"results":null}` 响应，列出你尚未索引的配对。
 2. `{"schema_version":1,"operation":"upload","feeder_id":"guidance","assets":[{"record","content"}]}`，只包含这些配对。`record` 是选择请求中的原样记录。技能的 `content` 是 `{"kind":"file","path":"/abs/SKILL.md","size_bytes":812}`，工具或没有文件的技能为 `null`。用 `"missing":null` 响应，并为每个配对给出一个结果：接收并准备建立索引时为 `{"asset_id","content_hash","status":"accepted","reason":null}`，否则为 `"status":"rejected"`，`"reason"` 取 `hash_mismatch`、`size_mismatch`、`outside_roots`、`too_large`、`unreadable` 或 `invalid_record` 之一。
 
-由你自己读取文件，只读取运维人员允许的目录，并用 `size_bytes` 和 `content_hash` 核对大小和 SHA-256。按准确的 `asset_id` 和 `content_hash` 为每个资产建立索引；如果选择请求提供了你尚未索引的配对，就响应 `not_ready`。如果你的嵌入模型或标签模型不在本机，请返回 `"inference":"remote"`：此时网关不发送路径，除非运维人员设置 `sync_allow_remote = true`。网关从不读取或发送技能正文，同一时间最多运行一次同步。
+由你自己读取文件，只有当文件的真实路径（解析所有符号链接之后）位于运维人员允许的目录下时才读取，并用 `size_bytes` 和 `content_hash` 核对大小和 SHA-256。按准确的 `asset_id` 和 `content_hash` 为每个资产建立索引；如果选择请求提供了你尚未索引的配对，就响应 `not_ready`。既没有建立索引、也没有正在建立索引的配对要报告为缺失，所以索引失败的配对会再次缺失。如果你的嵌入模型或标签模型不在本机，请返回 `"inference":"remote"`：此时网关不发送路径，除非运维人员设置 `sync_allow_remote = true`。网关从不读取或发送技能正文，同一时间最多运行一次同步。
 
-带文件时被你拒绝的技能会再发送一次，但不带文件，这样你可以只根据记录为它建立索引。不带文件时被你拒绝的配对在其哈希变化之前不会再次发送。同步失败后，下一次同步要等待 30 秒，此后每连续失败一次等待时间加倍，最多 10 分钟。每次交换使用 `sync_ms`（默认 60 秒），与本轮自身的时间分开；同步失败不会改变任何响应。用应用令牌调用 `GET /relay/v1/guidance/sync` 可以查看上一次同步的计数和等待时间，其中不包含资产名称或路径。
+带文件时被你拒绝的技能会再发送一次，但不带文件，这样你可以只根据记录为它建立索引。不带文件时被你拒绝的配对在其哈希变化之前不会再次发送。同步失败后，下一次同步要等待 30 秒，此后每连续失败一次等待时间加倍，最多 10 分钟。如果一次同步上传的配对都是你以前接收过的，它也同样等待，因为你接收了它们却没有建立索引。每次交换使用 `sync_ms`（默认 60 秒），与本轮自身的时间分开；同步失败不会改变任何响应。用应用令牌调用 `GET /relay/v1/guidance/sync` 可以查看上一次已结束的同步的计数和等待时间，其中不包含资产名称或路径。
+
+这种设计有两个代价。`not_ready` 针对整个选择请求，所以只要有一个配对尚未索引，每一轮都会退回到词匹配，直到同步让它建立索引。另外，挂起的同步最多会占用唯一的同步位置三个 `sync_ms`（默认 3 分钟），在此期间其他同步都会被跳过。
+
+`scripts/guidance_selector_server.py --sync-root DIR` 是这个协议的参考选择器：它提供 `/sync`，只读取其根目录下的文件，并在拥有所有提供的配对之前响应 `not_ready`。它仍然按描述排序，所以它展示的是协议，而不是更好的排序。
 
 ## 添加 MCP 工具
 

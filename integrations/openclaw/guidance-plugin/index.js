@@ -129,34 +129,49 @@ export function readSkillInfo(entry) {
     const stat = statSync(path);
     // A device or pipe may report size 0 and never end, and opening a pipe can block the hook.
     if (!stat.isFile()) return UNKNOWN;
-    const { mtimeMs, size } = stat;
+    // An edit can keep the size and set the modification time back; the change time still moves.
+    const { mtimeMs, ctimeMs, size } = stat;
     const cached = fileCache.get(path);
-    if (cached && cached.mtimeMs === mtimeMs && cached.size === size) return cached.info;
-    // A small file is read once, whole: its hash and its frontmatter come from the same bytes. The
-    // read stops one byte past the limit, so a file that grew after stat is never hashed.
-    const whole = size <= MAX_SKILL_FILE_BYTES ? readHead(path, MAX_SKILL_FILE_BYTES + 1) : null;
-    const head = (whole ? whole.subarray(0, MAX_FRONT_BYTES) : readHead(path, MAX_FRONT_BYTES)).toString("utf8");
-    // Frontmatter that does not close within the bytes read may still hide the skill further on,
-    // so it counts as unknown, and an unknown skill is never offered.
-    if (size > MAX_FRONT_BYTES && /^\ufeff?---\r?\n/.test(head) && !/^\ufeff?---\r?\n[\s\S]*?\r?\n---/.test(head)) {
-      return UNKNOWN;
-    }
-    const parsed = parseFrontmatter(head);
+    if (cached && cached.mtimeMs === mtimeMs && cached.ctimeMs === ctimeMs && cached.size === size) return cached.info;
+    // The frontmatter comes first, so the body of a hidden skill is never read.
+    let bytes = readHead(path, MAX_FRONT_BYTES);
+    let parsed = frontmatterOf(bytes, size);
+    if (!parsed) return UNKNOWN;
     // Only an offered skill is hashed, and only with a path the gateway accepts.
     const absolute = resolve(path);
-    const file =
-      !parsed.hidden && whole && whole.length <= MAX_SKILL_FILE_BYTES
-        && basename(absolute) === "SKILL.md" && Buffer.byteLength(absolute) <= MAX_PATH_BYTES
-        ? { content_hash: createHash("sha256").update(whole).digest("hex"), path: absolute, size_bytes: whole.length }
-        : null;
+    let file = null;
+    if (!parsed.hidden && size <= MAX_SKILL_FILE_BYTES && basename(absolute) === "SKILL.md" && Buffer.byteLength(absolute) <= MAX_PATH_BYTES) {
+      // A head shorter than its limit is the whole file. Otherwise the whole file is read, and its
+      // frontmatter read again from the bytes that are hashed, so a hash never stands for a hidden
+      // skill. The read stops one byte past the limit, so a file that grew after stat is never hashed.
+      if (bytes.length >= MAX_FRONT_BYTES) {
+        bytes = readHead(path, MAX_SKILL_FILE_BYTES + 1);
+        parsed = frontmatterOf(bytes, size);
+        if (!parsed) return UNKNOWN;
+      }
+      if (!parsed.hidden && bytes.length <= MAX_SKILL_FILE_BYTES) {
+        file = { content_hash: createHash("sha256").update(bytes).digest("hex"), path: absolute, size_bytes: bytes.length };
+      }
+    }
     // Only the part that is ever sent is kept, so the cache stays small.
     const info = { ...parsed, description: clip(parsed.description, MAX_DESCRIPTION_BYTES), file };
     if (fileCache.size > 50_000) fileCache.clear();
-    fileCache.set(path, { mtimeMs, size, info });
+    fileCache.set(path, { mtimeMs, ctimeMs, size, info });
     return info;
   } catch {
     return UNKNOWN;
   }
+}
+
+/** The frontmatter in the first bytes of a file of `size` bytes, or null when it cannot be known. */
+function frontmatterOf(bytes, size) {
+  const head = bytes.subarray(0, MAX_FRONT_BYTES).toString("utf8");
+  // Frontmatter that does not close within the bytes read may still hide the skill further on,
+  // so it counts as unknown, and an unknown skill is never offered.
+  if (size > MAX_FRONT_BYTES && /^﻿?---\r?\n/.test(head) && !/^﻿?---\r?\n[\s\S]*?\r?\n---/.test(head)) {
+    return null;
+  }
+  return parseFrontmatter(head);
 }
 
 /** At most the first `limit` bytes of a file, without reading the rest of it. */
@@ -516,6 +531,8 @@ function hostAssets(snapshot, toolsFile, logger) {
     assets.push(asset);
   };
   for (const entry of snapshot?.skills ?? []) {
+    // The gateway takes no more assets than this, so no further file is read.
+    if (assets.length >= MAX_ASSETS) break;
     const info = readSkillInfo(entry);
     if (!info.hidden) add(entry.name, "skill", info.description, info.file);
   }
@@ -529,33 +546,60 @@ function hostAssets(snapshot, toolsFile, logger) {
   return assets;
 }
 
-/** The request as JSON, with descriptions shortened in steps until it fits the body limit. */
+const FILE_FIELDS = ["content_hash", "path", "size_bytes"];
+const hasFile = (asset) => FILE_FIELDS.some((key) => key in asset);
+/** An asset without the skill file fields of spec 0.72. */
+const bare = ({ content_hash, path, size_bytes, ...rest }) => rest;
+
+/**
+ * The request as JSON under the body limit. The file fields go first, since a hint needs none of
+ * them; only then are descriptions shortened in steps.
+ */
 export function fitBody(body, limit = MAX_BODY_BYTES) {
+  return fit(body, limit).json;
+}
+
+/** fitBody, and whether the JSON kept any file fields. */
+function fit(body, limit = MAX_BODY_BYTES) {
   let json = JSON.stringify(body);
+  if (Buffer.byteLength(json) <= limit) return { json, files: body.assets.some(hasFile) };
+  const assets = body.assets.map(bare);
+  json = JSON.stringify({ ...body, assets });
   let room = MAX_DESCRIPTION_BYTES;
   while (Buffer.byteLength(json) > limit && room > 16) {
     room = Math.floor(room / 2);
-    json = JSON.stringify({ ...body, assets: body.assets.map((a) => ({ ...a, description: clip(a.description, room) })) });
+    json = JSON.stringify({ ...body, assets: assets.map((a) => ({ ...a, description: clip(a.description, room) })) });
   }
-  // Long paths can still keep it too large: the file fields go last, since a hint needs none of them.
-  if (Buffer.byteLength(json) > limit) {
-    const bare = ({ content_hash, path, size_bytes, ...rest }) => ({ ...rest, description: clip(rest.description, room) });
-    json = JSON.stringify({ ...body, assets: body.assets.map(bare) });
-  }
-  return json;
+  return { json, files: false };
 }
 
-async function ask(config, token, text, recent, assets) {
-  const body = { schema_version: 1, task_text: clip(text, MAX_TASK_BYTES), assets };
+/**
+ * Ask the gateway. A gateway older than 0.72 answers HTTP 400 to the file fields, so a refused
+ * request that had them is sent once more without them, within the same time limit. `files` holds
+ * whether this process still sends them: it turns off only after the request without them worked.
+ */
+async function ask(config, token, text, recent, assets, files, logger) {
+  const body = { schema_version: 1, task_text: clip(text, MAX_TASK_BYTES), assets: files.send ? assets : assets.map(bare) };
   if (recent) body.recent_text = recent;
   if (config.maxPicks !== undefined) body.max_picks = config.maxPicks;
-  const response = await fetch(config.origin + ENDPOINT, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: fitBody(body),
-    redirect: "manual",
-    signal: AbortSignal.timeout(config.timeoutMs),
-  });
+  const signal = AbortSignal.timeout(config.timeoutMs);
+  const post = (json) =>
+    fetch(config.origin + ENDPOINT, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: json,
+      redirect: "manual",
+      signal,
+    });
+  const first = fit(body);
+  let response = await post(first.json);
+  if (response.status === 400 && first.files) {
+    response = await post(fitBody({ ...body, assets: body.assets.map(bare) }));
+    if (response.status === 200) {
+      files.send = false;
+      logger.info("relaymind-guidance: the gateway refused the skill file fields, so it sends none from now on. Upgrade the gateway to 0.72 or later for selector sync.");
+    }
+  }
   if (response.status !== 200) throw new Error(`guidance answered HTTP ${response.status}`);
   return response.json();
 }
@@ -574,6 +618,8 @@ function register(api) {
     );
   }
   const strict = config.limit === "strict";
+  // Whether requests still carry the skill file fields (spec 0.72); see ask.
+  const files = { send: true };
   let warnedAboutLoad = false;
   const warnAboutLoad = (snapshot) => {
     const cap = api.config?.skills?.limits?.maxSkillsLoadedPerSource ?? HOST_DEFAULT_SKILLS_LOADED;
@@ -621,7 +667,7 @@ function register(api) {
       const assets = hostAssets(snapshot, config.toolsFile, api.logger);
       if (!assets.length) return {};
       if (state) state.offer = newOffer(snapshot, assets, ctx?.workspaceDir);
-      const answer = await ask(config, token, text, recentUserText(event?.messages, text), assets);
+      const answer = await ask(config, token, text, recentUserText(event?.messages, text), assets, files, api.logger);
       if (!Array.isArray(answer?.picks)) return {};
       const offered = new Set(assets.map((a) => `${a.kind}:${a.name}`));
       // Only a pick the hint can name counts, so a strict limit never allows what the model cannot see.
