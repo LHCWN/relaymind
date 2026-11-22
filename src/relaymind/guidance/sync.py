@@ -188,8 +188,9 @@ class GuidanceSync:
             self._rejected[pair] = None
             self._accepted.pop(_variant(sent[pair]), None)
         for pair in accepted:
-            self._accepted[_variant(sent[pair])] = None
-            self._accepted.move_to_end(_variant(sent[pair]))
+            variant = _variant(sent[pair])
+            self._accepted[variant] = None
+            self._accepted.move_to_end(variant)
         while len(self._rejected) > MAX_REJECTED:
             self._rejected.popitem(last=False)
         while len(self._accepted) > MAX_ACCEPTED:

@@ -4024,6 +4024,12 @@ loopback, and no real model, host or ranking quality is involved.
   own `src/apps/server/main.ts` in fed mode with its own SQLite store.
 - Command: `python scripts/asset_router_interop.py --rev <commit> --repo <local clone of asset-router>`.
 
+### At `1e6d4e56c527702d96e31abf4ff1836086739c81`: 9 of 9 passed
+
+The head of LHCWN/asset-router#1 after `de80945` (selection deadlines, index publication, inference boundaries),
+`a90c156`, `3f35068` and `1e6d4e5`, against RelayMind `6e12b64` plus the test-reliability changes of the same
+PR. Same nine cases and results as at `b54416b` below. The `Router interop` workflow now pins this commit.
+
 ### At `853dada92e6f6d557d138c23b6e3b08204cccd4d`: 9 of 9 passed, three runs
 
 The head of LHCWN/asset-router#1 after its review fixes (`6bd7896`, `853dada`), against RelayMind `2cb0907`.

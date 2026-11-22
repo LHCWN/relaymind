@@ -5,7 +5,8 @@
 
 It clones the router into a cache folder named after the commit, checks out exactly that commit,
 installs its locked dependencies with `npm ci`, and runs tests/test_guidance_router_interop.py with
-RELAYMIND_ASSET_ROUTER_DIR and RELAYMIND_ASSET_ROUTER_REV set. It never follows a branch: a run
+RELAYMIND_ASSET_ROUTER_DIR and RELAYMIND_ASSET_ROUTER_REV set, and RELAYMIND_ASSET_ROUTER_REQUIRED=1
+so that a test cannot skip for want of the checkout. It never follows a branch: a run
 names the commit it checked. Inference is a deterministic double, so the result says whether the
 two programs interoperate, not how well a real model ranks. Development tooling only.
 """
@@ -76,6 +77,8 @@ def main() -> int:
         **os.environ,
         "RELAYMIND_ASSET_ROUTER_DIR": str(checkout),
         "RELAYMIND_ASSET_ROUTER_REV": args.rev,
+        # The checkout was just prepared: a test that skips for want of it is a failure.
+        "RELAYMIND_ASSET_ROUTER_REQUIRED": "1",
     }
     command = [
         sys.executable,

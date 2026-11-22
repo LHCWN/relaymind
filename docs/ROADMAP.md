@@ -1889,7 +1889,8 @@ answer falls back to word match and, with `guidance.sync_url`, starts a `find_mi
 the answer, with a result for each asset, a growing wait after failures, its own `guidance.sync_ms` and a status
 route. Deterministic tests use a fake router (`tests/test_guidance_sync.py`). An `interop` harness runs the
 gateway against the real asset-router at an exact commit with deterministic inference
-(`scripts/asset_router_interop.py`). At asset-router `853dada` and `b54416b` (PR LHCWN/asset-router#1) all nine
-interop cases pass; at `c3cc835` none did ([evidence](EVIDENCE.md#2026-11-22--guidance-gateway-against-asset-router-rm47-ac42)).
-Open: the gateway counts a re-upload for a new description of an accepted pair as no progress (spec section 7.7,
-open finding). Not done: the same sync for recommendations, and any run with a real host or real inference.
+(`scripts/asset_router_interop.py`). At asset-router `1e6d4e5`, `853dada` and `b54416b` (PR LHCWN/asset-router#1)
+all nine interop cases pass; at `c3cc835` none did ([evidence](EVIDENCE.md#2026-11-22--guidance-gateway-against-asset-router-rm47-ac42)).
+The `Router interop` workflow runs them in CI at the pinned `1e6d4e5` once asset-router's deploy key is set up.
+Open: offers that alternate between descriptions of the same file make such a router re-index on each change,
+until the gateway has accepted every variant once (spec section 7.7, open finding). Not done: the same sync for recommendations, and any run with a real host or real inference.

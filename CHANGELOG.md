@@ -41,6 +41,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   missing pairs were all rejected before now waits too, instead of asking again on every `not_ready`. A sync whose
   `find_missing` failed reports zero counts. The plugin reads at most 64 MiB of skill files whole in one turn; a
   skill past that is offered by its description and read on a later turn.
+  A `Router interop` workflow runs the same check in CI at a pinned asset-router commit (`1e6d4e5`, where all nine
+  cases pass) when guidance sync or the harness changes; it needs a read-only deploy key of asset-router as the
+  `ROUTER_DEPLOY_KEY` secret and says so in a notice when the secret is missing. Under the runner and in CI a
+  missing router checkout fails instead of skipping. Tests that failed under parallel load now hold: the
+  operations fixture no longer gives each real request a 1 s wall-clock deadline, two recommendation timeout tests
+  expire their budget only after the primary was dispatched, and the release-pack and native-actions tests build the
+  plugin in their own copy of the package instead of deleting and rewriting the shared `dist/` other workers import.
 
 - Specification 0.71 (RM45, RM46; AC41; sections 7.7 and 14.1): `relaymind openclaw guidance` sets up per-prompt
   guidance with the host's own commands. It installs the plugin, empties the listed skill catalog and, with

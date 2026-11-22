@@ -28,6 +28,8 @@ import pytest
 
 ROUTER_DIR_ENV = "RELAYMIND_ASSET_ROUTER_DIR"
 ROUTER_REV_ENV = "RELAYMIND_ASSET_ROUTER_REV"
+# Set by scripts/asset_router_interop.py and CI: a missing checkout fails, never skips.
+ROUTER_REQUIRED_ENV = "RELAYMIND_ASSET_ROUTER_REQUIRED"
 ROUTER_NAME = "asset-router"
 ROUTER_VERSION = "1"
 DIMENSIONS = 64
@@ -52,13 +54,16 @@ def poll(check: Callable[[], object], timeout: float, message: Callable[[], str]
 
 
 def require_checkout() -> Path:
-    """The router checkout named by RELAYMIND_ASSET_ROUTER_DIR, or a skip without one."""
+    """The router checkout named by RELAYMIND_ASSET_ROUTER_DIR, or a skip without one.
+
+    With RELAYMIND_ASSET_ROUTER_REQUIRED=1 a missing checkout is a failure instead."""
+    missing = pytest.fail if os.environ.get(ROUTER_REQUIRED_ENV) == "1" else pytest.skip
     value = os.environ.get(ROUTER_DIR_ENV)
     if not value:
-        pytest.skip(f"set {ROUTER_DIR_ENV} to an asset-router checkout with node_modules")
+        missing(f"set {ROUTER_DIR_ENV} to an asset-router checkout with node_modules")
     path = Path(value).resolve()
     if not (path / _TSX_LOADER).is_file():
-        pytest.skip(f"{path} has no installed dependencies (run npm ci there)")
+        missing(f"{path} has no installed dependencies (run npm ci there)")
     return path
 
 
