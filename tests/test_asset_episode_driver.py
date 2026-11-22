@@ -35,7 +35,7 @@ def corpus(tmp_path):
     return resolve_corpus(*companions(expanded_release(tmp_path / "release")))
 
 
-def setup(tmp_path, episode_count=1):
+def setup(tmp_path, episode_count=1, clock=None):
     from relaymind.assets.embedding_backends import EmbeddingEngine
     from relaymind.selection.adaptation_stage import AdaptationStage
 
@@ -88,13 +88,20 @@ def setup(tmp_path, episode_count=1):
         fixture_production().recommendations,
         tmp_path / "work",
         adaptation_stage=stage,
-        clock=FakeClock(),
+        clock=clock or FakeClock(),
     )
     return release, freeze, episodes, arms
 
 
-def run(tmp_path, *, interrupted=lambda: False, episode_count=1, qualification="fixture"):
-    release, freeze, episodes, arms = setup(tmp_path, episode_count)
+def run(
+    tmp_path,
+    *,
+    interrupted=lambda: False,
+    episode_count=1,
+    qualification="fixture",
+    clock=None,
+):
+    release, freeze, episodes, arms = setup(tmp_path, episode_count, clock)
     report, evidence = asyncio.run(
         run_adaptation_episodes(
             episodes,
@@ -137,6 +144,22 @@ def test_an_episode_runs_through_the_real_lifecycle_and_grades(tmp_path):
         reset_preimages=reset_preimages(evidence),
     )
     assert summary["reset_passed"] == 1 and summary["gate"] == "not_applicable"
+
+
+def test_feedback_follows_the_injected_clock_not_the_wall_clock(tmp_path):
+    """RM37/AC28: feedback and reset use the same clock as the episode stores."""
+    from datetime import UTC, datetime, timedelta
+
+    clock = FakeClock()
+    # Anchor the session well before the real wall clock, as a paused
+    # deterministic test run would be. Reading real time here would expire
+    # every recommendation before its first correction.
+    clock.now = datetime.now(UTC) - timedelta(days=100)
+    release, freeze, episodes, report, _ = run(tmp_path, clock=clock)
+    result = report["episodes"][0]
+    assert result["status"] == "completed", result["reason"]
+    assert [c["status"] for c in result["corrections"]] == ["accepted"] * 3
+    assert result["reset_equal"] is True
 
 
 def test_reset_evidence_is_the_spec_0_64_document(tmp_path):
