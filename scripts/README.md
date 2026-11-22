@@ -15,6 +15,8 @@
 - `guidance_selector_server.py` — serve the built-in guidance stages as a selection v2
   service, so the benchmark compares them like any third-party selector (RM40, RM45). With
   `--sync-root DIR` it is also a reference selector for guidance selector sync (RM47).
+- `asset_router_interop.py --rev <commit>` — run the guidance gateway against the real asset-router
+  at one exact commit, with deterministic inference (RM47, AC42; `pytest -m interop`).
 - `example_intent_selector.py` — a complete third-party selector with no RelayMind imports,
   with optional keywords and a picker through any OpenAI-compatible model (RM28, RM45).
 - `guidance_turn_benchmark.py` — real full turns through OpenClaw, the guidance plugin, a

@@ -2785,6 +2785,14 @@ Deterministic, with model doubles: `tests/test_guidance.py`, `tests/test_guidanc
 Selector sync (spec 0.72; RM47, AC42): `tests/test_guidance_sync.py` drives the guidance endpoint against a fake
 router that answers select and sync, and once against a real loopback server through the launched gateway.
 
+Interop with asset-router (RM47, AC42): `tests/test_guidance_router_interop.py` is marked `interop` and skipped
+unless `RELAYMIND_ASSET_ROUTER_DIR` names a router checkout. It starts the router's own server from an explicit checkout and runs the real gateway against
+it, with a deterministic embeddings double; a recording proxy shows each exchange. Run it at an exact commit with
+`python scripts/asset_router_interop.py --rev <commit>`, or with `RELAYMIND_ASSET_ROUTER_DIR` (and optionally
+`RELAYMIND_ASSET_ROUTER_REV`) and `pytest -m interop`. It never follows a branch. A pass shows the programs work
+together; it says nothing about ranking quality with a real model. `tests/test_router_interop_harness.py` checks
+the harness itself in the default run.
+
 Live and separate, because they spend on a real model:
 `scripts/guidance_similar_benchmark.py` runs the stages or a third-party selector over families of similar
 skills, and `scripts/guidance_turn_benchmark.py` runs real full turns, with `--similar` for similar skills,
