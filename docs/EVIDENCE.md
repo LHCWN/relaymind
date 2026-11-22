@@ -4024,6 +4024,12 @@ loopback, and no real model, host or ranking quality is involved.
   own `src/apps/server/main.ts` in fed mode with its own SQLite store.
 - Command: `python scripts/asset_router_interop.py --rev <commit> --repo <local clone of asset-router>`.
 
+### At `853dada92e6f6d557d138c23b6e3b08204cccd4d`: 9 of 9 passed, three runs
+
+The head of LHCWN/asset-router#1 after its review fixes (`6bd7896`, `853dada`), against RelayMind `2cb0907`.
+Same nine cases and results as at `b54416b` below. A new description for a ready pair still gets `not_ready`
+and one re-sync; the router now compares only the record fields its active features read.
+
 ### At `b54416b4b80c395176c0777c2db62ab873afc2c6`: 9 of 9 passed, three runs
 
 | Case | Result |
