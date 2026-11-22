@@ -272,8 +272,9 @@ description, so it shows the protocol, not a better ranking.
   answer after you publish new features.
 - Rank with the description of the current select. The same file hash can come with a description shortened or
   redacted differently than before. asset-router `b54416b` and later answer `not_ready` to such an offer and
-  report the pair in `find_missing`, so the gateway uploads the current record, which counts as progress. Offers
-  that keep alternating between descriptions are still an open finding.
+  report the pair in `find_missing`, so the gateway uploads the current record, which counts as progress. The
+  gateway remembers only the record you last accepted for each asset, so switching back to an earlier version or
+  description is progress too. A selector that keeps one version of each asset re-indexes on each such change.
 - A tool record's `input_schema` is the placeholder `{"type":"object"}` and its `schema_hash` is fixed, so it
   does not tell you when a real tool's schema changed. Real MCP schemas need a separate contract extension.
 

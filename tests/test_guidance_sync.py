@@ -1099,3 +1099,82 @@ def test_a_failed_find_missing_is_reported_with_zero_counts():
     body = status(http)
     assert body["last_outcome"] == "failed" and body["last_inference"] is None
     assert [body[k] for k in ("missing", "accepted", "rejected", "files_sent")] == [0, 0, 0, 0]
+
+
+# --- switching an asset's current version (spec 0.72; RM47, AC42) ------------------------------
+# A selector keeps one current version of each asset. Going back to an earlier version means
+# uploading it again, and that is progress; the same version missing again is not. These tests
+# never move the clock, so a sync that started the 30 s wait would show at once.
+
+
+def ask_with(http, router, skill) -> dict:
+    """One turn offering only `skill`; the sync status after it, with the uploads so far."""
+    http.post("/relay/v1/guidance", json=dict(BODY, assets=[skill]), headers=AUTH)
+    return dict(status(http), uploads=len(uploads(router)))
+
+
+def assert_switched(body: dict, uploads_so_far: int) -> None:
+    assert body["uploads"] == uploads_so_far
+    assert body["last_outcome"] == "synced" and body["accepted"] == 1
+    assert body["consecutive_failures"] == 0 and body["retry_after_ms"] == 0
+
+
+def test_switching_source_versions_back_and_forth_is_progress_each_time():
+    """Hashes A, B, A, B: each restores a version the selector no longer holds."""
+    router = Router(outcome="not_ready", missing=lambda sent: sent)
+    http, _ = syncing_client(router)
+    versions = [dict(SKILL, content_hash=h) for h in ("a" * 64, "b" * 64)] * 2
+    for turn, skill in enumerate(versions, start=1):
+        assert_switched(ask_with(http, router, skill), turn)
+    assert [u["assets"][0]["record"]["content_hash"] for u in uploads(router)] == [
+        "a" * 64,
+        "b" * 64,
+        "a" * 64,
+        "b" * 64,
+    ]
+
+
+def test_alternating_descriptions_under_one_hash_are_progress_each_time():
+    """The same file offered with two descriptions in turn: each change is a new target."""
+    router = Router(outcome="not_ready", missing=lambda sent: sent)
+    http, _ = syncing_client(router)
+    described = [dict(SKILL, description=d) for d in ("Merge PDF files", "Merge pdf")] * 2
+    for turn, skill in enumerate(described, start=1):
+        assert_switched(ask_with(http, router, skill), turn)
+
+
+def test_an_unchanged_target_that_keeps_failing_waits_longer_each_time():
+    """Accepted, then missing again with the same record: not indexed, so the wait grows."""
+    router = Router(outcome="not_ready", missing=lambda sent: sent)
+    http, clock = syncing_client(router)
+    a, b = (dict(SKILL, content_hash=h) for h in ("a" * 64, "b" * 64))
+    assert_switched(ask_with(http, router, a), 1)
+    body = ask_with(http, router, a)
+    assert body["uploads"] == 2 and body["accepted"] == 1
+    assert body["consecutive_failures"] == 1 and body["retry_after_ms"] == 30000
+    clock.now += 29
+    assert ask_with(http, router, a)["uploads"] == 2  # Within the wait: no sync.
+    clock.now += 1
+    body = ask_with(http, router, a)
+    assert body["uploads"] == 3
+    assert body["consecutive_failures"] == 2 and body["retry_after_ms"] == 60000
+    # After a switch, the new target failing again still waits.
+    clock.now += 60
+    assert_switched(ask_with(http, router, b), 4)
+    body = ask_with(http, router, b)
+    assert body["uploads"] == 5
+    assert body["consecutive_failures"] == 1 and body["retry_after_ms"] == 30000
+
+
+def test_the_targets_are_kept_for_at_most_max_targets_assets(monkeypatch):
+    import relaymind.guidance.sync as sync_module
+
+    assert sync_module.MAX_TARGETS == 10_000
+    monkeypatch.setattr(sync_module, "MAX_TARGETS", 1)
+    router = Router(outcome="not_ready", missing=lambda sent: sent)
+    http, _ = syncing_client(router)
+    other = dict(SKILL, name="pdf-split", description="Split PDF files")
+    assert_switched(ask_with(http, router, SKILL), 1)
+    assert_switched(ask_with(http, router, other), 2)  # Takes the only place.
+    # The first asset's target was dropped, so its record again counts as new.
+    assert_switched(ask_with(http, router, SKILL), 3)

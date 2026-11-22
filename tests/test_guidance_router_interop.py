@@ -173,6 +173,22 @@ class Stack:
         assert_from_router(self, answer)
         return answer
 
+    def until_ranked_without_a_wait(self, assets: list[dict], task: str = TASK) -> dict:
+        """Ask until the router ranks, never moving the clock; no sync may start a wait."""
+
+        def ranked():
+            answer = self.ask(assets, task)
+            body = self.status()
+            assert body["retry_after_ms"] == 0 and body["consecutive_failures"] == 0, (
+                f"a sync started the wait: {self.diagnostics()}"
+            )
+            last = self.selects()[-1]
+            return last.response.get("outcome") == "ranked" and answer
+
+        answer = poll(ranked, 30, lambda: f"the router never ranked: {self.diagnostics()}")
+        assert_from_router(self, answer)
+        return answer
+
     def require_uploads(self, count: int = 1):
         """At least `count` uploads, or a failure that says where the sync stopped."""
         uploads = self.uploads()
@@ -451,3 +467,24 @@ def test_a_new_description_for_the_same_file_is_ranked_as_offered(stack):
         alpha["content_hash"],
         beta["content_hash"],
     }
+
+
+def test_switching_a_skill_back_and_forth_between_versions_never_starts_the_wait(stack):
+    """Spec 0.72 7.7: file versions A, B, A, B of one skill are four switches, never a stuck sync.
+
+    The clock never moves here, so a sync counted as no progress would hold the next one back
+    for 30 s and the router would never rank the version offered now.
+    """
+    notes = notes_skill(stack)
+    task = "merge pdf documents"
+    bodies = ["Join several PDF files into one document.", "Combine PDF files into a single file."]
+    offered = []
+    for body in bodies * 2:
+        skill = skill_file(stack.root, "pdf-merge", "Merge pdf documents", body)
+        answer = stack.until_ranked_without_a_wait([skill, notes], task=task)
+        assert answer["picks"][0]["name"] == "pdf-merge"
+        offered.append(skill["content_hash"])
+        ranked_hash = next(r["content_hash"] for r in stack.offered() if name_of(r) == "pdf-merge")
+        assert ranked_hash == skill["content_hash"]
+    assert offered[0] == offered[2] and offered[1] == offered[3] and offered[0] != offered[1]
+    assert stack.clock.offset == 0.0

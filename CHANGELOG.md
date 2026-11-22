@@ -36,15 +36,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   file is handled. `scripts/asset_router_interop.py --rev <commit>` runs the gateway against the real asset-router
   at one exact commit with deterministic inference (`pytest -m interop`): all nine cases pass at `853dada` and
   `b54416b`; at `c3cc835` none did (a refused fractional `deadline_ms`, and `/sync` answers without `results`).
-  The gateway now remembers each accepted pair with a digest of the record it sent, so re-sending a changed record
-  (a new description for the same file) is progress, while the same record again still waits. A sync whose
+  The gateway now remembers, for each asset ID, only the target the selector last accepted: its hash and a digest
+  of the exact record. A selector keeps one current version, so any other record is a switch and is progress,
+  including a return to an earlier version (hashes A, B, A, B) or alternating descriptions of one file; the same
+  target missing again still waits, with the wait growing on each repeat. A sync whose
   missing pairs were all rejected before now waits too, instead of asking again on every `not_ready`. A sync whose
   `find_missing` failed reports zero counts. The plugin reads at most 64 MiB of skill files whole in one turn; a
   skill past that is offered by its description and read on a later turn.
   A `Router interop` workflow runs the same check in CI at a pinned asset-router commit (`1e6d4e5`, where all nine
   cases pass) when guidance sync or the harness changes; it needs a read-only deploy key of asset-router as the
-  `ROUTER_DEPLOY_KEY` secret and says so in a notice when the secret is missing. Under the runner and in CI a
-  missing router checkout fails instead of skipping. Tests that failed under parallel load now hold: the
+  `ROUTER_DEPLOY_KEY` secret, and without it the job fails as not validated instead of passing with nothing run.
+  Under the runner and in CI a missing router checkout fails instead of skipping, a run with any skipped or no
+  interop test fails as `not_validated`, and `--result` records the outcome with the RelayMind and asset-router
+  commits. Tests that failed under parallel load now hold: the
   operations fixture no longer gives each real request a 1 s wall-clock deadline, two recommendation timeout tests
   expire their budget only after the primary was dispatched, and the release-pack and native-actions tests build the
   plugin in their own copy of the package instead of deleting and rewriting the shared `dist/` other workers import.

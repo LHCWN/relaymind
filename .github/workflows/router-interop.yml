@@ -8,7 +8,9 @@ name: Router interop
 #
 # asset-router is private. The clone uses a read-only deploy key of that repository, stored
 # here as the ROUTER_DEPLOY_KEY secret. Without the secret (a fork, or before it is set up)
-# the job says so in a notice and runs nothing; it never reports a run that did not happen.
+# nothing can be checked, so the job fails and says why: an unavailable check is never green.
+# The runner also fails a run in which any interop test skipped or none ran, and writes a
+# result naming both commits, attached to the run.
 
 on:
   pull_request:
@@ -59,9 +61,14 @@ jobs:
           KEY: ${{ secrets.ROUTER_DEPLOY_KEY }}
         run: |
           if [ -z "$KEY" ]; then
-            echo "::notice::ROUTER_DEPLOY_KEY is not set; the asset-router interop run was skipped."
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            message="ROUTER_DEPLOY_KEY is not set: asset-router interop was NOT validated for this commit."
+            echo "::error::$message"
+            {
+              echo "## Router interop: not validated"
+              echo
+              echo "$message No interop test ran. See docs/TESTING.md to set up the deploy key."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
           mkdir -p ~/.ssh
           printf '%s\n' "$KEY" > ~/.ssh/asset_router
@@ -94,15 +101,26 @@ jobs:
         env:
           REV: ${{ inputs.rev || env.ROUTER_REV }}
           GIT_SSH_COMMAND: ssh -i ~/.ssh/asset_router -o IdentitiesOnly=yes
-        run: >
-          python scripts/asset_router_interop.py --rev "$REV"
-          --cache "$RUNNER_TEMP/relaymind-interop"
-          -- --junitxml=ci-evidence/router-interop.xml
+        run: |
+          python scripts/asset_router_interop.py --rev "$REV" \
+            --cache "$RUNNER_TEMP/relaymind-interop" \
+            --result ci-evidence/router-interop.json
+
+      - name: Summary
+        if: always() && steps.key.outputs.present == 'true'
+        run: |
+          {
+            echo "## Router interop"
+            echo
+            echo '```json'
+            cat ci-evidence/router-interop.json 2>/dev/null || echo '{"outcome": "not_validated"}'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         if: always() && steps.key.outputs.present == 'true'
         with:
           name: router-interop
-          path: ci-evidence/router-interop.xml
+          path: ci-evidence/router-interop.json
           if-no-files-found: warn
           retention-days: 30

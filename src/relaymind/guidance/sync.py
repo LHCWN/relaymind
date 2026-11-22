@@ -26,9 +26,9 @@ FEEDER_ID = "guidance"
 _THREAD_ABOVE = 200
 # Pairs a selector rejected without a file; the oldest is dropped first (spec 0.72).
 MAX_REJECTED = 10_000
-# Pairs a selector accepted, each with the digest of the record sent; the same pair and record
-# missing again was taken and not indexed, while a changed record is new (spec 0.72).
-MAX_ACCEPTED = 10_000
+# Asset IDs whose current target is remembered: the selector keeps one version of each asset, so
+# only the last accepted record of an ID tells a stuck upload from a switch (spec 0.72).
+MAX_TARGETS = 10_000
 # After a failed sync none starts for this long, doubled for each failure in a row, up to the cap.
 FIRST_WAIT_S = 30.0
 MAX_WAIT_S = 600.0
@@ -41,9 +41,9 @@ def _key(record: Mapping) -> tuple[str, str]:
     return record["asset_id"], record["content_hash"]
 
 
-def _variant(record: Mapping) -> tuple[str, str, str]:
-    """The pair and the SHA-256 of its exact record, as an accepted upload is remembered."""
-    return *_key(record), hashlib.sha256(canonical_json(record).encode()).hexdigest()
+def _target(record: Mapping) -> tuple[str, str]:
+    """The version a record makes current: its content hash and the SHA-256 of the exact record."""
+    return record["content_hash"], hashlib.sha256(canonical_json(record).encode()).hexdigest()
 
 
 class GuidanceSync:
@@ -65,7 +65,8 @@ class GuidanceSync:
         self._failures = 0
         self._not_before = 0.0
         self._rejected: OrderedDict[tuple[str, str], None] = OrderedDict()
-        self._accepted: OrderedDict[tuple[str, str, str], None] = OrderedDict()
+        # Per asset ID, the target the selector last accepted; the least recently updated is first.
+        self._targets: OrderedDict[str, tuple[str, str]] = OrderedDict()
         # The last sync whose find_missing was answered: counts only, never an asset (RM16, RM47).
         # A running sync fills `_current`; the status shows it only once that sync ends.
         self._current: dict | None = None
@@ -122,8 +123,8 @@ class GuidanceSync:
         self._not_before = self._clock() + wait
 
     async def _sync(self, catalog: Sequence[Mapping], files: Mapping[str, Mapping]) -> bool:
-        """One sync; False when it made no progress (spec 0.72): every pair it uploaded was accepted
-        before with the same record, or every missing pair was rejected before."""
+        """One sync; False when it made no progress (spec 0.72): every record it uploaded is the
+        current target of its asset ID, or every missing pair was rejected before."""
         offered = {_key(record) for record in catalog}
         found = await self._exchange(
             "find_missing",
@@ -147,9 +148,10 @@ class GuidanceSync:
         if not chosen:
             return not known
         records = [record for record in catalog if _key(record) in chosen]
-        # A selector reports a pair whose indexing failed as missing again (spec 0.72); the same
-        # record sent again is no progress, a changed one (a new description) is.
-        progress = any(_variant(record) not in self._accepted for record in records)
+        # A selector reports a pair whose indexing failed as missing again (spec 0.72): sending its
+        # current target again is no progress. Any other record switches the asset's version, a
+        # return to an earlier one included (hashes A, B, A), and that is progress.
+        progress = any(self._targets.get(r["asset_id"]) != _target(r) for r in records)
         # A selector that sends text to remote inference gets no file unless the operator allows it.
         send_files = found["inference"] == "local" or self.allow_remote
         uploads = [
@@ -180,21 +182,20 @@ class GuidanceSync:
     def _remember(self, current: dict, sent: Mapping, accepted: set, rejected: set) -> None:
         """Keep confirmed results even if a later upload in the same sync fails.
 
-        `sent` maps each uploaded pair to its record: an accepted pair is remembered with the
-        digest of that record, so the same record again is no progress and a changed one is."""
+        `sent` maps each uploaded pair to its record: an accepted record becomes the target of its
+        asset ID, and a rejection leaves that ID with no known target."""
         current["accepted"] += len(accepted)
         current["rejected"] += len(rejected)
         for pair in rejected:
             self._rejected[pair] = None
-            self._accepted.pop(_variant(sent[pair]), None)
+            self._targets.pop(pair[0], None)
         for pair in accepted:
-            variant = _variant(sent[pair])
-            self._accepted[variant] = None
-            self._accepted.move_to_end(variant)
+            self._targets[pair[0]] = _target(sent[pair])
+            self._targets.move_to_end(pair[0])
         while len(self._rejected) > MAX_REJECTED:
             self._rejected.popitem(last=False)
-        while len(self._accepted) > MAX_ACCEPTED:
-            self._accepted.popitem(last=False)
+        while len(self._targets) > MAX_TARGETS:
+            self._targets.popitem(last=False)
 
     async def _upload(self, uploads: list[dict]) -> set[tuple[str, str]]:
         """Upload, and return the pairs the selector rejected. One result for each pair sent."""

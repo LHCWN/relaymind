@@ -2792,14 +2792,18 @@ it, with a deterministic embeddings double; a recording proxy shows each exchang
 asset-router repository. Use `--repo https://github.com/LHCWN/asset-router.git` with HTTPS Git credentials,
 or `--repo <local clone>` to use an existing clone. You can also run with `RELAYMIND_ASSET_ROUTER_DIR` (and optionally
 `RELAYMIND_ASSET_ROUTER_REV`) and `pytest -m interop`. It never follows a branch. The runner sets
-`RELAYMIND_ASSET_ROUTER_REQUIRED=1`, so a missing checkout fails instead of skipping. A pass shows the programs work
+`RELAYMIND_ASSET_ROUTER_REQUIRED=1`, so a missing checkout fails instead of skipping, and it fails a run in which
+any interop test skipped or none ran (`not_validated`). `--result PATH` writes the outcome, the counts, the
+RelayMind commit (and whether its tracked files were clean) and the asset-router commit as JSON. A pass shows the programs work
 together; it says nothing about ranking quality with a real model. `tests/test_router_interop_harness.py` checks
 the harness itself in the default run.
 In CI, `.github/workflows/router-interop.yml` runs the same command at the commit in its `ROUTER_REV` when guidance
 sync or the harness changes, and on demand with another exact commit. The clone uses a read-only deploy key of
 asset-router stored as the `ROUTER_DEPLOY_KEY` secret: generate a key pair, add the public key to asset-router
 under Settings, Deploy keys (read access only), and add the private key to this repository's Actions secrets.
-Without the secret the job prints a notice and runs nothing. Move `ROUTER_REV` only to a commit that passed.
+Without the secret nothing can be checked, so the job fails with an error that says interop was not validated;
+it is never green without a run. A run attaches its result JSON and shows it in the job summary. Move
+`ROUTER_REV` only to a commit that passed.
 
 Live and separate, because they spend on a real model:
 `scripts/guidance_similar_benchmark.py` runs the stages or a third-party selector over families of similar
