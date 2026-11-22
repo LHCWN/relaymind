@@ -4010,3 +4010,44 @@ history. Tools reach the plugin only through `toolsFile`, because the host keeps
 third-party plugins. The word match ranking found only 22 of 39 English cases in its top 40 at 100,000
 assets on synthetic data, and the request limit is 20,000. A third party gets the best 1,000 by word
 match.
+
+## 2026-11-22 — Guidance gateway against asset-router (RM47, AC42)
+
+Deterministic interoperability, not a quality measurement: inference is a bag-of-words embeddings double on
+loopback, and no real model, host or ranking quality is involved.
+
+- Machine: Ubuntu 26.04.1 LTS, kernel 7.0.0-43-generic, Intel Xeon (Skylake, IBRS) VM, 11 GiB RAM; Node 24.22.1,
+  Python 3.14.4.
+- RelayMind: PR #291 branch on top of `3bd4f73`, with the interop harness (`tests/test_guidance_router_interop.py`,
+  `scripts/asset_router_interop.py`).
+- asset-router: clean checkouts at exact commits of LHCWN/asset-router#1, `npm ci`, started through the router's
+  own `src/apps/server/main.ts` in fed mode with its own SQLite store.
+- Command: `python scripts/asset_router_interop.py --rev <commit> --repo <local clone of asset-router>`.
+
+### At `b54416b4b80c395176c0777c2db62ab873afc2c6`: 9 of 9 passed, three runs
+
+| Case | Result |
+| --- | --- |
+| sync wire format: `find_missing` and `upload` answers satisfy AssetSyncResponseV1 | passed |
+| fractional `deadline_ms` from the real request construction | passed |
+| cold router: `not_ready`, degraded word match, `find_missing`, upload, then the router's own ranking | passed |
+| mixed upload: valid file accepted, file outside the roots `rejected`/`outside_roots`, tool accepted; the refused skill sent again with `content:null` and accepted | passed |
+| indexing failure after acceptance: missing again, re-sent, the gateway waits, then indexed and ranked | passed |
+| unchanged source reused: a subset needs no sync; a new skill is the only upload | passed |
+| feature recipe published (description to full-body embeddings, same store): identical requests go from the router's `no_match` to its ranking, with a new `index_revision`; the router derived the new feature from stored inputs, and nothing was re-sent | passed |
+| restart on the same store: ranked on the first request, no sync, no body embedded again | passed |
+| new description for the same file: ranked as offered after one re-sync | passed |
+
+In every ranked case the test checks that the gateway's picks are the router's candidates in order, with
+`chosen_by: third_party` and `degraded: false`.
+
+### At `c3cc8357ef086fa70b024b251fc4b32f282fa6db`: 0 of 9 passed
+
+All cases failed on two router issues before any later step could run: `/select` answered 400
+`schema_violation` at `/deadline_ms` for a fractional value such as `6999.649438002962`, and the `find_missing`
+answer had no `results`, which AssetSyncResponseV1 requires. A direct check, offering the same ready pairs with
+their descriptions swapped, showed that this revision ranked with the descriptions it stored at upload.
+
+To check the harness before the router fixes existed, it was also run against a throwaway local copy of
+`c3cc835` patched only for those two issues; the eight cases it had then passed three runs in a row. That copy
+was never pushed and is not compatibility evidence.
