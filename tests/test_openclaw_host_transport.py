@@ -17,6 +17,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import threading
 from pathlib import Path
 
@@ -87,16 +88,34 @@ def require_node_build_dependencies() -> None:
         pytest.skip(reason)
 
 
-def run_tsc(*args: str) -> None:
-    """Compile the plugin with its pinned TypeScript; a failure raises."""
+def run_tsc(*args: str, package: Path = PACKAGE) -> None:
+    """Compile the plugin in `package` with its pinned TypeScript; a failure raises."""
     subprocess.run(
-        [_node(), str(PACKAGE / "node_modules/typescript/bin/tsc"), *args],
-        cwd=PACKAGE,
+        [_node(), str(package / "node_modules/typescript/bin/tsc"), *args],
+        cwd=package,
         check=True,
         capture_output=True,
         text=True,
         timeout=30,
     )
+
+
+def private_package(root: Path) -> Path:
+    """A copy of the plugin package at `root`, without its dist/, for a test to build in.
+
+    Tests in other workers import the shared dist/; building there deletes and rewrites
+    files they may be reading. The copy reaches the locked dependencies through a link
+    to the package's own node_modules (a junction on Windows, as an installed peer is).
+    """
+    shutil.copytree(PACKAGE, root, ignore=shutil.ignore_patterns("node_modules", "dist"))
+    modules, shared = root / "node_modules", PACKAGE / "node_modules"
+    if sys.platform == "win32":
+        import _winapi
+
+        _winapi.CreateJunction(str(shared), str(modules))
+    else:
+        modules.symlink_to(shared, target_is_directory=True)
+    return root
 
 
 def test_node_is_found_on_path_as_the_harness_finds_it(monkeypatch, tmp_path):

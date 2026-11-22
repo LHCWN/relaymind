@@ -12,7 +12,7 @@ import test_openclaw_host_transport as node_guard
 from recommendation_helpers import setup
 from test_asset_user_actions import enable_fixture_action
 from test_openclaw_asset_commands import drive_actions
-from test_openclaw_host_transport import run_tsc
+from test_openclaw_host_transport import private_package, run_tsc
 
 
 @pytest.mark.parametrize(
@@ -43,8 +43,9 @@ def test_node_build_guard_respects_optional_and_required_modes(
 def test_native_action_factory_records_explicit_choice_and_private_feedback_once(tmp_path):
     """RM37/RM39: actual routes/CAS, scope, deduplication and erasure survive native translation."""
     node_guard.require_node_build_dependencies()
+    package = private_package(tmp_path / "package")
     for config in ("tsconfig.build.json", "tsconfig.control-ui.json"):
-        run_tsc("-p", config)
+        run_tsc("-p", config, package=package)
     app, service, runs, _ = setup(tmp_path)
     enable_fixture_action(app, service, runs)
     asyncio.run(service.refresh_catalog())
@@ -55,6 +56,7 @@ def test_native_action_factory_records_explicit_choice_and_private_feedback_once
             tmp_path / "native-actions.json",
             timeout=30,
             env={"RELAYMIND_FIXTURE_WORKSPACE": str(tmp_path)},
+            package=package,
         )
         assert result["fixture"] == "controlled-host-context-real-gateway"
         assert result["choose"] == result["choiceReplay"]

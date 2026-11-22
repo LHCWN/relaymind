@@ -371,16 +371,45 @@ class MeasuredGate(Gate):
     )
 
 
+def _timeout_after_dispatch(tmp_path, gate):
+    """A recommendation whose total deadline passes only once `gate` was dispatched.
+
+    With a real 30 ms budget a busy test worker could miss the deadline before the
+    request was accepted (a 504 with no recommendation) or before the primary started
+    (no attempt). A test clock and a timer that waits for the dispatch remove that race.
+    """
+    from helpers import FakeClock
+    from relaymind.assets.settings import RecommendationSettings
+    from relaymind.selection.asset_chain import SelectionBudget
+
+    total_ms = 60_000
+    clock = FakeClock()
+
+    async def expire_once_dispatched(_seconds):
+        await gate.started.wait()
+        clock.advance(total_ms / 1000)
+
+    settings = RecommendationSettings(
+        enabled=True,
+        user_id="u",
+        workspace_id="w",
+        total_ms=total_ms,
+        primary_ms=total_ms,
+        fallback=False,
+    )
+    app, service, runs, _ = setup(tmp_path, settings=settings, primary=gate, clock=clock)
+    service.new_budget = lambda: SelectionBudget(
+        total_ms, clock=clock, sleep=expire_once_dispatched
+    )
+    return app, service, runs
+
+
 def test_total_timeout_persists_dispatched_primary_measurement_once(tmp_path):
     """RM36/AC27: the coordinator's timed attempt survives observer expiry."""
-    from relaymind.assets.settings import RecommendationSettings
 
     async def go():
         gate = MeasuredGate()
-        settings = RecommendationSettings(
-            enabled=True, user_id="u", workspace_id="w", total_ms=30, primary_ms=30, fallback=False
-        )
-        app, service, runs, _ = setup(tmp_path, settings=settings, primary=gate, clock=TraceClock())
+        app, service, runs = _timeout_after_dispatch(tmp_path, gate)
         await service.refresh_catalog()
         async with await client_for(app) as client:
             first = await client.post("/relay/v1/recommendations", json=BODY)
@@ -466,12 +495,7 @@ def test_total_timeout_during_floor_preserves_both_ordered_attempts(tmp_path, mo
 def test_terminal_accepted_timeout_replays_without_recomputation(tmp_path):
     async def go():
         gate = Gate()
-        from relaymind.assets.settings import RecommendationSettings
-
-        settings = RecommendationSettings(
-            enabled=True, user_id="u", workspace_id="w", total_ms=30, primary_ms=30, fallback=False
-        )
-        app, service, runs, _ = setup(tmp_path, settings=settings, primary=gate, clock=TraceClock())
+        app, service, runs = _timeout_after_dispatch(tmp_path, gate)
         await service.refresh_catalog()
         async with await client_for(app) as c:
             first = await c.post("/relay/v1/recommendations", json=BODY)
