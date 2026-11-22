@@ -8,6 +8,7 @@ import itertools
 import json
 import threading
 from dataclasses import replace
+from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import httpx
@@ -17,6 +18,7 @@ from fastapi.testclient import TestClient
 
 from helpers import ScriptedAdapter
 from launcher_helpers import write_config
+from relaymind.api import guidance as guidance_api
 from relaymind.api.guidance import install_guidance_routes
 from relaymind.guidance import GuidanceSettings
 from relaymind.guidance.sync import GuidanceSync
@@ -173,6 +175,7 @@ def test_the_plugins_skill_hash_is_the_offered_content_hash():
         dict(SKILL, path="/home/user/notes.txt"),
         dict(SKILL, path="/home/user/skills/a\x00/SKILL.md"),
         dict(SKILL, content_hash="A" * 64),
+        dict(SKILL, content_hash=SKILL_HASH + "\n"),
         dict(SKILL, size_bytes=1024 * 1024 + 1),
     ],
 )
@@ -357,6 +360,38 @@ class Clock:
 
     def __call__(self):
         return self.now
+
+
+def test_a_failed_file_retry_keeps_the_first_upload_results():
+    """RM47, AC42: a failed retry does not forget other confirmed upload results."""
+    other = dict(name="notes", kind="skill", description="Write notes")
+    body = dict(BODY, assets=[SKILL, TOOL, other])
+    router = Router(
+        outcome="not_ready",
+        missing=lambda sent: sent,
+        reject=lambda item: (
+            "invalid_record" if item["record"]["description"] != "Write notes" else None
+        ),
+    )
+
+    def handler(request):
+        answer = router.handler(request)
+        if len(uploads(router)) == 2 and json.loads(request.content).get("operation") == "upload":
+            return httpx.Response(500)
+        return answer
+
+    clock = Clock()
+    sync = GuidanceSync(
+        SYNCING, transport_factory=lambda: httpx.MockTransport(handler), clock=clock
+    )
+    http = client(router, SYNCING, sync=sync)
+    http.post("/relay/v1/guidance", json=body, headers=AUTH)
+    failed = status(http)
+
+    clock.now += 31
+    http.post("/relay/v1/guidance", json=body, headers=AUTH)
+    assert all(a["record"]["kind"] != "mcp_tool" for a in uploads(router)[2]["assets"])
+    assert (failed["last_outcome"], failed["accepted"], failed["rejected"]) == ("failed", 1, 1)
 
 
 def test_a_failed_sync_waits_longer_after_each_failure_and_a_good_one_ends_the_wait():
@@ -793,6 +828,22 @@ def test_the_reference_selector_rejects_a_path_with_a_nul_and_takes_the_rest(tmp
     ]
 
 
+def test_the_reference_selector_rejects_a_directory_and_takes_the_rest(tmp_path):
+    """RM47, AC42: a non-file path is unreadable without failing the entire upload."""
+    good = skill_file(tmp_path)
+    directory = tmp_path / "directory" / "SKILL.md"
+    directory.mkdir(parents=True)
+    items = [
+        upload_item(good["content_hash"], directory, 0, "a:directory"),
+        upload_item(good["content_hash"], good["path"], good["size_bytes"]),
+    ]
+    answer = reference_server().SyncIndex([tmp_path]).handle(sync_request("upload", items))
+    assert [(r["asset_id"], r["status"], r["reason"]) for r in answer["results"]] == [
+        ("a:directory", "rejected", "unreadable"),
+        ("host:skill:pdf-merge", "accepted", None),
+    ]
+
+
 def test_the_launched_gateway_syncs_the_reference_selector_until_it_ranks(tmp_path):
     """AC42: not_ready -> find_missing -> upload with the file -> the next select is ranked."""
     server = reference_server()
@@ -868,11 +919,19 @@ def test_the_real_selection_request_carries_a_fractional_deadline():
     assert f'"deadline_ms":{deadline!r}'.encode() in sent[0]  # Not rounded on the wire.
 
 
-def test_the_guidance_route_sends_the_deadline_with_its_fraction():
+@pytest.mark.parametrize("tick", [0.0, 1 / 8192], ids=["whole-ms", "fractional-ms"])
+def test_the_guidance_route_sends_the_deadline_from_the_clock(monkeypatch, tick):
+    """RM47, AC42: whole and fractional deadlines both survive the route and transport."""
+    clock = itertools.count(1000.0, tick).__next__
+    monkeypatch.setattr(
+        guidance_api, "run_guidance", partial(guidance_api.run_guidance, clock=clock)
+    )
     router = Router()
-    client(router).post("/relay/v1/guidance", json=BODY, headers=AUTH)
+    answer = client(router).post("/relay/v1/guidance", json=BODY, headers=AUTH)
+    assert answer.json()["chosen_by"] == "third_party"
     deadline = router.selects[0]["deadline_ms"]
-    assert deadline != int(deadline)  # Never rounded to whole milliseconds on the way.
+    assert 0 < deadline <= SETTINGS.total_ms
+    assert (deadline != int(deadline)) == bool(tick)
 
 
 def test_an_unchanged_asset_keeps_its_identity_whatever_the_request():

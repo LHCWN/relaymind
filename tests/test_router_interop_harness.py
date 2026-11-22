@@ -65,3 +65,16 @@ def test_the_interop_tests_skip_without_an_explicit_checkout(monkeypatch, tmp_pa
     monkeypatch.setenv(ROUTER_DIR_ENV, str(tmp_path))
     with pytest.raises(pytest.skip.Exception, match="npm ci"):
         require_checkout()
+
+
+def test_the_interop_harness_uses_the_installed_loader_without_shell_shims(monkeypatch, tmp_path):
+    """RM47, AC42: npm's platform-specific executables are optional for the harness."""
+    loader = tmp_path / "node_modules" / "tsx" / "dist" / "loader.mjs"
+    loader.parent.mkdir(parents=True)
+    loader.touch()
+    monkeypatch.setenv(ROUTER_DIR_ENV, str(tmp_path))
+    try:
+        checkout = require_checkout()
+    except pytest.skip.Exception as error:
+        pytest.fail(str(error))
+    assert checkout == tmp_path.resolve()

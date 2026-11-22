@@ -20,7 +20,7 @@
           "name": {"type": "string", "minLength": 1},
           "kind": {"enum": ["skill", "mcp_tool"]},
           "description": {"type": "string"},
-          "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}(?![\\s\\S])"},
           "path": {"type": "string", "minLength": 1},
           "size_bytes": {"type": "integer", "minimum": 0, "maximum": 1048576}
         },

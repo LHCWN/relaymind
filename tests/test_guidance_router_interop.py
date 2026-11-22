@@ -21,10 +21,12 @@ checks that the gateway's picks are the router's candidates, so a word-match fal
 from __future__ import annotations
 
 import asyncio
+import itertools
 import os
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 import httpx
@@ -32,6 +34,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from relaymind.api import guidance as guidance_api
 from relaymind.api.guidance import install_guidance_routes
 from relaymind.guidance import GuidanceSettings
 from relaymind.guidance.sync import GuidanceSync
@@ -282,8 +285,12 @@ def test_the_gateway_sync_and_the_router_agree_on_the_sync_wire_format(stack):
     assert stack.status()["last_outcome"] == "synced"
 
 
-def test_a_fractional_deadline_from_the_real_request_is_accepted(stack):
+def test_a_fractional_deadline_from_the_real_request_is_accepted(stack, monkeypatch):
     """SelectionRequestV2.deadline_ms is a positive number; the gateway sends fractions."""
+    clock = itertools.count(1000.0, 1 / 8192).__next__
+    monkeypatch.setattr(
+        guidance_api, "run_guidance", partial(guidance_api.run_guidance, clock=clock)
+    )
     stack.ask([pdf_skill(stack), TOOL])
     first = stack.selects()[0]
     deadline = first.request["deadline_ms"]

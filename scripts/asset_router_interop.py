@@ -13,6 +13,7 @@ two programs interoperate, not how well a real model ranks. Development tooling 
 import argparse
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -48,8 +49,11 @@ def prepare(repo: str, rev: str, cache: Path) -> Path:
         rev,
         cwd=checkout,
     )
-    if not (checkout / "node_modules" / ".bin" / "tsx").exists():
-        subprocess.run(["npm", "ci", "--no-audit", "--no-fund"], cwd=checkout, check=True)
+    if not (checkout / "node_modules" / "tsx" / "dist" / "loader.mjs").is_file():
+        npm = shutil.which("npm")
+        if npm is None:
+            sys.exit("npm is required to install asset-router dependencies")
+        subprocess.run([npm, "ci", "--no-audit", "--no-fund"], cwd=checkout, check=True)
     return checkout
 
 

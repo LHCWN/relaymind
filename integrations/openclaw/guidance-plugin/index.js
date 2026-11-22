@@ -135,7 +135,7 @@ export function readSkillInfo(entry) {
     if (cached && cached.mtimeMs === mtimeMs && cached.ctimeMs === ctimeMs && cached.size === size) return cached.info;
     // The frontmatter comes first, so the body of a hidden skill is never read.
     let bytes = readHead(path, MAX_FRONT_BYTES);
-    let parsed = frontmatterOf(bytes, size);
+    let parsed = frontmatterOf(bytes);
     if (!parsed) return UNKNOWN;
     // Only an offered skill is hashed, and only with a path the gateway accepts.
     const absolute = resolve(path);
@@ -146,7 +146,7 @@ export function readSkillInfo(entry) {
       // skill. The read stops one byte past the limit, so a file that grew after stat is never hashed.
       if (bytes.length >= MAX_FRONT_BYTES) {
         bytes = readHead(path, MAX_SKILL_FILE_BYTES + 1);
-        parsed = frontmatterOf(bytes, size);
+        parsed = frontmatterOf(bytes);
         if (!parsed) return UNKNOWN;
       }
       if (!parsed.hidden && bytes.length <= MAX_SKILL_FILE_BYTES) {
@@ -163,12 +163,12 @@ export function readSkillInfo(entry) {
   }
 }
 
-/** The frontmatter in the first bytes of a file of `size` bytes, or null when it cannot be known. */
-function frontmatterOf(bytes, size) {
+/** The frontmatter in the bytes read, or null when it cannot be known. */
+function frontmatterOf(bytes) {
   const head = bytes.subarray(0, MAX_FRONT_BYTES).toString("utf8");
   // Frontmatter that does not close within the bytes read may still hide the skill further on,
   // so it counts as unknown, and an unknown skill is never offered.
-  if (size > MAX_FRONT_BYTES && /^\ufeff?---\r?\n/.test(head) && !/^\ufeff?---\r?\n[\s\S]*?\r?\n---/.test(head)) {
+  if (bytes.length >= MAX_FRONT_BYTES && /^\ufeff?---\r?\n/.test(head) && !/^\ufeff?---\r?\n[\s\S]*?\r?\n---/.test(head)) {
     return null;
   }
   return parseFrontmatter(head);

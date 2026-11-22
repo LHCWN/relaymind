@@ -31,6 +31,7 @@ ROUTER_REV_ENV = "RELAYMIND_ASSET_ROUTER_REV"
 ROUTER_NAME = "asset-router"
 ROUTER_VERSION = "1"
 DIMENSIONS = 64
+_TSX_LOADER = Path("node_modules/tsx/dist/loader.mjs")
 _WORD = re.compile(r"[a-z0-9]+")
 
 
@@ -56,7 +57,7 @@ def require_checkout() -> Path:
     if not value:
         pytest.skip(f"set {ROUTER_DIR_ENV} to an asset-router checkout with node_modules")
     path = Path(value).resolve()
-    if not (path / "node_modules" / ".bin" / "tsx").exists():
+    if not (path / _TSX_LOADER).is_file():
         pytest.skip(f"{path} has no installed dependencies (run npm ci there)")
     return path
 
@@ -254,11 +255,12 @@ class RouterProcess:
         self.port = self.port or free_port()
         self.write_config()
         log_path = self.workdir / "router.log"
-        tsx = self.checkout / "node_modules" / ".bin" / "tsx"
+        loader = (self.checkout / _TSX_LOADER).as_uri()
+        entry = self.checkout / "src" / "apps" / "server" / "main.ts"
         # The child keeps its own copy of the log descriptor, so ours closes at once.
         with open(log_path, "ab") as log:
             self.process = subprocess.Popen(
-                [str(tsx), str(self.checkout / "src" / "apps" / "server" / "main.ts")],
+                ["node", "--import", loader, str(entry)],
                 cwd=self.workdir,
                 stdout=log,
                 stderr=log,

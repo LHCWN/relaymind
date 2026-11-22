@@ -118,7 +118,7 @@ class SyncIndex:
             fd = os.open(real, flags)
         except OSError:
             return "unreadable"
-        with os.fdopen(fd, "rb") as file:
+        try:
             opened = os.fstat(fd)
             if not stat.S_ISREG(opened.st_mode):
                 return "unreadable"
@@ -131,10 +131,12 @@ class SyncIndex:
                 return "unreadable"
             if not now or (now.st_dev, now.st_ino) != (opened.st_dev, opened.st_ino):
                 return "outside_roots"
-            try:
+            with os.fdopen(fd, "rb", closefd=False) as file:
                 data = file.read(MAX_SKILL_FILE_BYTES + 1)
-            except OSError:
-                return "unreadable"
+        except OSError:
+            return "unreadable"
+        finally:
+            os.close(fd)
         if len(data) > MAX_SKILL_FILE_BYTES:
             return "too_large"
         if len(data) != content["size_bytes"]:

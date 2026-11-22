@@ -55,6 +55,15 @@ describe("reading skill files", () => {
     expect(info.file.size_bytes).toBe(Buffer.byteLength(text));
   });
 
+  it("keeps a skill hidden when its frontmatter grew past the read limit after stat", () => {
+    // RM45, RM47: the bytes read can span a newer version than the reported size.
+    const path = write("growing", "---\ndescription: Visible\n---\n");
+    const initial = statSync(path);
+    writeFileSync(path, "---\ndescription: Hidden\n#" + "x".repeat(32_768) + "\ndisable-model-invocation: true\n---\n");
+    statSync.mockReturnValueOnce(initial);
+    expect(readSkillInfo({ name: "growing", source: { filePath: path } }).hidden).toBe(true);
+    expect(bytesRead()).toBeLessThanOrEqual(32_768);
+  });
   it("reads no more skill files once it has the asset limit", async () => {
     const path = write("shared", "---\nname: shared\ndescription: Shared\n---\n");
     // 20,000 is the gateway's asset limit; every entry names its own skill on one shared file.

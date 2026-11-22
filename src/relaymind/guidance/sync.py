@@ -155,21 +155,27 @@ class GuidanceSync:
             for item in uploads
             if item["content"] and _key(item["record"]) in rejected
         ]
-        final = (rejected - {_key(i["record"]) for i in again}) | (
-            await self._upload(again) if again else set()
-        )
-        current.update(accepted=len(chosen) - len(final), rejected=len(known) + len(final))
-        for pair in final:
+        retrying = {_key(item["record"]) for item in again}
+        self._remember(current, chosen - rejected, rejected - retrying)
+        if again:
+            rejected = await self._upload(again)
+            self._remember(current, retrying - rejected, rejected)
+        return progress
+
+    def _remember(self, current: dict, accepted: set, rejected: set) -> None:
+        """Keep confirmed results even if a later upload in the same sync fails."""
+        current["accepted"] += len(accepted)
+        current["rejected"] += len(rejected)
+        for pair in rejected:
             self._rejected[pair] = None
             self._accepted.pop(pair, None)
-        for pair in chosen - final:
+        for pair in accepted:
             self._accepted[pair] = None
             self._accepted.move_to_end(pair)
         while len(self._rejected) > MAX_REJECTED:
             self._rejected.popitem(last=False)
         while len(self._accepted) > MAX_ACCEPTED:
             self._accepted.popitem(last=False)
-        return progress
 
     async def _upload(self, uploads: list[dict]) -> set[tuple[str, str]]:
         """Upload, and return the pairs the selector rejected. One result for each pair sent."""

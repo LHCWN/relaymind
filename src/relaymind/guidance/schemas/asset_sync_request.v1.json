@@ -25,7 +25,7 @@
       "required": ["asset_id", "content_hash"],
       "properties": {
         "asset_id": {"type": "string", "minLength": 1},
-        "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}(?![\\s\\S])"}
       }
     },
     "upload": {
