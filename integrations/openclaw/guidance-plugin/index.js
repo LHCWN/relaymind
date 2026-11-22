@@ -168,7 +168,7 @@ function frontmatterOf(bytes, size) {
   const head = bytes.subarray(0, MAX_FRONT_BYTES).toString("utf8");
   // Frontmatter that does not close within the bytes read may still hide the skill further on,
   // so it counts as unknown, and an unknown skill is never offered.
-  if (size > MAX_FRONT_BYTES && /^﻿?---\r?\n/.test(head) && !/^﻿?---\r?\n[\s\S]*?\r?\n---/.test(head)) {
+  if (size > MAX_FRONT_BYTES && /^\ufeff?---\r?\n/.test(head) && !/^\ufeff?---\r?\n[\s\S]*?\r?\n---/.test(head)) {
     return null;
   }
   return parseFrontmatter(head);
