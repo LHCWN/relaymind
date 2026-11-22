@@ -28,6 +28,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   shortening descriptions. It reads only the frontmatter of a hidden skill, stops reading at 20,000 assets, and
   re-reads a file when its change time changes. `scripts/guidance_selector_server.py --sync-root DIR` serves the
   sync protocol as a reference selector.
+  Section 7.7 now says what each identifier names: `content_hash` the source, `catalog_revision` the offer,
+  `index_revision` the selector's retrieval generation, with feature recipe versions and fingerprints kept inside
+  the selector; that a selector answers `not_ready` while any offered pair is unknown, because sync starts only
+  then; that the gateway caches no ranking; that `deadline_ms` may have a fraction; and that a guidance tool's
+  `schema_hash` covers only the placeholder schema. An open finding records how a new description for the same
+  file is handled. `scripts/asset_router_interop.py --rev <commit>` runs the gateway against the real asset-router
+  at one exact commit with deterministic inference (`pytest -m interop`): all nine cases pass at `b54416b`; at
+  `c3cc835` none did (a refused fractional `deadline_ms`, and `/sync` answers without `results`).
 
 - Specification 0.71 (RM45, RM46; AC41; sections 7.7 and 14.1): `relaymind openclaw guidance` sets up per-prompt
   guidance with the host's own commands. It installs the plugin, empties the listed skill catalog and, with

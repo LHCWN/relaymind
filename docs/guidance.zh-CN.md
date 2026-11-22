@@ -180,6 +180,21 @@ openclaw skills info <name> --json        # filePath 是该技能的 SKILL.md，
 
 `scripts/guidance_selector_server.py --sync-root DIR` 是这个协议的参考选择器：它提供 `/sync`，只读取其根目录下的文件，并在拥有所有提供的配对之前响应 `not_ready`。它仍然按描述排序，所以它展示的是协议，而不是更好的排序。
 
+### 各个标识的含义
+
+- `content_hash` 标识来源内容：插件发送了文件时是整个 `SKILL.md`（最多 1 MiB）的 SHA-256，否则是所发送描述的哈希。其中不包含请求、任务、会话或目录 ID，所以未改变的技能在每个请求和每次提供中都保持相同的 `{asset_id, content_hash}`。
+- 你自己的特征配方版本和输入指纹决定何时可以复用从来源派生的内容。它们留在你的选择器内部，不属于本协议。
+- `catalog_revision` 标识一次提供，即一次选择请求的准确列表。
+- 你响应中的 `index_revision` 标识你评分时使用的检索代次。
+- “可检索”和“所有可选特征都已完成”是不同的状态。只要有提供的配对你还不认识，就响应 `not_ready`：网关只在 `not_ready` 之后同步，所以只对一部分排序会让未知配对得不到同步。在所有可选特征完成之前就排序（渐进就绪），以及同时保存一个资产的多个版本，都是计划中的内容，尚不属于契约。
+- 网关不缓存你的排序。它在每个请求中都询问你，所以在你发布新特征之后，相同的请求可能得到新的响应。
+- 按当前选择请求中的描述排序。同一个文件哈希可能带着与之前不同的截短或脱敏描述。`b54416b` 版本的 asset-router 对这样的提供响应 `not_ready`，并在 `find_missing` 中报告该配对，于是网关上传当前记录。网关把重新上传已接收的配对算作没有进展，并在下一次同步前等待；这是一个未解决的问题。
+- 工具记录的 `input_schema` 是占位符 `{"type":"object"}`，其 `schema_hash` 固定不变，所以它不能告诉你真实工具的 schema 何时变化。真实的 MCP schema 需要单独的契约扩展。
+
+### 用真实的 asset-router 检查
+
+`python scripts/asset_router_interop.py --rev <router commit>` 会把该准确提交的 asset-router 克隆到 `~/.cache/relaymind-interop`，运行 `npm ci`，再用确定性的嵌入替身代替模型，针对路由器自己的服务器运行 `tests/test_guidance_router_interop.py`。它覆盖冷启动的路由器经过 `not_ready`、同步到路由器自己的排序，混合上传，被拒绝的文件不带内容重新发送，索引失败后重试，跨不同提供的复用，新的特征配方，重启，以及同一文件的新描述。它检查的是两个程序能否协同工作，而不是真实模型排序的好坏。
+
 ## 添加 MCP 工具
 
 OpenClaw 的 Tool Search 默认已把 MCP 工具的 schema 排除在请求之外，所以工具占用的上下文很少。插件可以拒绝工具调用，但 OpenClaw 的插件 API 不向它提供主机的工具列表，所以引导功能从插件的 `toolsFile` 获取工具，它是一个 `{"name","description"}` 的 JSON 列表。

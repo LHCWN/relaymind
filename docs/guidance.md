@@ -253,6 +253,38 @@ turn to word match until a sync gets it indexed. And a sync that hangs holds the
 reads files only under its roots and answers `not_ready` until it has every offered pair. It still ranks by
 description, so it shows the protocol, not a better ranking.
 
+### What each identifier means
+
+- `content_hash` names the source: the SHA-256 of the whole `SKILL.md` (up to 1 MiB) when the plugin sent it,
+  otherwise the description as sent. No request, task, session or catalog ID goes into it, so an unchanged skill
+  keeps the same `{asset_id, content_hash}` in every request and every offer.
+- Your own feature recipe versions and input fingerprints decide when you may reuse what you derived from a
+  source. Keep them inside your selector; they are not part of this protocol.
+- `catalog_revision` names one offer: the exact list of one select.
+- `index_revision` in your answer names the retrieval generation you scored with.
+- "Searchable" and "every optional feature done" are different states. Answer `not_ready` while any offered pair
+  is unknown to you: the gateway syncs only after `not_ready`, so ranking a subset would leave the unknown pair
+  without a sync. Ranking before every optional feature is ready (progressive readiness), and keeping several
+  versions of one asset, are planned, not part of the contract yet.
+- The gateway does not cache your rankings. It asks you on every request, so identical requests may get a new
+  answer after you publish new features.
+- Rank with the description of the current select. The same file hash can come with a description shortened or
+  redacted differently than before. asset-router `b54416b` answers `not_ready` to such an offer and reports the
+  pair in `find_missing`, so the gateway uploads the current record. The gateway counts that re-upload of an
+  accepted pair as no progress and waits before its next sync; this is an open finding.
+- A tool record's `input_schema` is the placeholder `{"type":"object"}` and its `schema_hash` is fixed, so it
+  does not tell you when a real tool's schema changed. Real MCP schemas need a separate contract extension.
+
+### Check against the real asset-router
+
+`python scripts/asset_router_interop.py --rev <router commit>` clones asset-router at that exact commit into
+`~/.cache/relaymind-interop`, runs `npm ci`, and runs `tests/test_guidance_router_interop.py` against the
+router's own server, with a deterministic embeddings double instead of a model. It covers a cold router through
+`not_ready`, sync and the router's own ranking, a mixed upload, a refused file sent again without content, an
+indexing failure retried, reuse across offers, a new feature recipe, a restart and a new description for the same
+file. It checks that two programs
+work together, not how well a real model ranks.
+
 ## Add MCP tools
 
 OpenClaw's Tool Search already keeps MCP tool schemas out of the request by default, so tools cost little

@@ -192,7 +192,7 @@ _GENERATOR_ANCHORS = {
     "docs/SPECIFICATION.md": frozenset(
         {
             # 0.72 guidance selector sync (RM47, AC42; #290); subject to the owner's review.
-            ("67a78f45ec6ffac7d669f51966a715b5dcc98dfd1b2492a4b9754ac7b942c933", 670026),
+            ("55305dfc469913c2a5cbdf77f621020b000a4cd3a1be642fe86d9ab8110aebb2", 673838),
             # 0.71 OpenClaw guidance setup helper (AC41); subject to the owner's review.
             ("75018663060a792aaa0f1176ff6510df1530253349a5df7b440d74214886a97a", 660727),
             # 0.70 OpenClaw plugin declared range and install helper; subject to the owner's review.
