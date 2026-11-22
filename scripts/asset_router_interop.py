@@ -60,7 +60,11 @@ def prepare(repo: str, rev: str, cache: Path) -> Path:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--rev", required=True, help="exact 40-hex asset-router commit")
-    parser.add_argument("--repo", default=DEFAULT_REPO, help="clone URL or local path")
+    parser.add_argument(
+        "--repo",
+        default=DEFAULT_REPO,
+        help="private router repository: authenticated SSH (default), HTTPS or a local clone",
+    )
     parser.add_argument("--cache", type=Path, default=DEFAULT_CACHE)
     parser.add_argument("pytest_args", nargs="*", help="extra pytest arguments, after --")
     args = parser.parse_args()

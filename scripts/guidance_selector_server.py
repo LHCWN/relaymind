@@ -122,6 +122,9 @@ class SyncIndex:
             opened = os.fstat(fd)
             if not stat.S_ISREG(opened.st_mode):
                 return "unreadable"
+            # Some filesystems do not report a file ID. It cannot establish identity.
+            if opened.st_ino == 0:
+                return "unreadable"
             # A folder on the path may have become a link since the roots were checked: the path
             # must still lead, under a root, to the very file that is open.
             try:

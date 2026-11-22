@@ -2788,7 +2788,9 @@ router that answers select and sync, and once against a real loopback server thr
 Interop with asset-router (RM47, AC42): `tests/test_guidance_router_interop.py` is marked `interop` and skipped
 unless `RELAYMIND_ASSET_ROUTER_DIR` names a router checkout. It starts the router's own server from an explicit checkout and runs the real gateway against
 it, with a deterministic embeddings double; a recording proxy shows each exchange. Run it at an exact commit with
-`python scripts/asset_router_interop.py --rev <commit>`, or with `RELAYMIND_ASSET_ROUTER_DIR` (and optionally
+`python scripts/asset_router_interop.py --rev <commit>`. The default SSH URL requires access to the private
+asset-router repository. Use `--repo https://github.com/LHCWN/asset-router.git` with HTTPS Git credentials,
+or `--repo <local clone>` to use an existing clone. You can also run with `RELAYMIND_ASSET_ROUTER_DIR` (and optionally
 `RELAYMIND_ASSET_ROUTER_REV`) and `pytest -m interop`. It never follows a branch. A pass shows the programs work
 together; it says nothing about ranking quality with a real model. `tests/test_router_interop_harness.py` checks
 the harness itself in the default run.

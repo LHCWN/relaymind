@@ -844,6 +844,34 @@ def test_the_reference_selector_rejects_a_directory_and_takes_the_rest(tmp_path)
     ]
 
 
+def test_the_reference_selector_requires_a_verifiable_file_identity(tmp_path, monkeypatch):
+    """RM47, AC42: matching unavailable file IDs do not prove the file is under an allowed root."""
+    import os
+    from pathlib import Path
+
+    good = skill_file(tmp_path)
+    path = Path(good["path"]).resolve()
+    stat_path = Path.stat
+    stat_fd = os.fstat
+
+    def without_identity(info):
+        values = list(info)
+        values[1] = 0  # st_ino
+        return os.stat_result(values)
+
+    def path_stat(candidate, *args, **kwargs):
+        info = stat_path(candidate, *args, **kwargs)
+        return without_identity(info) if candidate == path else info
+
+    monkeypatch.setattr(Path, "stat", path_stat)
+    monkeypatch.setattr(os, "fstat", lambda fd: without_identity(stat_fd(fd)))
+    item = upload_item(good["content_hash"], path, good["size_bytes"])
+    answer = reference_server().SyncIndex([tmp_path]).handle(sync_request("upload", [item]))
+    assert [(result["status"], result["reason"]) for result in answer["results"]] == [
+        ("rejected", "unreadable")
+    ]
+
+
 def test_the_launched_gateway_syncs_the_reference_selector_until_it_ranks(tmp_path):
     """AC42: not_ready -> find_missing -> upload with the file -> the next select is ranked."""
     server = reference_server()
