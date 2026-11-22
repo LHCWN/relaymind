@@ -78,3 +78,11 @@ def github_expression(text: str, context: dict):
     value = either()
     assert pos == len(tokens), text
     return value
+
+
+def covered(path: str, patterns) -> bool:
+    """Whether a workflow `paths:` filter matches `path`, case-sensitive as on GitHub."""
+    from fnmatch import fnmatchcase
+
+    # GitHub's ``**`` matches any number of directories; fnmatch's ``*`` crosses ``/``.
+    return any(fnmatchcase(path, p.replace("**", "*")) for p in patterns)

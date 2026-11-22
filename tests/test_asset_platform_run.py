@@ -50,7 +50,7 @@ from relaymind.evaluation.asset_operations_run import (
     write_import,
 )
 from relaymind.evaluation.asset_platform_export import PLATFORM_STEPS
-from workflow_helpers import github_expression
+from workflow_helpers import covered, github_expression
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github/workflows/platform-runs.yml"
@@ -554,7 +554,7 @@ def test_the_workflow_platform_matrix_for_each_event(compact):
         "src/relaymind/evaluation/asset_operations_run.py",
         "src/relaymind/evaluation/asset_operations_child.py",
     ):
-        assert _covered(path, paths), path
+        assert covered(path, paths), path
     (job,) = workflow["jobs"].values()
     assert job["strategy"]["fail-fast"] is False
     expression = job["strategy"]["matrix"]["os"]
@@ -961,13 +961,6 @@ def test_the_workflow_keeps_time_for_the_always_steps():
     assert sum(limits) < job["timeout-minutes"]
 
 
-def _covered(path: str, patterns) -> bool:
-    from fnmatch import fnmatchcase
-
-    # GitHub's ``**`` matches any number of directories; fnmatch's ``*`` crosses ``/``.
-    return any(fnmatchcase(path, p.replace("**", "*")) for p in patterns)
-
-
 def test_the_path_filter_covers_the_platform_runner_inventory():
     """Review 264 M5/M6: a change to any bound runner file triggers the platform run."""
     module = _script()
@@ -988,9 +981,9 @@ def test_the_path_filter_covers_the_platform_runner_inventory():
     ):
         assert needed in files, needed
     for path in [*files, "docs/SPECIFICATION.md", "integrations/openclaw/package.json"]:
-        assert _covered(path, paths), path
+        assert covered(path, paths), path
     # Still a filter: an unrelated change does not start the three-platform run.
-    assert not _covered("docs/ROADMAP.md", paths)
+    assert not covered("docs/ROADMAP.md", paths)
 
 
 def _runner_files(platform_dir: Path) -> tuple[dict, Path]:

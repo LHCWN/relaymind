@@ -9,51 +9,35 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - Specification 0.72 (#290; RM47; AC42; section 7.7): guidance can keep a third-party selector's index in step
-  with the host's skills. The plugin sends each skill's SHA-256, absolute path and size, so a skill's
-  `content_hash` now changes with its body. A selector answer `not_ready` now falls back to word match. With
-  `guidance.sync_url` set, the gateway then asks the selector which offered records it is missing
-  (`find_missing`) and uploads only those (`upload`), after the answer is sent. A skill body reaches the
-  selector only as a file path it reads itself, and no path is sent to a selector that reports remote inference
-  unless `guidance.sync_allow_remote = true`. The upload answer gives a result for each asset: a skill rejected
-  with its file is sent once more without it, and a pair rejected without a file is not sent again until its hash
-  changes. A failed sync waits 30 s, doubling up to 10 minutes. Each exchange has its own `guidance.sync_ms`
-  (60 s by default). `GET /relay/v1/guidance/sync` reports the last sync's counts with no asset names or paths.
-  New schemas: `AssetSyncRequestV1`, `AssetSyncResponseV1` and `GuidanceSyncStatusV1`. Recommendations are
-  unchanged; their sync is a follow-up. A plugin whose file fields an older gateway refuses (HTTP 400) sends
-  the request once more without them, and then sends none for the rest of the process, so the turn keeps its hint
-  without sync; upgrade the gateway too to get sync. Sections 4.6.2 and 12.6.4 now say that this sync is a separate
-  protocol and not preparation. `find_missing` reports a pair whose indexing failed as missing again, and the gateway
-  remembers accepted pairs: a sync that only uploads pairs accepted before waits like a failed one. A selector checks
-  its roots against the real path of the file. To keep under the body limit, the plugin drops the file fields before
-  shortening descriptions. It reads only the frontmatter of a hidden skill, stops reading at 20,000 assets, and
-  re-reads a file when its change time changes. `scripts/guidance_selector_server.py --sync-root DIR` serves the
-  sync protocol as a reference selector.
-  Section 7.7 now says what each identifier names: `content_hash` the source, `catalog_revision` the offer,
-  `index_revision` the selector's retrieval generation, with feature recipe versions and fingerprints kept inside
-  the selector; that a selector answers `not_ready` while any offered pair is unknown, because sync starts only
-  then; that the gateway caches no ranking; that `deadline_ms` may have a fraction; and that a guidance tool's
-  `schema_hash` covers only the placeholder schema. An open finding records how a new description for the same
-  file is handled. `scripts/asset_router_interop.py --rev <commit>` runs the gateway against the real asset-router
-  at one exact commit with deterministic inference (`pytest -m interop`): all nine cases pass at `853dada` and
-  `b54416b`; at `c3cc835` none did (a refused fractional `deadline_ms`, and `/sync` answers without `results`).
-  The gateway now remembers, for each asset ID, only the target the selector last accepted: its hash and a digest
-  of the exact record. A selector keeps one current version, so any other record is a switch and is progress,
-  including a return to an earlier version (hashes A, B, A, B) or alternating descriptions of one file; the same
-  target missing again still waits, with the wait growing on each repeat. A sync whose
-  missing pairs were all rejected before now waits too, instead of asking again on every `not_ready`. A sync whose
-  `find_missing` failed reports zero counts. The plugin reads at most 64 MiB of skill files whole in one turn; a
-  skill past that is offered by its description and read on a later turn.
-  A `Router interop` workflow runs the same check in CI at a pinned asset-router commit (`621b879`, where all ten
-  cases pass, as at `1e6d4e5`, versions A, B, A, B of one skill included) when guidance sync or the harness changes; it reads asset-router through the organization's
-  `relaymind-interop` GitHub App (Contents: read-only, installed only on asset-router, secrets `ROUTER_APP_ID`
-  and `ROUTER_APP_PRIVATE_KEY`), whose one-hour token only fetches the router commit, and without those secrets the
-  job fails as not validated instead of passing with nothing run.
-  Under the runner and in CI a missing router checkout fails instead of skipping, a run with any skipped or no
-  interop test fails as `not_validated`, and `--result` records the outcome with the RelayMind and asset-router
-  commits. Tests that failed under parallel load now hold: the
-  operations fixture no longer gives each real request a 1 s wall-clock deadline, two recommendation timeout tests
-  expire their budget only after the primary was dispatched, and the release-pack and native-actions tests build the
-  plugin in their own copy of the package instead of deleting and rewriting the shared `dist/` other workers import.
+  with the host's skills.
+  - The plugin sends each skill's SHA-256, absolute path and size (files up to 1 MiB, at most 64 MiB read whole per
+    turn), so a skill's `content_hash` changes with its body. It reads only the frontmatter of a hidden skill,
+    stops at 20,000 assets, re-reads a file when its change time changes, and drops file fields before shortening
+    descriptions to stay under the body limit. If an older gateway refuses the file fields (HTTP 400), it retries
+    once without them and sends none for the rest of the process; upgrade the gateway to get sync.
+  - A selector answer `not_ready` falls back to word match. With `guidance.sync_url` set, the gateway then asks
+    which offered records the selector is missing (`find_missing`) and uploads only those, after the answer is
+    sent. A body reaches the selector only as a path it reads itself, never when it reports remote inference
+    unless `guidance.sync_allow_remote = true`.
+  - Each upload gets a result per asset. A skill rejected with its file is sent once more without it; a pair
+    rejected without a file is not sent again until its hash changes. The gateway remembers the last accepted
+    record of each asset: any other record (a new hash, a new description, or a return to an earlier version) is
+    progress, while the same record missing again, or only known rejections, wait like a failure (30 s, doubling
+    to 10 minutes). Each exchange has its own `guidance.sync_ms`.
+  - `GET /relay/v1/guidance/sync` reports the last sync's counts without asset names or paths; a failed
+    `find_missing` reports zero counts. New schemas: `AssetSyncRequestV1`, `AssetSyncResponseV1`,
+    `GuidanceSyncStatusV1`. Sections 4.6.2 and 12.6.4 say this sync is a separate protocol, not preparation.
+  - Section 7.7 says what each identifier names (`content_hash` the source, `catalog_revision` the offer,
+    `index_revision` the retrieval generation), that a selector answers `not_ready` while any offered pair is
+    unknown, that the gateway caches no ranking, that `deadline_ms` may have a fraction, and that a guidance
+    tool's `schema_hash` covers only its placeholder schema.
+  - `scripts/guidance_selector_server.py --sync-root DIR` is a reference selector for the sync protocol.
+    `scripts/asset_router_interop.py` and the `Router interop` workflow check the gateway against the real
+    asset-router at an exact commit; see [testing](docs/TESTING.md) and [evidence](docs/EVIDENCE.md).
+  - Recommendations are unchanged; their sync is a follow-up.
+- Parallel test runs no longer depend on load or on the shared plugin build: real-server fixtures allow 60 s
+  instead of 1 s, two recommendation timeout tests use a test clock, and tests that build the plugin do it in a
+  private copy of the package.
 
 - Specification 0.71 (RM45, RM46; AC41; sections 7.7 and 14.1): `relaymind openclaw guidance` sets up per-prompt
   guidance with the host's own commands. It installs the plugin, empties the listed skill catalog and, with

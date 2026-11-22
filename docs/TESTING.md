@@ -2785,27 +2785,30 @@ Deterministic, with model doubles: `tests/test_guidance.py`, `tests/test_guidanc
 Selector sync (spec 0.72; RM47, AC42): `tests/test_guidance_sync.py` drives the guidance endpoint against a fake
 router that answers select and sync, and once against a real loopback server through the launched gateway.
 
-Interop with asset-router (RM47, AC42): `tests/test_guidance_router_interop.py` is marked `interop` and skipped
-unless `RELAYMIND_ASSET_ROUTER_DIR` names a router checkout. It starts the router's own server from an explicit checkout and runs the real gateway against
-it, with a deterministic embeddings double; a recording proxy shows each exchange. Run it at an exact commit with
-`python scripts/asset_router_interop.py --rev <commit>`. The default SSH URL requires access to the private
-asset-router repository. Use `--repo https://github.com/LHCWN/asset-router.git` with HTTPS Git credentials,
-or `--repo <local clone>` to use an existing clone. You can also run with `RELAYMIND_ASSET_ROUTER_DIR` (and optionally
-`RELAYMIND_ASSET_ROUTER_REV`) and `pytest -m interop`. It never follows a branch. The runner sets
-`RELAYMIND_ASSET_ROUTER_REQUIRED=1`, so a missing checkout fails instead of skipping, and it fails a run in which
-any interop test skipped or none ran (`not_validated`). `--result PATH` writes the outcome, the counts, the
-RelayMind commit (and whether its tracked files were clean) and the asset-router commit as JSON. A pass shows the programs work
-together; it says nothing about ranking quality with a real model. `tests/test_router_interop_harness.py` checks
-the harness itself in the default run.
-In CI, `.github/workflows/router-interop.yml` runs the same command at the commit in its `ROUTER_REV` when guidance
-sync or the harness changes, and on demand with another exact commit. LHCWN does not allow deploy keys, so access
-comes from a GitHub App owned by the organization (`relaymind-interop`) with one permission, Contents: read-only,
-installed only on asset-router. Its App ID and a private key it generated are this repository's Actions secrets
-`ROUTER_APP_ID` and `ROUTER_APP_PRIVATE_KEY`. The job turns them into a token that lasts one hour and uses it only
-to fetch the exact router commit; the token is not written to disk or passed to the router's `npm ci` or the tests.
-To revoke access, uninstall the app from asset-router or delete its private key. Without the secrets nothing can
-be checked, so the job fails with an error that says interop was not validated; it is never green without a run. A run attaches its result JSON and shows it in the job summary. Move
-`ROUTER_REV` only to a commit that passed.
+Interop with asset-router (RM47, AC42). This checks that the guidance gateway and the real asset-router work
+together. Inference is a deterministic double, so a pass says nothing about ranking quality.
+
+```bash
+python scripts/asset_router_interop.py --rev <40-hex commit> [--repo <URL or local clone>] [--result out.json]
+```
+
+- The runner checks out that exact commit (never a branch) into a cache, runs `npm ci` and then
+  `pytest -m interop tests/test_guidance_router_interop.py`. `--repo` defaults to the SSH URL of the private
+  repository.
+- A run passes only when every interop test ran and passed. A skip or an empty run is `not_validated` and fails.
+- `--result` writes the outcome, the counts and both commits (RelayMind's, with whether it was clean) as JSON.
+- Without the runner, `RELAYMIND_ASSET_ROUTER_DIR=<checkout with node_modules> pytest -m interop` runs the same
+  tests; they skip when the variable is unset. `tests/test_router_interop_harness.py` checks the harness itself in
+  the default run.
+
+In CI, `.github/workflows/router-interop.yml` runs the runner at its `ROUTER_REV` when guidance sync or the harness
+changes, and on demand at another exact commit. Move `ROUTER_REV` only to a commit that passed.
+
+- Access: LHCWN does not allow deploy keys, so the organization's `relaymind-interop` GitHub App (Contents:
+  read-only, installed only on asset-router) issues a one-hour token. Its secrets are `ROUTER_APP_ID` and
+  `ROUTER_APP_PRIVATE_KEY`. Only the step that fetches the router commit sees the token.
+- Without the secrets the job fails as not validated: it is never green without a run.
+- To revoke access, uninstall the app from asset-router.
 
 Live and separate, because they spend on a real model:
 `scripts/guidance_similar_benchmark.py` runs the stages or a third-party selector over families of similar

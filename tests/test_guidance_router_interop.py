@@ -153,39 +153,35 @@ class Stack:
         if wait_ms:
             self.clock.offset += wait_ms / 1000 + 0.001
 
-    def until_router_answers(self, assets: list[dict], task: str = TASK, timeout: float = 30):
-        """Ask until the router answers with something other than not_ready."""
+    def until_router_answers(
+        self, assets: list[dict], task: str = TASK, timeout: float = 30, *, move_clock=True
+    ):
+        """Ask until the router answers with something other than not_ready.
+
+        With `move_clock` false the clock never moves, and no sync may start a wait."""
 
         def answered():
             answer = self.ask(assets, task)
+            if not move_clock:  # After every ask, the answered one too.
+                body = self.status()
+                assert body["retry_after_ms"] == 0 and body["consecutive_failures"] == 0, (
+                    f"a sync started the wait: {self.diagnostics()}"
+                )
             last = self.selects()[-1]
             if last.status == 200 and last.response.get("outcome") not in (None, "not_ready"):
                 return answer, last.response
-            self.pass_sync_wait()
+            if move_clock:
+                self.pass_sync_wait()
             return None
 
         return poll(answered, timeout, lambda: f"the router never answered: {self.diagnostics()}")
 
-    def until_ranked(self, assets: list[dict], task: str = TASK, timeout: float = 30) -> dict:
+    def until_ranked(
+        self, assets: list[dict], task: str = TASK, timeout: float = 30, *, move_clock=True
+    ) -> dict:
         """Ask until the router itself ranks; the gateway's picks must be its candidates."""
-        answer, _ = self.until_router_answers(assets, task, timeout)
+        answer, _ = self.until_router_answers(assets, task, timeout, move_clock=move_clock)
         assert answer["chosen_by"] == "third_party", self.diagnostics()
-        assert_from_router(self, answer)
-        return answer
-
-    def until_ranked_without_a_wait(self, assets: list[dict], task: str = TASK) -> dict:
-        """Ask until the router ranks, never moving the clock; no sync may start a wait."""
-
-        def ranked():
-            answer = self.ask(assets, task)
-            body = self.status()
-            assert body["retry_after_ms"] == 0 and body["consecutive_failures"] == 0, (
-                f"a sync started the wait: {self.diagnostics()}"
-            )
-            last = self.selects()[-1]
-            return last.response.get("outcome") == "ranked" and answer
-
-        answer = poll(ranked, 30, lambda: f"the router never ranked: {self.diagnostics()}")
         assert_from_router(self, answer)
         return answer
 
@@ -481,7 +477,7 @@ def test_switching_a_skill_back_and_forth_between_versions_never_starts_the_wait
     offered = []
     for body in bodies * 2:
         skill = skill_file(stack.root, "pdf-merge", "Merge pdf documents", body)
-        answer = stack.until_ranked_without_a_wait([skill, notes], task=task)
+        answer = stack.until_ranked([skill, notes], task=task, move_clock=False)
         assert answer["picks"][0]["name"] == "pdf-merge"
         offered.append(skill["content_hash"])
         ranked_hash = next(r["content_hash"] for r in stack.offered() if name_of(r) == "pdf-merge")

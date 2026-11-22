@@ -1,22 +1,13 @@
 #!/usr/bin/env python3
 """Check guidance selector sync against the real asset-router at one exact commit (RM47, AC42).
 
-  python scripts/asset_router_interop.py --rev <40-hex router commit> [--repo URL|PATH]
-      [--result PATH]
+  python scripts/asset_router_interop.py --rev <40-hex commit> [--repo URL|PATH] [--result PATH]
 
-It clones the router into a cache folder named after the commit, checks out exactly that commit,
-installs its locked dependencies with `npm ci`, and runs tests/test_guidance_router_interop.py with
-RELAYMIND_ASSET_ROUTER_DIR and RELAYMIND_ASSET_ROUTER_REV set, and RELAYMIND_ASSET_ROUTER_REQUIRED=1
-so that a test cannot skip for want of the checkout. It never follows a branch: a run
-names the commit it checked. A run passes only when every interop test ran and passed: a skipped or
-empty run is `not_validated` and fails. `--result` writes the outcome, the counts and both commits
-(RelayMind's, with whether its tracked files were clean, and asset-router's) as JSON. Inference is
-a deterministic double, so the result says whether the two programs interoperate, not how well a
-real model ranks. Development tooling only.
+A run passes only when every interop test ran and passed; a skipped or empty run is
+`not_validated`. Details: docs/TESTING.md, "Interop with asset-router". Development tooling only.
 """
 
 import argparse
-import json
 import os
 import re
 import shutil
@@ -25,6 +16,8 @@ import sys
 import tempfile
 import xml.etree.ElementTree as ElementTree
 from pathlib import Path
+
+from relaymind.evaluation.checkpoint import atomic_json
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_REPO = "git@github.com:LHCWN/asset-router.git"
@@ -66,7 +59,10 @@ def prepare(repo: str, rev: str, cache: Path) -> Path:
 
 
 def relaymind_state() -> tuple[str, bool]:
-    """This checkout's commit, and whether its tracked files match that commit."""
+    """This checkout's commit, and whether its tracked files match that commit.
+
+    Not environment.application_revision: that one also counts untracked files as changes and
+    returns None when git fails, while a result must name its commit, so this one fails loudly."""
     head = run("git", "rev-parse", "HEAD", cwd=ROOT)
     return head, not run("git", "status", "--porcelain", "--untracked-files=no", cwd=ROOT)
 
@@ -112,8 +108,6 @@ def main() -> int:
         **os.environ,
         "RELAYMIND_ASSET_ROUTER_DIR": str(checkout),
         "RELAYMIND_ASSET_ROUTER_REV": args.rev,
-        # The checkout was just prepared: a test that skips for want of it is a failure.
-        "RELAYMIND_ASSET_ROUTER_REQUIRED": "1",
     }
     with tempfile.TemporaryDirectory() as scratch:
         report = Path(scratch) / "interop.xml"
@@ -150,8 +144,7 @@ def main() -> int:
         skipped=totals["skipped"],
     )
     if args.result:
-        args.result.parent.mkdir(parents=True, exist_ok=True)
-        args.result.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+        atomic_json(args.result, result)
     dirty = "" if clean else " (with local changes)"
     print(
         f"interop {outcome.replace('_', ' ')}: {passed} passed, {totals['failed']} failed,"

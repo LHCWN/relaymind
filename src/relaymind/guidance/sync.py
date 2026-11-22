@@ -41,9 +41,9 @@ def _key(record: Mapping) -> tuple[str, str]:
     return record["asset_id"], record["content_hash"]
 
 
-def _target(record: Mapping) -> tuple[str, str]:
-    """The version a record makes current: its content hash and the SHA-256 of the exact record."""
-    return record["content_hash"], hashlib.sha256(canonical_json(record).encode()).hexdigest()
+def _target(record: Mapping) -> str:
+    """The version a record makes current: the SHA-256 of the exact record, its hash included."""
+    return hashlib.sha256(canonical_json(record).encode()).hexdigest()
 
 
 class GuidanceSync:
@@ -66,7 +66,7 @@ class GuidanceSync:
         self._not_before = 0.0
         self._rejected: OrderedDict[tuple[str, str], None] = OrderedDict()
         # Per asset ID, the target the selector last accepted; the least recently updated is first.
-        self._targets: OrderedDict[str, tuple[str, str]] = OrderedDict()
+        self._targets: OrderedDict[str, str] = OrderedDict()
         # The last sync whose find_missing was answered: counts only, never an asset (RM16, RM47).
         # A running sync fills `_current`; the status shows it only once that sync ends.
         self._current: dict | None = None

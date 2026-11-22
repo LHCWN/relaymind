@@ -1119,28 +1119,20 @@ def assert_switched(body: dict, uploads_so_far: int) -> None:
     assert body["consecutive_failures"] == 0 and body["retry_after_ms"] == 0
 
 
-def test_switching_source_versions_back_and_forth_is_progress_each_time():
-    """Hashes A, B, A, B: each restores a version the selector no longer holds."""
+@pytest.mark.parametrize(
+    ("field", "one", "other"),
+    [
+        ("content_hash", "a" * 64, "b" * 64),  # Each hash restores a version no longer held.
+        ("description", "Merge PDF files", "Merge pdf"),  # One file, two descriptions in turn.
+    ],
+)
+def test_switching_back_and_forth_is_progress_each_time(field, one, other):
     router = Router(outcome="not_ready", missing=lambda sent: sent)
     http, _ = syncing_client(router)
-    versions = [dict(SKILL, content_hash=h) for h in ("a" * 64, "b" * 64)] * 2
+    versions = [dict(SKILL, **{field: value}) for value in (one, other, one, other)]
     for turn, skill in enumerate(versions, start=1):
         assert_switched(ask_with(http, router, skill), turn)
-    assert [u["assets"][0]["record"]["content_hash"] for u in uploads(router)] == [
-        "a" * 64,
-        "b" * 64,
-        "a" * 64,
-        "b" * 64,
-    ]
-
-
-def test_alternating_descriptions_under_one_hash_are_progress_each_time():
-    """The same file offered with two descriptions in turn: each change is a new target."""
-    router = Router(outcome="not_ready", missing=lambda sent: sent)
-    http, _ = syncing_client(router)
-    described = [dict(SKILL, description=d) for d in ("Merge PDF files", "Merge pdf")] * 2
-    for turn, skill in enumerate(described, start=1):
-        assert_switched(ask_with(http, router, skill), turn)
+    assert [u["assets"][0]["record"][field] for u in uploads(router)] == [one, other, one, other]
 
 
 def test_an_unchanged_target_that_keeps_failing_waits_longer_each_time():

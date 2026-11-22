@@ -4,7 +4,6 @@ import json
 import re
 import subprocess
 import sys
-from fnmatch import fnmatch
 from pathlib import Path
 
 import httpx
@@ -15,11 +14,11 @@ from helpers import load_script_module
 from router_interop import (
     DIMENSIONS,
     ROUTER_DIR_ENV,
-    ROUTER_REQUIRED_ENV,
     EmbeddingDouble,
     require_checkout,
     router_revision,
 )
+from workflow_helpers import covered
 
 runner = load_script_module("asset_router_interop")
 WORKFLOW = Path(__file__).resolve().parents[1] / ".github/workflows/router-interop.yml"
@@ -87,17 +86,6 @@ def test_the_interop_harness_uses_the_installed_loader_without_shell_shims(monke
     assert checkout == tmp_path.resolve()
 
 
-def test_a_required_router_checkout_fails_instead_of_skipping(monkeypatch, tmp_path):
-    """RM47, AC42: the runner and CI set the required mode, so a skip cannot pass."""
-    monkeypatch.setenv(ROUTER_REQUIRED_ENV, "1")
-    monkeypatch.delenv(ROUTER_DIR_ENV, raising=False)
-    with pytest.raises(pytest.fail.Exception, match=ROUTER_DIR_ENV):
-        require_checkout()
-    monkeypatch.setenv(ROUTER_DIR_ENV, str(tmp_path))
-    with pytest.raises(pytest.fail.Exception, match="npm ci"):
-        require_checkout()
-
-
 RELAYMIND_HEAD = "b" * 40
 
 
@@ -129,9 +117,8 @@ def run_runner(monkeypatch, tmp_path, report: str, code: int = 0):
     return exit_code, json.loads(result.read_text(encoding="utf-8")), seen
 
 
-def test_the_runner_requires_the_checkout_it_prepared(monkeypatch, tmp_path):
+def test_the_runner_points_the_tests_at_the_checkout_it_prepared(monkeypatch, tmp_path):
     _, _, seen = run_runner(monkeypatch, tmp_path, junit())
-    assert seen["env"][ROUTER_REQUIRED_ENV] == "1"
     assert seen["env"][ROUTER_DIR_ENV] == str(tmp_path / "router")
 
 
@@ -191,11 +178,14 @@ def test_the_interop_workflow_runs_the_runner_at_a_pinned_commit():
     (interop,) = [s for s in job["steps"] if s.get("name") == "Interop at the router commit"]
     assert "secrets." not in str(interop) and "token" not in str(interop).lower()
     triggers = workflow[True]  # YAML 1.1 reads the bare key "on" as true.
+    assert triggers["push"]["paths"] == triggers["pull_request"]["paths"]
     for path in (
         ".github/workflows/router-interop.yml",
         "src/relaymind/guidance/sync.py",
+        "src/relaymind/api/guidance.py",
+        "src/relaymind/evaluation/checkpoint.py",
         "tests/router_interop.py",
         "tests/test_guidance_router_interop.py",
         "scripts/asset_router_interop.py",
     ):
-        assert any(fnmatch(path, pattern) for pattern in triggers["pull_request"]["paths"]), path
+        assert covered(path, triggers["pull_request"]["paths"]), path

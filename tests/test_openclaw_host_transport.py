@@ -89,7 +89,14 @@ def require_node_build_dependencies() -> None:
 
 
 def run_tsc(*args: str, package: Path = PACKAGE) -> None:
-    """Compile the plugin in `package` with its pinned TypeScript; a failure raises."""
+    """Compile the plugin in `package` with its pinned TypeScript; a failure raises.
+
+    Other workers import the shared dist/, so a build of the shared package must name its
+    own --outDir; a full build belongs in a private_package() copy.
+    """
+    own_out = any(a == "--outDir" or a.startswith("--outDir=") for a in args)
+    if package.resolve() == PACKAGE.resolve() and not own_out:
+        raise ValueError("this would rewrite the shared dist/; build in private_package()")
     subprocess.run(
         [_node(), str(package / "node_modules/typescript/bin/tsc"), *args],
         cwd=package,
@@ -100,21 +107,25 @@ def run_tsc(*args: str, package: Path = PACKAGE) -> None:
     )
 
 
+def link_directory(target: Path, link: Path) -> None:
+    """Make `link` point at the directory `target`: a junction on Windows, else a symlink."""
+    if sys.platform == "win32":
+        import _winapi
+
+        _winapi.CreateJunction(str(target), str(link))
+    else:
+        link.symlink_to(target, target_is_directory=True)
+
+
 def private_package(root: Path) -> Path:
     """A copy of the plugin package at `root`, without its dist/, for a test to build in.
 
     Tests in other workers import the shared dist/; building there deletes and rewrites
     files they may be reading. The copy reaches the locked dependencies through a link
-    to the package's own node_modules (a junction on Windows, as an installed peer is).
+    to the package's own node_modules.
     """
     shutil.copytree(PACKAGE, root, ignore=shutil.ignore_patterns("node_modules", "dist"))
-    modules, shared = root / "node_modules", PACKAGE / "node_modules"
-    if sys.platform == "win32":
-        import _winapi
-
-        _winapi.CreateJunction(str(shared), str(modules))
-    else:
-        modules.symlink_to(shared, target_is_directory=True)
+    link_directory(PACKAGE / "node_modules", root / "node_modules")
     return root
 
 
