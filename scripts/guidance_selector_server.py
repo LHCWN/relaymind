@@ -22,6 +22,7 @@ import asyncio
 import hashlib
 import json
 import os
+import stat
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -99,20 +100,41 @@ class SyncIndex:
             reason=reason,
         )
 
+    def _real(self, path):
+        """The real path of `path` when it lies under a root; None when it does not."""
+        real = Path(path).resolve(strict=True)
+        return real if any(real.is_relative_to(root) for root in self.roots) else None
+
     def _check(self, content, content_hash):
         try:
-            real = Path(content["path"]).resolve(strict=True)
-        except (OSError, RuntimeError):
+            real = self._real(content["path"])
+        # A NUL in the path is a ValueError; it is still one rejected pair, not a failed upload.
+        except (OSError, RuntimeError, ValueError):
             return "unreadable"
-        if not any(real.is_relative_to(root) for root in self.roots):
+        if real is None:
             return "outside_roots"
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
         try:
-            if not real.is_file():
-                return "unreadable"
-            with real.open("rb") as file:
-                data = file.read(MAX_SKILL_FILE_BYTES + 1)
+            fd = os.open(real, flags)
         except OSError:
             return "unreadable"
+        with os.fdopen(fd, "rb") as file:
+            opened = os.fstat(fd)
+            if not stat.S_ISREG(opened.st_mode):
+                return "unreadable"
+            # A folder on the path may have become a link since the roots were checked: the path
+            # must still lead, under a root, to the very file that is open.
+            try:
+                again = self._real(content["path"])
+                now = again and again.stat()
+            except (OSError, RuntimeError, ValueError):
+                return "unreadable"
+            if not now or (now.st_dev, now.st_ino) != (opened.st_dev, opened.st_ino):
+                return "outside_roots"
+            try:
+                data = file.read(MAX_SKILL_FILE_BYTES + 1)
+            except OSError:
+                return "unreadable"
         if len(data) > MAX_SKILL_FILE_BYTES:
             return "too_large"
         if len(data) != content["size_bytes"]:

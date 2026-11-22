@@ -301,6 +301,26 @@ describe("a gateway that refuses the file fields", () => {
     expect(sent(fetcher, 2).assets[0].content_hash).toBeUndefined();
   });
 
+  it("releases the refused response before it sends again", async () => {
+    const path = skill("pdf-merge", "Merge pdf documents");
+    let released = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        const body = JSON.parse(String(init.body));
+        if (!body.assets.some((a: object) => FILE_FIELDS.some((k) => k in a))) {
+          return new Response(JSON.stringify(picks(["pdf-merge"])), { status: 200 });
+        }
+        const stream = new ReadableStream({ cancel: () => void (released = true) });
+        return new Response(stream, { status: 400 });
+      }),
+    );
+    const { handlers } = load({}, [entry("pdf-merge", path)]);
+    const result = await handlers.before_prompt_build(EVENT, CTX);
+    expect(result.prependContext).toContain("pdf-merge");
+    expect(released).toBe(true);
+  });
+
   it("keeps sending them when the request without them is refused too", async () => {
     const path = skill("pdf-merge", "Merge pdf documents");
     const fetcher = gateway({ error: { code: "invalid_request" } }, 400);

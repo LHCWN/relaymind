@@ -776,6 +776,23 @@ def test_the_reference_selector_reads_only_real_paths_under_its_roots(tmp_path):
     assert missing == ["a:outside", "a:link", "a:hash", "a:size", "a:gone"]
 
 
+def test_the_reference_selector_rejects_a_path_with_a_nul_and_takes_the_rest(tmp_path):
+    """RM47 spec 0.72: a rejected pair does not stop the others, even for a path it cannot open."""
+    server = reference_server()
+    root = tmp_path / "skills"
+    good = skill_file(root)
+    index = server.SyncIndex([root])
+    items = [
+        upload_item(good["content_hash"], f"{root}/a\0b/SKILL.md", 1, "a:nul"),
+        upload_item(good["content_hash"], good["path"], good["size_bytes"]),
+    ]
+    answer = index.handle(sync_request("upload", items))
+    assert [(r["asset_id"], r["status"], r["reason"]) for r in answer["results"]] == [
+        ("a:nul", "rejected", "unreadable"),
+        ("host:skill:pdf-merge", "accepted", None),
+    ]
+
+
 def test_the_launched_gateway_syncs_the_reference_selector_until_it_ranks(tmp_path):
     """AC42: not_ready -> find_missing -> upload with the file -> the next select is ranked."""
     server = reference_server()
@@ -909,3 +926,35 @@ def test_a_shortened_description_keeps_the_file_hash_and_is_offered_as_it_is_now
     assert [r["description"] for r in records] == ["Merge pdf documents into one file", "Merge pdf"]
     assert records[0]["content_hash"] == records[1]["content_hash"] == SKILL_HASH
     assert router.syncs == []  # Ranked both times: a description change starts no sync.
+
+
+def test_the_reference_selector_checks_the_file_it_opened_not_only_the_path_it_resolved(
+    tmp_path, monkeypatch
+):
+    """RM47 spec 0.72: the real path of the file the selector opens must be under its roots.
+
+    A folder on the path is swapped for a link outside the roots after the roots were checked
+    and before the file is opened. The selector must notice and refuse it.
+    """
+    import os
+
+    server = reference_server()
+    root, outside = tmp_path / "skills", tmp_path / "elsewhere"
+    good = skill_file(root)
+    away = skill_file(outside)
+    assert good["content_hash"] == away["content_hash"]  # Same bytes: only the location differs.
+    real_open = os.open
+
+    def swapping_open(path, *args, **kwargs):
+        folder = root / "pdf-merge"
+        if folder.is_dir() and not folder.is_symlink():
+            folder.rename(root / "pdf-merge-moved")
+            os.symlink(outside / "pdf-merge", folder)
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(server.os, "open", swapping_open)
+    item = upload_item(good["content_hash"], good["path"], good["size_bytes"])
+    answer = server.SyncIndex([root]).handle(sync_request("upload", [item]))
+    assert [(r["status"], r["reason"]) for r in answer["results"]] == [
+        ("rejected", "outside_roots")
+    ]

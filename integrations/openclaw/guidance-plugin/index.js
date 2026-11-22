@@ -594,6 +594,8 @@ async function ask(config, token, text, recent, assets, files, logger) {
   const first = fit(body);
   let response = await post(first.json);
   if (response.status === 400 && first.files) {
+    // An unread body keeps its connection until it is collected, so release it first.
+    await response.body?.cancel().catch(() => {});
     response = await post(fitBody({ ...body, assets: body.assets.map(bare) }));
     if (response.status === 200) {
       files.send = false;
