@@ -1889,8 +1889,8 @@ answer falls back to word match and, with `guidance.sync_url`, starts a `find_mi
 the answer, with a result for each asset, a growing wait after failures, its own `guidance.sync_ms` and a status
 route. Deterministic tests use a fake router (`tests/test_guidance_sync.py`). An `interop` harness runs the
 gateway against the real asset-router at an exact commit with deterministic inference
-(`scripts/asset_router_interop.py`). At asset-router `1e6d4e5` (PR LHCWN/asset-router#1 head) all ten interop
-cases pass against RelayMind `c79b53d`, including one skill switched through versions A, B, A, B; at `853dada` and
+(`scripts/asset_router_interop.py`). At asset-router `621b879` (PR LHCWN/asset-router#1 head) and `1e6d4e5` all ten
+interop cases pass, including one skill switched through versions A, B, A, B; at `853dada` and
 `b54416b` the first nine passed; at `c3cc835` none did ([evidence](EVIDENCE.md#2026-11-22--guidance-gateway-against-asset-router-rm47-ac42)).
 The `Router interop` workflow runs them in CI at the pinned router commit, with read access to asset-router from
 the organization's `relaymind-interop` GitHub App; without the app's secrets it fails as not validated. The gateway remembers only the last accepted target of each asset, so switching back to

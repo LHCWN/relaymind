@@ -51,7 +51,7 @@ concurrency:
 env:
   # The asset-router commit this RelayMind revision is checked against. Move it only to a
   # commit that passed here; the runner refuses anything but a full commit.
-  ROUTER_REV: 1e6d4e56c527702d96e31abf4ff1836086739c81
+  ROUTER_REV: 621b879b2ee8a233d9c5ff2cdfd31931b83b0226
 
 jobs:
   interop:

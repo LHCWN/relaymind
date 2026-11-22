@@ -43,8 +43,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   missing pairs were all rejected before now waits too, instead of asking again on every `not_ready`. A sync whose
   `find_missing` failed reports zero counts. The plugin reads at most 64 MiB of skill files whole in one turn; a
   skill past that is offered by its description and read on a later turn.
-  A `Router interop` workflow runs the same check in CI at a pinned asset-router commit (`1e6d4e5`, where all ten
-  cases pass against RelayMind `c79b53d`, versions A, B, A, B of one skill included) when guidance sync or the harness changes; it reads asset-router through the organization's
+  A `Router interop` workflow runs the same check in CI at a pinned asset-router commit (`621b879`, where all ten
+  cases pass, as at `1e6d4e5`, versions A, B, A, B of one skill included) when guidance sync or the harness changes; it reads asset-router through the organization's
   `relaymind-interop` GitHub App (Contents: read-only, installed only on asset-router, secrets `ROUTER_APP_ID`
   and `ROUTER_APP_PRIVATE_KEY`), whose one-hour token only fetches the router commit, and without those secrets the
   job fails as not validated instead of passing with nothing run.

@@ -4024,6 +4024,19 @@ loopback, and no real model, host or ranking quality is involved.
   own `src/apps/server/main.ts` in fed mode with its own SQLite store.
 - Command: `python scripts/asset_router_interop.py --rev <commit> --repo <local clone of asset-router>`.
 
+### RelayMind `8509cc2` at asset-router `621b879`: 10 of 10 passed, three runs, none skipped
+
+RelayMind `8509cc27e2d9f17d88bcf1dff7b4231d3e28f6a9` (clean tree) against asset-router
+`621b879b2ee8a233d9c5ff2cdfd31931b83b0226`, the head of LHCWN/asset-router#1 after `42b18ac` (the four schemas
+copied from RelayMind `5e0b04f`) and `621b879` (a backup before a schema-1 store upgrade; a pair still indexing is
+ready once the router holds exactly that version with its required features). Result:
+[`2026-11-22-guidance-router-interop-8509cc2-621b879.json`](evidence/2026-11-22-guidance-router-interop-8509cc2-621b879.json).
+All ten cases pass, the same as at `1e6d4e5` below; the `Router interop` workflow now pins `621b879`.
+
+The first CI run of that workflow with read access (RelayMind `4ad500e`, through the organization's
+`relaymind-interop` GitHub App) passed all ten cases at the earlier pin `1e6d4e5`, on GitHub's merge of `4ad500e`
+into master `0b68534` (`c23c40e`).
+
 ### RelayMind `c79b53d` at asset-router `1e6d4e5`: 10 of 10 passed, three runs, none skipped
 
 RelayMind `c79b53d4f8278885f97f2d625b00638d49d2aa2f` (clean tree) against asset-router
