@@ -490,6 +490,31 @@ describe("reading SKILL.md", () => {
     expect(readSkillInfo(skillEntry).description).toBe("New1");
     expect(readSkillInfo(skillEntry).file).toEqual(fileOf(path));
   });
+
+  // RM47 (router integration review): content_hash names the whole SKILL.md, not a prefix. A
+  // router may embed only its first 4,000 characters, but an edit past them is still a new source.
+  it("changes the content hash when only text past character 4,000 changes", () => {
+    const path = skill("deep", "Deep edit");
+    const head = readFileSync(path, "utf8");
+    writeFileSync(path, head + "a".repeat(6000) + " old ending\n");
+    const skillEntry = entry("deep", path);
+    const before = readSkillInfo(skillEntry).file;
+    const text = readFileSync(path, "utf8");
+    writeFileSync(path, text.replace("old ending", "new ending"));
+    const later = new Date(statSync(path).mtimeMs + 5000);
+    utimesSync(path, later, later);
+    const after = readSkillInfo(skillEntry).file;
+    expect(text.indexOf("old ending")).toBeGreaterThan(4000);
+    expect(after.size_bytes).toBe(before.size_bytes);
+    expect(after.content_hash).not.toBe(before.content_hash);
+    expect(after).toEqual(fileOf(path));
+  });
+
+  it("sends no file fields for a SKILL.md over 1 MiB, so its description hash identifies it", () => {
+    const path = skill("huge", "Huge skill");
+    writeFileSync(path, readFileSync(path, "utf8") + "x".repeat(1024 * 1024));
+    expect(readSkillInfo(entry("huge", path))).toEqual({ description: "Huge skill", hidden: false, file: null });
+  });
 });
 
 describe("the hint text", () => {

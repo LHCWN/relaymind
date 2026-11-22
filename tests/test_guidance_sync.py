@@ -820,3 +820,103 @@ def test_the_launched_gateway_syncs_the_reference_selector_until_it_ranks(tmp_pa
     assert synced["accepted"] == 2 and synced["rejected"] == 0
     assert second["chosen_by"] == "third_party" and second["degraded"] is False
     assert [p["name"] for p in second["picks"]] == ["pdf-merge"]
+
+
+# --- identity, deadline and freshness (router integration review) --------------------------
+
+
+def test_the_real_selection_request_carries_a_fractional_deadline():
+    """SelectionRequestV2.deadline_ms is a positive number: built and sent with its fraction."""
+    from relaymind.guidance import parse_guidance_request, run_guidance
+
+    sent: list[bytes] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(request.content)
+        return Router().handler(request)
+
+    class Ticking:
+        now = 1000.0
+
+        def __call__(self):
+            Ticking.now += 0.0001234
+            return Ticking.now
+
+    selector = HttpAssetSelector(
+        name="router",
+        version="1",
+        url=SELECT_URL,
+        transport_factory=lambda: httpx.MockTransport(handler),
+    )
+    settings = replace(SETTINGS, total_ms=7777)
+    answer = asyncio.run(
+        run_guidance(parse_guidance_request(BODY), settings, selector=selector, clock=Ticking())
+    )
+    assert answer["chosen_by"] == "third_party"
+    request = json.loads(sent[0])
+    deadline = request["deadline_ms"]
+    assert isinstance(deadline, float) and deadline != int(deadline) and 0 < deadline < 7777
+    schema = StrictValidator(
+        load_packaged_schema("relaymind.selection", "selection_request.v2.json")
+    )
+    assert first_schema_error(schema, request) is None
+    assert f'"deadline_ms":{deadline!r}'.encode() in sent[0]  # Not rounded on the wire.
+
+
+def test_the_guidance_route_sends_the_deadline_as_a_number_not_an_integer():
+    router = Router()
+    client(router).post("/relay/v1/guidance", json=BODY, headers=AUTH)
+    assert isinstance(router.selects[0]["deadline_ms"], float)
+
+
+def test_an_unchanged_asset_keeps_its_identity_whatever_the_request():
+    """Session, task and recommendation IDs and the catalog revision never enter source identity."""
+    router = Router()
+    http = client(router)
+    http.post("/relay/v1/guidance", json=BODY, headers=AUTH)
+    other = dict(schema_version=1, task_text="join two pdfs", recent_text="earlier", assets=[SKILL])
+    http.post("/relay/v1/guidance", json=other, headers=AUTH)
+    first, second = router.selects
+    skill = [next(r for r in s["catalog"] if r["kind"] == "skill") for s in (first, second)]
+    assert skill[0] == skill[1]  # The whole record: asset_id, content_hash, description, identity.
+    assert skill[0]["content_hash"] == SKILL_HASH
+    assert first["recommendation_id"] != second["recommendation_id"]
+    assert first["task_id"] != second["task_id"]
+    assert first["catalog_revision"] != second["catalog_revision"]  # The offer changed.
+
+
+def test_identical_requests_get_the_selectors_latest_answer():
+    """No ranking cache: an identical request asks the selector again and admits its new answer."""
+
+    class Changing(Router):
+        def answer(self, request):
+            result = super().answer(request)
+            pick = request["catalog"][(len(self.selects) - 1) % len(request["catalog"])]
+            result["candidates"][0].update(
+                asset_id=pick["asset_id"],
+                kind=pick["kind"],
+                content_hash=pick["content_hash"],
+                source_version=pick["source_version"],
+            )
+            result["index_revision"] = f"r{len(self.selects)}"
+            return result
+
+    router = Changing()
+    http = client(router)
+    answers = [http.post("/relay/v1/guidance", json=BODY, headers=AUTH).json() for _ in range(2)]
+    assert len(router.selects) == 2
+    assert [a["picks"][0]["name"] for a in answers] == ["pdf-merge", "weather"]
+
+
+def test_a_shortened_description_keeps_the_file_hash_and_is_offered_as_it_is_now():
+    """Spec 0.72 7.7: the pair covers the file, not the description; a selector ranks with the
+    description of the current select. Same SKILL.md, two projections, one source identity."""
+    router = Router()
+    http = client(router, SYNCING)
+    for description in ("Merge pdf documents into one file", "Merge pdf"):
+        body = dict(BODY, assets=[dict(SKILL, description=description)])
+        assert http.post("/relay/v1/guidance", json=body, headers=AUTH).status_code == 200
+    records = [s["catalog"][0] for s in router.selects]
+    assert [r["description"] for r in records] == ["Merge pdf documents into one file", "Merge pdf"]
+    assert records[0]["content_hash"] == records[1]["content_hash"] == SKILL_HASH
+    assert router.syncs == []  # Ranked both times: a description change starts no sync.
