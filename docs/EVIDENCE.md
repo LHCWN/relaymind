@@ -4024,6 +4024,23 @@ loopback, and no real model, host or ranking quality is involved.
   own `src/apps/server/main.ts` in fed mode with its own SQLite store.
 - Command: `python scripts/asset_router_interop.py --rev <commit> --repo <local clone of asset-router>`.
 
+### RelayMind `c79b53d` at asset-router `1e6d4e5`: 10 of 10 passed, three runs, none skipped
+
+RelayMind `c79b53d4f8278885f97f2d625b00638d49d2aa2f` (clean tree) against asset-router
+`1e6d4e56c527702d96e31abf4ff1836086739c81`, the head of LHCWN/asset-router#1, through
+`python scripts/asset_router_interop.py --rev <commit> --result <file>`. Result:
+[`2026-11-22-guidance-router-interop-c79b53d-1e6d4e5.json`](evidence/2026-11-22-guidance-router-interop-c79b53d-1e6d4e5.json)
+(`outcome: passed`, 10 passed, 0 failed, 0 skipped; three identical runs).
+
+The nine cases below pass, and a tenth: one skill switched through file versions A, B, A, B, with the clock never
+moved. Each version is synced and then ranked by the router, and no sync starts the wait. The same case run against
+the gateway before this change (per-pair memory of every accepted record) fails on the return to A: the router
+reports that pair missing again, because it keeps one version of each asset, and the gateway counted the upload as
+no progress (`consecutive_failures: 1`, `retry_after_ms: 29995`).
+
+The `Router interop` CI workflow could not produce this result: the asset-router deploy key is not set up in this
+repository, so the job now fails as not validated instead of passing with nothing run.
+
 ### At `1e6d4e56c527702d96e31abf4ff1836086739c81`: 9 of 9 passed
 
 The head of LHCWN/asset-router#1 after `de80945` (selection deadlines, index publication, inference boundaries),
