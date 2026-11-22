@@ -23,6 +23,9 @@ const MAX_FRONT_BYTES = 32_768;
 // A skill file up to this size is read whole, so its SHA-256 tells a selector when the body changed
 // (spec 0.72). The gateway forwards only the hash, the path and the size, never the body.
 const MAX_SKILL_FILE_BYTES = 1024 * 1024;
+// Whole skill files read in one turn to hash them, so a large catalog never blocks the host for long
+// (spec 0.72). A skill past it goes without file fields this turn and is read on a later one.
+const MAX_HASH_BYTES_PER_TURN = 64 * 1024 * 1024;
 const MAX_PATH_BYTES = 2048;
 // The gateway refuses a body above 32 MiB; 20,000 long descriptions can pass that, so keep a margin.
 const MAX_BODY_BYTES = 31 * 1024 * 1024;
@@ -119,9 +122,9 @@ let headBuffer = Buffer.alloc(0);
 /**
  * Description and hidden flag of one snapshot entry, cached by file time. The host sets fileHost only
  * when skills can live elsewhere: unset or "gateway" is this machine, and "workspace" may be a sandbox
- * or another machine, so that file is not read.
+ * or another machine, so that file is not read. `budget.bytes` bounds the whole-file reads this turn.
  */
-export function readSkillInfo(entry) {
+export function readSkillInfo(entry, budget = { bytes: Infinity }) {
   const path = entry?.source?.filePath;
   const host = entry?.source?.fileHost;
   if (typeof path !== "string" || (host !== undefined && host !== "gateway")) return UNKNOWN;
@@ -145,6 +148,9 @@ export function readSkillInfo(entry) {
       // frontmatter read again from the bytes that are hashed, so a hash never stands for a hidden
       // skill. The read stops one byte past the limit, so a file that grew after stat is never hashed.
       if (bytes.length >= MAX_FRONT_BYTES) {
+        // Past this turn's budget: offered by description now, and not cached, so a later turn reads it.
+        if (size > budget.bytes) return { ...parsed, description: clip(parsed.description, MAX_DESCRIPTION_BYTES), file: null };
+        budget.bytes -= size;
         bytes = readHead(path, MAX_SKILL_FILE_BYTES + 1);
         parsed = frontmatterOf(bytes);
         if (!parsed) return UNKNOWN;
@@ -521,6 +527,7 @@ function readTools(path) {
 
 function hostAssets(snapshot, toolsFile, logger) {
   const assets = [];
+  const budget = { bytes: MAX_HASH_BYTES_PER_TURN };
   const seen = new Set();
   const add = (name, kind, description, file) => {
     const key = `${kind}:${name}`;
@@ -533,7 +540,7 @@ function hostAssets(snapshot, toolsFile, logger) {
   for (const entry of snapshot?.skills ?? []) {
     // The gateway takes no more assets than this, so no further file is read.
     if (assets.length >= MAX_ASSETS) break;
-    const info = readSkillInfo(entry);
+    const info = readSkillInfo(entry, budget);
     if (!info.hidden) add(entry.name, "skill", info.description, info.file);
   }
   if (toolsFile) {

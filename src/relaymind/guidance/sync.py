@@ -7,6 +7,7 @@ hashes or logs a body, and a sync changes no answer: any failure ends it quietly
 """
 
 import asyncio
+import hashlib
 import math
 import time
 from collections import OrderedDict
@@ -25,7 +26,8 @@ FEEDER_ID = "guidance"
 _THREAD_ABOVE = 200
 # Pairs a selector rejected without a file; the oldest is dropped first (spec 0.72).
 MAX_REJECTED = 10_000
-# Pairs a selector accepted; one that is missing again was taken and not indexed (spec 0.72).
+# Pairs a selector accepted, each with the digest of the record sent; the same pair and record
+# missing again was taken and not indexed, while a changed record is new (spec 0.72).
 MAX_ACCEPTED = 10_000
 # After a failed sync none starts for this long, doubled for each failure in a row, up to the cap.
 FIRST_WAIT_S = 30.0
@@ -37,6 +39,11 @@ _RESPONSE = StrictValidator(
 
 def _key(record: Mapping) -> tuple[str, str]:
     return record["asset_id"], record["content_hash"]
+
+
+def _variant(record: Mapping) -> tuple[str, str, str]:
+    """The pair and the SHA-256 of its exact record, as an accepted upload is remembered."""
+    return *_key(record), hashlib.sha256(canonical_json(record).encode()).hexdigest()
 
 
 class GuidanceSync:
@@ -58,18 +65,11 @@ class GuidanceSync:
         self._failures = 0
         self._not_before = 0.0
         self._rejected: OrderedDict[tuple[str, str], None] = OrderedDict()
-        self._accepted: OrderedDict[tuple[str, str], None] = OrderedDict()
+        self._accepted: OrderedDict[tuple[str, str, str], None] = OrderedDict()
         # The last sync whose find_missing was answered: counts only, never an asset (RM16, RM47).
         # A running sync fills `_current`; the status shows it only once that sync ends.
         self._current: dict | None = None
-        self._last = dict(
-            last_outcome="none",
-            last_inference=None,
-            missing=0,
-            accepted=0,
-            rejected=0,
-            files_sent=0,
-        )
+        self._last = self._nothing()
 
     def status(self) -> dict:
         """GuidanceSyncStatusV1 for `GET /relay/v1/guidance/sync`."""
@@ -93,16 +93,28 @@ class GuidanceSync:
         try:
             progress = await self._sync(catalog, files)
         except Exception:  # The answer is already sent; a failed sync changes nothing.
-            self._last = dict(self._current or self._last, last_outcome="failed")
+            # Without an answered find_missing this sync counted nothing (spec 0.72).
+            self._last = dict(self._current or self._nothing(), last_outcome="failed")
             self._wait()
         else:
             self._last = self._current
             if progress:
                 self._failures, self._not_before = 0, 0.0
-            else:  # Only pairs accepted before: asking on every not_ready would not help.
+            else:  # Asking on every not_ready would get the same answer again.
                 self._wait()
         finally:
             self._running, self._current = False, None
+
+    @staticmethod
+    def _nothing() -> dict:
+        return dict(
+            last_outcome="none",
+            last_inference=None,
+            missing=0,
+            accepted=0,
+            rejected=0,
+            files_sent=0,
+        )
 
     def _wait(self) -> None:
         self._failures += 1
@@ -110,7 +122,8 @@ class GuidanceSync:
         self._not_before = self._clock() + wait
 
     async def _sync(self, catalog: Sequence[Mapping], files: Mapping[str, Mapping]) -> bool:
-        """One sync; False when every pair it uploaded was accepted before and is missing again."""
+        """One sync; False when it made no progress (spec 0.72): every pair it uploaded was accepted
+        before with the same record, or every missing pair was rejected before."""
         offered = {_key(record) for record in catalog}
         found = await self._exchange(
             "find_missing",
@@ -132,9 +145,11 @@ class GuidanceSync:
         # A pair rejected without a file would be rejected again; a new hash is a new pair.
         chosen -= known
         if not chosen:
-            return True
-        # A selector reports a pair whose indexing failed as missing again (spec 0.72).
-        progress = not chosen <= self._accepted.keys()
+            return not known
+        records = [record for record in catalog if _key(record) in chosen]
+        # A selector reports a pair whose indexing failed as missing again (spec 0.72); the same
+        # record sent again is no progress, a changed one (a new description) is.
+        progress = any(_variant(record) not in self._accepted for record in records)
         # A selector that sends text to remote inference gets no file unless the operator allows it.
         send_files = found["inference"] == "local" or self.allow_remote
         uploads = [
@@ -144,8 +159,7 @@ class GuidanceSync:
                 if send_files and record["asset_id"] in files
                 else None,
             )
-            for record in catalog
-            if _key(record) in chosen
+            for record in records
         ]
         current["files_sent"] = sum(1 for item in uploads if item["content"])
         rejected = await self._upload(uploads)
@@ -156,22 +170,26 @@ class GuidanceSync:
             if item["content"] and _key(item["record"]) in rejected
         ]
         retrying = {_key(item["record"]) for item in again}
-        self._remember(current, chosen - rejected, rejected - retrying)
+        sent = {_key(record): record for record in records}
+        self._remember(current, sent, chosen - rejected, rejected - retrying)
         if again:
             rejected = await self._upload(again)
-            self._remember(current, retrying - rejected, rejected)
+            self._remember(current, sent, retrying - rejected, rejected)
         return progress
 
-    def _remember(self, current: dict, accepted: set, rejected: set) -> None:
-        """Keep confirmed results even if a later upload in the same sync fails."""
+    def _remember(self, current: dict, sent: Mapping, accepted: set, rejected: set) -> None:
+        """Keep confirmed results even if a later upload in the same sync fails.
+
+        `sent` maps each uploaded pair to its record: an accepted pair is remembered with the
+        digest of that record, so the same record again is no progress and a changed one is."""
         current["accepted"] += len(accepted)
         current["rejected"] += len(rejected)
         for pair in rejected:
             self._rejected[pair] = None
-            self._accepted.pop(pair, None)
+            self._accepted.pop(_variant(sent[pair]), None)
         for pair in accepted:
-            self._accepted[pair] = None
-            self._accepted.move_to_end(pair)
+            self._accepted[_variant(sent[pair])] = None
+            self._accepted.move_to_end(_variant(sent[pair]))
         while len(self._rejected) > MAX_REJECTED:
             self._rejected.popitem(last=False)
         while len(self._accepted) > MAX_ACCEPTED:

@@ -322,11 +322,12 @@ def test_a_pair_rejected_without_a_file_is_not_sent_again_until_its_hash_changes
     router = Router(
         outcome="not_ready", missing=lambda sent: sent, reject=lambda item: "invalid_record"
     )
-    http = client(router, SYNCING)
+    http, clock = syncing_client(router)
     http.post("/relay/v1/guidance", json=BODY, headers=AUTH)
     assert len(uploads(router)) == 2  # Both rejected; the skill once more without its file.
     http.post("/relay/v1/guidance", json=BODY, headers=AUTH)
     assert len(uploads(router)) == 2  # Nothing new: every missing pair was rejected before.
+    clock.now += 31  # That sync made no progress, so the next one waits (spec 0.72).
     changed = dict(BODY, assets=[dict(SKILL, content_hash="3" * 64), TOOL])
     http.post("/relay/v1/guidance", json=changed, headers=AUTH)
     latest = uploads(router)[-2]
@@ -695,9 +696,10 @@ def test_the_rejected_pairs_are_capped_with_the_oldest_dropped_first(monkeypatch
         missing=lambda sent: [p for p in sent if p["asset_id"].endswith("pdf-merge")],
         reject=lambda item: "invalid_record",
     )
-    http = client(router, SYNCING)
+    http, clock = syncing_client(router)
 
     def ask(content_hash):
+        clock.now += 1000  # Past any wait: this test is about the cap, not the wait.
         body = dict(BODY, assets=[dict(SKILL, content_hash=content_hash)])
         http.post("/relay/v1/guidance", json=body, headers=AUTH)
         return len(uploads(router))
@@ -1045,3 +1047,55 @@ def test_the_reference_selector_checks_the_file_it_opened_not_only_the_path_it_r
     assert [(r["status"], r["reason"]) for r in answer["results"]] == [
         ("rejected", "outside_roots")
     ]
+
+
+# --- progress and status (spec 0.72, open items after review) ------------------------------
+
+
+def syncing_client(router: Router):
+    clock = Clock()
+    sync = GuidanceSync(SYNCING, transport_factory=router.transport, clock=clock)
+    return client(router, SYNCING, sync=sync), clock
+
+
+def test_a_changed_record_for_an_accepted_pair_is_progress():
+    """A new description for the same file is a new record: re-sending it is not a stuck pair."""
+    router = Router(outcome="not_ready", missing=lambda sent: sent)
+    http, _ = syncing_client(router)
+    http.post("/relay/v1/guidance", json=BODY, headers=AUTH)
+    renamed = dict(BODY, assets=[dict(SKILL, description="Merge pdf"), TOOL])
+    http.post("/relay/v1/guidance", json=renamed, headers=AUTH)
+    assert len(uploads(router)) == 2
+    assert status(http)["consecutive_failures"] == 0  # The skill's record changed: progress.
+    http.post("/relay/v1/guidance", json=renamed, headers=AUTH)
+    assert len(uploads(router)) == 3
+    assert status(http)["consecutive_failures"] == 1  # The same records again: no progress.
+
+
+def test_a_sync_whose_missing_pairs_were_all_rejected_before_waits():
+    router = Router(
+        outcome="not_ready", missing=lambda sent: sent, reject=lambda item: "invalid_record"
+    )
+    http, clock = syncing_client(router)
+    http.post("/relay/v1/guidance", json=BODY, headers=AUTH)
+    assert len(uploads(router)) == 2  # Both rejected; the skill once more without its file.
+    http.post("/relay/v1/guidance", json=BODY, headers=AUTH)
+    body = status(http)
+    assert len(uploads(router)) == 2 and len(router.syncs) == 4  # find_missing, no upload.
+    assert body["last_outcome"] == "synced" and body["rejected"] == 2
+    assert body["consecutive_failures"] == 1 and body["retry_after_ms"] == 30000
+    clock.now += 29
+    http.post("/relay/v1/guidance", json=BODY, headers=AUTH)
+    assert len(router.syncs) == 4  # Within the wait: not even a find_missing.
+
+
+def test_a_failed_find_missing_is_reported_with_zero_counts():
+    router = Router(outcome="not_ready", missing=lambda sent: sent)
+    http, _ = syncing_client(router)
+    http.post("/relay/v1/guidance", json=BODY, headers=AUTH)
+    assert status(http)["missing"] == 2
+    router.sync_status = 500
+    http.post("/relay/v1/guidance", json=BODY, headers=AUTH)
+    body = status(http)
+    assert body["last_outcome"] == "failed" and body["last_inference"] is None
+    assert [body[k] for k in ("missing", "accepted", "rejected", "files_sent")] == [0, 0, 0, 0]

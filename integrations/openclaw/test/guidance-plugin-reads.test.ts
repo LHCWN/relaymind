@@ -92,3 +92,60 @@ describe("reading skill files", () => {
     expect(statSync.mock.calls.filter(([p]) => p === path)).toHaveLength(20_000);
   });
 });
+
+// RM47 (spec 0.72): hashing whole skill files is bounded per turn, so a large catalog never blocks
+// the host for long. A skill past the budget is offered by description and read on a later turn.
+describe("the per-turn hashing budget", () => {
+  const big = (name: string) =>
+    write(name, `---\nname: ${name}\ndescription: Skill ${name}\n---\n` + "x".repeat(600_000));
+
+  it("offers a skill past the budget without file fields and reads it on a later turn", () => {
+    const first = big("first");
+    const second = big("second");
+    const budget = { bytes: 1_000_000 };
+    expect(readSkillInfo({ name: "first", source: { filePath: first } }, budget).file).not.toBeNull();
+    expect(readSkillInfo({ name: "second", source: { filePath: second } }, budget).file).toBeNull();
+    expect(budget.bytes).toBeLessThan(600_000);
+    // Not cached without its hash: the next turn's budget reads it.
+    const next = { bytes: 1_000_000 };
+    expect(readSkillInfo({ name: "second", source: { filePath: second } }, next).file).not.toBeNull();
+    // A cached skill costs no budget.
+    const empty = { bytes: 0 };
+    expect(readSkillInfo({ name: "first", source: { filePath: first } }, empty).file).not.toBeNull();
+  });
+
+  it("reads at most 64 MiB of skill files in one turn", async () => {
+    const skills = Array.from({ length: 70 }, (_, i) => {
+      const path = write(`s${i}`, `---\nname: s${i}\ndescription: Skill ${i}\n---\n` + "x".repeat(1_000_000));
+      return { name: `s${i}`, source: { filePath: path, fileHost: "gateway" } };
+    });
+    const handlers: Record<string, Function> = {};
+    plugin.register({
+      pluginConfig: { baseUrl: "http://127.0.0.1:8080/v1" },
+      config: { skills: { limits: { maxSkillsInPrompt: 0, maxSkillsLoadedPerSource: 100_000 } } },
+      logger: { info() {}, warn() {}, error() {}, debug() {} },
+      on: (name: string, handler: Function) => {
+        handlers[name] = handler;
+      },
+      runtime: { agent: { session: { getSessionEntry: async () => ({ skillsSnapshot: { skills } }) } } },
+    });
+    const bodies: any[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        bodies.push(JSON.parse(String(init.body)));
+        return new Response(JSON.stringify({ picks: [] }), { status: 200 });
+      }),
+    );
+    const turn = () => handlers.before_prompt_build({ prompt: "merge two pdf files", messages: [] }, { agentId: "main", sessionKey: "k", trigger: "user" });
+    readSync.mockClear();
+    await turn();
+    expect(bytesRead()).toBeLessThanOrEqual(64 * 1024 * 1024 + 70 * 32_768 + 70);
+    const hashed = (body: any) => body.assets.filter((a: any) => a.content_hash).length;
+    expect(hashed(bodies[0])).toBeGreaterThan(0);
+    expect(hashed(bodies[0])).toBeLessThan(70);
+    expect(bodies[0].assets).toHaveLength(70); // Every skill is still offered.
+    await turn();
+    expect(hashed(bodies[1])).toBe(70); // The rest are read on the next turn.
+  });
+});
