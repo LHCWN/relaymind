@@ -20,7 +20,6 @@ import secrets
 import tempfile
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -167,8 +166,9 @@ def _semantics(row: Mapping, case_id: str) -> dict:
     )
 
 
-def _now():
-    return datetime.now(UTC)
+def _now(arm: EpisodeArm):
+    """The episode's own clock; feedback must never read the real wall clock."""
+    return arm.service.clock.utc_now()
 
 
 async def _correct(arm: EpisodeArm, recommendation_id, target: Mapping, revision: int, key: str):
@@ -196,7 +196,7 @@ async def _correct(arm: EpisodeArm, recommendation_id, target: Mapping, revision
         key,
         request_digest("POST", endpoint, recommendation_id, body),
     )
-    response = arm.feedback.create(arm.action, recommendation_id, body, claim, now=_now())
+    response = arm.feedback.create(arm.action, recommendation_id, body, claim, now=_now(arm))
     if response.status != 200:
         raise WholeTaskRejected("correction_refused")
     feedback_id = response.body["feedback_id"]
@@ -226,7 +226,7 @@ async def _reset(arm: EpisodeArm, revision: int) -> None:
         "reset",
         request_digest("POST", endpoint, None, body),
     )
-    response = arm.feedback.reset(arm.action, revision, claim, now=_now())
+    response = arm.feedback.reset(arm.action, revision, claim, now=_now(arm))
     if response.status != 200:
         raise WholeTaskRejected("reset_refused")
 
