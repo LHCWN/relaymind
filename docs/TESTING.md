@@ -2798,11 +2798,13 @@ RelayMind commit (and whether its tracked files were clean) and the asset-router
 together; it says nothing about ranking quality with a real model. `tests/test_router_interop_harness.py` checks
 the harness itself in the default run.
 In CI, `.github/workflows/router-interop.yml` runs the same command at the commit in its `ROUTER_REV` when guidance
-sync or the harness changes, and on demand with another exact commit. The clone uses a read-only deploy key of
-asset-router stored as the `ROUTER_DEPLOY_KEY` secret: generate a key pair, add the public key to asset-router
-under Settings, Deploy keys (read access only), and add the private key to this repository's Actions secrets.
-Without the secret nothing can be checked, so the job fails with an error that says interop was not validated;
-it is never green without a run. A run attaches its result JSON and shows it in the job summary. Move
+sync or the harness changes, and on demand with another exact commit. LHCWN does not allow deploy keys, so access
+comes from a GitHub App owned by the organization (`relaymind-interop`) with one permission, Contents: read-only,
+installed only on asset-router. Its App ID and a private key it generated are this repository's Actions secrets
+`ROUTER_APP_ID` and `ROUTER_APP_PRIVATE_KEY`. The job turns them into a token that lasts one hour and uses it only
+to fetch the exact router commit; the token is not written to disk or passed to the router's `npm ci` or the tests.
+To revoke access, uninstall the app from asset-router or delete its private key. Without the secrets nothing can
+be checked, so the job fails with an error that says interop was not validated; it is never green without a run. A run attaches its result JSON and shows it in the job summary. Move
 `ROUTER_REV` only to a commit that passed.
 
 Live and separate, because they spend on a real model:

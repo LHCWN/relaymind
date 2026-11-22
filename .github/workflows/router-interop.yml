@@ -6,8 +6,11 @@ name: Router interop
 # deterministic double, so a pass says the two programs interoperate, never how well a real
 # model ranks.
 #
-# asset-router is private. The clone uses a read-only deploy key of that repository, stored
-# here as the ROUTER_DEPLOY_KEY secret. Without the secret (a fork, or before it is set up)
+# asset-router is private. A GitHub App installed only on asset-router, with read access to
+# its contents, gives this job a token that lasts one hour; the app's ID and private key are
+# the ROUTER_APP_ID and ROUTER_APP_PRIVATE_KEY secrets. The token is used only to fetch the
+# exact router commit and is never written to disk or passed on, so neither the router's
+# npm ci nor the tests see it. Without the secrets (a fork, or before they are set up)
 # nothing can be checked, so the job fails and says why: an unavailable check is never green.
 # The runner also fails a run in which any interop test skipped or none ran, and writes a
 # result naming both commits, attached to the run.
@@ -55,30 +58,54 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Deploy key
+      - name: App credentials
         id: key
         env:
-          KEY: ${{ secrets.ROUTER_DEPLOY_KEY }}
+          APP_ID: ${{ secrets.ROUTER_APP_ID }}
+          APP_KEY: ${{ secrets.ROUTER_APP_PRIVATE_KEY }}
         run: |
-          if [ -z "$KEY" ]; then
-            message="ROUTER_DEPLOY_KEY is not set: asset-router interop was NOT validated for this commit."
+          if [ -z "$APP_ID" ] || [ -z "$APP_KEY" ]; then
+            message="ROUTER_APP_ID or ROUTER_APP_PRIVATE_KEY is not set: asset-router interop was NOT validated for this commit."
             echo "::error::$message"
             {
               echo "## Router interop: not validated"
               echo
-              echo "$message No interop test ran. See docs/TESTING.md to set up the deploy key."
+              echo "$message No interop test ran. See docs/TESTING.md to set up the GitHub App."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-          mkdir -p ~/.ssh
-          printf '%s\n' "$KEY" > ~/.ssh/asset_router
-          chmod 600 ~/.ssh/asset_router
-          # GitHub's published host key, so the clone never trusts a first answer.
-          echo "github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl" >> ~/.ssh/known_hosts
           echo "present=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/create-github-app-token@v1
+        id: token
+        if: steps.key.outputs.present == 'true'
+        with:
+          app-id: ${{ secrets.ROUTER_APP_ID }}
+          private-key: ${{ secrets.ROUTER_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: asset-router
 
       - uses: actions/checkout@v4
         if: steps.key.outputs.present == 'true'
+
+      - name: Fetch the router commit
+        if: steps.key.outputs.present == 'true'
+        env:
+          REV: ${{ inputs.rev || env.ROUTER_REV }}
+          TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          case "$REV" in
+            *[!0-9a-f]* | "") echo "::error::not a full commit: $REV"; exit 2 ;;
+          esac
+          [ ${#REV} -eq 40 ] || { echo "::error::not a full commit: $REV"; exit 2; }
+          header=$(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)
+          echo "::add-mask::$header"
+          # Where the runner looks for this commit; it then needs no access of its own.
+          dir="$RUNNER_TEMP/relaymind-interop/asset-router-$REV"
+          git init -q "$dir"
+          git -C "$dir" remote add origin "https://github.com/${{ github.repository_owner }}/asset-router.git"
+          git -C "$dir" -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $header" \
+            fetch -q --depth 1 origin "$REV"
 
       - uses: actions/setup-python@v5
         if: steps.key.outputs.present == 'true'
@@ -100,7 +127,6 @@ jobs:
         if: steps.key.outputs.present == 'true'
         env:
           REV: ${{ inputs.rev || env.ROUTER_REV }}
-          GIT_SSH_COMMAND: ssh -i ~/.ssh/asset_router -o IdentitiesOnly=yes
         run: |
           python scripts/asset_router_interop.py --rev "$REV" \
             --cache "$RUNNER_TEMP/relaymind-interop" \

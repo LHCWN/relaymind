@@ -180,10 +180,16 @@ def test_the_interop_workflow_runs_the_runner_at_a_pinned_commit():
     commands = "\n".join(step.get("run", "") for step in job["steps"])
     assert "scripts/asset_router_interop.py" in commands
     assert '--rev "$REV"' in commands and "--result" in commands
-    # Without the deploy key nothing is checked, and the job must not end green.
+    # Without the app's secrets nothing is checked, and the job must not end green.
     key_step = job["steps"][0]["run"]
     assert "::error::" in key_step and "NOT validated" in key_step
     assert key_step.split("fi")[0].rstrip().endswith("exit 1")
+    # The app token reaches only the step that fetches the router commit: not the router's
+    # npm ci, not the tests.
+    holders = [step for step in job["steps"] if "steps.token.outputs.token" in str(step)]
+    assert [step["name"] for step in holders] == ["Fetch the router commit"]
+    (interop,) = [s for s in job["steps"] if s.get("name") == "Interop at the router commit"]
+    assert "secrets." not in str(interop) and "token" not in str(interop).lower()
     triggers = workflow[True]  # YAML 1.1 reads the bare key "on" as true.
     for path in (
         ".github/workflows/router-interop.yml",

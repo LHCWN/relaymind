@@ -44,8 +44,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `find_missing` failed reports zero counts. The plugin reads at most 64 MiB of skill files whole in one turn; a
   skill past that is offered by its description and read on a later turn.
   A `Router interop` workflow runs the same check in CI at a pinned asset-router commit (`1e6d4e5`, where all ten
-  cases pass against RelayMind `c79b53d`, versions A, B, A, B of one skill included) when guidance sync or the harness changes; it needs a read-only deploy key of asset-router as the
-  `ROUTER_DEPLOY_KEY` secret, and without it the job fails as not validated instead of passing with nothing run.
+  cases pass against RelayMind `c79b53d`, versions A, B, A, B of one skill included) when guidance sync or the harness changes; it reads asset-router through the organization's
+  `relaymind-interop` GitHub App (Contents: read-only, installed only on asset-router, secrets `ROUTER_APP_ID`
+  and `ROUTER_APP_PRIVATE_KEY`), whose one-hour token only fetches the router commit, and without those secrets the
+  job fails as not validated instead of passing with nothing run.
   Under the runner and in CI a missing router checkout fails instead of skipping, a run with any skipped or no
   interop test fails as `not_validated`, and `--result` records the outcome with the RelayMind and asset-router
   commits. Tests that failed under parallel load now hold: the

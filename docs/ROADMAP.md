@@ -1892,7 +1892,7 @@ gateway against the real asset-router at an exact commit with deterministic infe
 (`scripts/asset_router_interop.py`). At asset-router `1e6d4e5` (PR LHCWN/asset-router#1 head) all ten interop
 cases pass against RelayMind `c79b53d`, including one skill switched through versions A, B, A, B; at `853dada` and
 `b54416b` the first nine passed; at `c3cc835` none did ([evidence](EVIDENCE.md#2026-11-22--guidance-gateway-against-asset-router-rm47-ac42)).
-The `Router interop` workflow runs them in CI at the pinned `1e6d4e5`; until asset-router's deploy key is set up
-it fails as not validated. The gateway remembers only the last accepted target of each asset, so switching back to
+The `Router interop` workflow runs them in CI at the pinned router commit, with read access to asset-router from
+the organization's `relaymind-interop` GitHub App; without the app's secrets it fails as not validated. The gateway remembers only the last accepted target of each asset, so switching back to
 an earlier version or description is progress and starts no wait; a router that keeps one version re-indexes on
 each such change (spec section 7.7, open finding). Not done: the same sync for recommendations, and any run with a real host or real inference.
