@@ -21,7 +21,8 @@
   with optional keywords and a picker through any OpenAI-compatible model (RM28, RM45).
 - `guidance_turn_benchmark.py` — real full turns through OpenClaw, the guidance plugin, a
   gateway and an external model, including similar skills, MCP tools and the strict limit
-  (RM16, RM45, RM46); see `docs/guidance.md`.
+  (RM16, RM45, RM46); see `docs/guidance.md`. `--third-party-sync-url` syncs a selector
+  that builds an index with free warm-up turns before the measured ones (RM47).
 - `guidance_similar_benchmark.py` — the guidance stages or your selector over families of similar
   skills, with follow-ups, undecided and unrelated prompts (RM16, RM45). `--sync-url` syncs a
   selector that builds an index before any case runs (RM47).

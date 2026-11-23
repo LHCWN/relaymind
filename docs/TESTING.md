@@ -2787,6 +2787,9 @@ router that answers select and sync, and once against a real loopback server thr
 `tests/test_guidance_similar_benchmark.py` runs the benchmark's `--sync-url` warm-up against the reference selector
 (`scripts/guidance_selector_server.py --sync-root`): without it every case falls back to word match, and with it
 every upload is the record alone and every case is the selector's own answer.
+`tests/test_guidance_turn_benchmark.py` checks the turn harness's warm-up: the recorder answers a warm-up turn
+itself and records nothing, the proxy in front of the selector passes `/select` and `/sync` on and sees the full
+ranking, and an arm whose selector never gets ready stops before any measured turn.
 
 Interop with asset-router (RM47, AC42). This checks that the guidance gateway and the real asset-router work
 together. Inference is a deterministic double, so a pass says nothing about ranking quality.
@@ -2826,6 +2829,8 @@ skills, and `scripts/guidance_turn_benchmark.py` runs real full turns, with `--s
 `--tools` for MCP tools over a fake server, and strict arms. Develop on `--split development`, report on
 `--split holdout`. Run from one frozen commit and run the default arm twice, since identical runs differ.
 The turn harness refuses a setup that did not apply, and refuses an arm with a missing input before it spends.
+With `--third-party-sync-url` it also refuses to measure a third-party arm until the selector answers the host's
+real offer with its full ranking.
 
 A test double of the host cannot show what the host really sends. Real runs found faults the unit tests had
 passed: no descriptions sent on `agent exec`, a relative `read` past the strict limit because the tool hook

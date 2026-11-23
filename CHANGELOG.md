@@ -21,6 +21,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   ranking; otherwise it stops with nothing measured (`--sync-wait-s`, 600 s by default). The assets are JSON with no
   `SKILL.md`, so each upload is the record alone (`content: null`), and the selector indexes the asset from it.
   A new `interop` case runs this against asset-router `e02157e`.
+- `scripts/guidance_turn_benchmark.py --third-party-sync-url` (spec 0.73; RM47; AC42): the same for real turns.
+  Its third-party arms set `fallback = false`, so a cold indexing selector gave those turns no hint. Before the
+  measured turns, the harness now runs warm-up turns that its own recorder answers, so no model call is paid. The
+  real plugin offers the host's skills with their files, the gateway syncs after each `not_ready`, and a loopback
+  proxy in front of the selector shows when it answers with its full ranking (`--sync-wait-s`, 600 s by default).
+  `sync.json` records the warm-up, the gateway's sync counts and the select outcomes of the measured turns.
+  `--third-party-name` and `--third-party-version` name the selector, which the gateway checks; before, the arms
+  always named `example_intent`.
 - Specification 0.72 (#290; RM47; AC42; section 7.7): guidance can keep a third-party selector's index in step
   with the host's skills.
   - The plugin sends each skill's SHA-256, absolute path and size (files up to 1 MiB, at most 64 MiB read whole per

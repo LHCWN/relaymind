@@ -192,7 +192,7 @@ _GENERATOR_ANCHORS = {
     "docs/SPECIFICATION.md": frozenset(
         {
             # 0.73 early selector answers (RM47, AC42; #290); subject to the owner's review.
-            ("dde6e5c27b1f80e6a62b4909a3bee5252fe1bad48d330a42528173f71ca861b9", 677049),
+            ("d58d6822f305d9066608886eeb1ba70ef1a031e2cb2ef055f33a28acabcc047c", 677676),
             # 0.72 guidance selector sync (RM47, AC42; #290); subject to the owner's review.
             ("6ea4296d7331e0dd51741c3bce71341ea9e8ba6e7292cff7c7a465898ba5ae38", 675452),
             # 0.71 OpenClaw guidance setup helper (AC41); subject to the owner's review.

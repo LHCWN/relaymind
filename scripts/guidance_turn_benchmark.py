@@ -9,6 +9,15 @@ Add --similar holdout --lanes similar_en,similar_zh for similar skills, or --too
 With --tools the right answer is choosing the tool, by describing or calling it, because a prompt
 may hold too little to call it for real.
 
+A third-party selector that builds an index answers not_ready to skills it has not indexed, and the
+third-party arms set fallback = false, so those turns would get no hint. Add
+--third-party-sync-url http://127.0.0.1:8940/sync and, before the measured turns of such an arm,
+the harness runs warm-up turns whose model answer it gives itself, so no model call is paid. In
+each, the real plugin offers the host's real skills with their files, and the gateway syncs the
+selector after its not_ready (spec 0.73 section 7.7; RM47). A loopback proxy in front of the
+selector sees when it answers with its full ranking. Then the measured turns start, and sync.json
+records the warm-up and the select outcomes of the measured turns.
+
   RELAYMIND_EXTERNAL_API_KEY=... python scripts/guidance_turn_benchmark.py \\
       --catalog-dir /var/tmp/rm/catalog-v3 \\
       --cases evaluation/assets/matrix-development/cases.v3.json \\
@@ -33,6 +42,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -55,6 +65,8 @@ READ_ONLY = ["read", "skills_read", "skills_search"]
 HINT = "[RelayMind guidance, not from the user]"
 MCP_SERVER = "gh"
 PREFLIGHT_EXTRA = 3
+# Between warm-up turns; each turn starts a host, which takes seconds already.
+WARM_UP_POLL_S = 1.0
 # The whole of a tool result that says the call was refused. A skill's own text may use the same
 # words, such as "blocked", so only the envelope of the host or the plugin counts.
 REFUSAL_PREFIXES = ("RelayMind limit:", "Validation failed for tool")
@@ -426,7 +438,18 @@ def _toml_string(value) -> str:
     return json.dumps(str(value), ensure_ascii=False)
 
 
-def gateway_toml(arm, directory, *, port, local, third_party_url=None, external=None):
+def gateway_toml(
+    arm,
+    directory,
+    *,
+    port,
+    local,
+    third_party_url=None,
+    external=None,
+    sync_url=None,
+    selector=None,
+):
+    """The gateway's file; `selector` is the third-party (name, version), by default the arm's."""
     q = _toml_string
     lines = [
         f'[server]\nhost = "127.0.0.1"\nport = {port}',
@@ -455,13 +478,15 @@ def gateway_toml(arm, directory, *, port, local, third_party_url=None, external=
     if arm.third_party:
         guidance += [
             'primary = "http"',
-            f"name = {q(arm.third_party)}",
-            'version = "1"',
+            f"name = {q(selector[0] if selector else arm.third_party)}",
+            f"version = {q(selector[1] if selector else '1')}",
             f"url = {q(third_party_url)}",
             # A selector that is down must give no hint, so the preflight stops the arm instead
             # of measuring word match under the selector's name.
             "fallback = false",
         ]
+        if sync_url:  # The gateway syncs the selector after each not_ready (RM47).
+            guidance.append(f"sync_url = {q(sync_url)}")
     lines.append("\n".join(guidance))
     return "\n".join(lines) + "\n"
 
@@ -491,8 +516,12 @@ class Recorder:
                 self.wfile.write(body)
 
             def do_POST(self):
-                run = self.path.split("/")[2]
+                route, run = self.path.split("/")[1:3]
                 request = json.loads(self.rfile.read(int(self.headers["content-length"])))
+                if route == "warmup":  # Answered here: the provider is never called.
+                    self.close_connection = True
+                    self.answer(200, warm_up_reply(request.get("model")), "text/event-stream")
+                    return
                 request["reasoning_effort"] = "low"
                 request.setdefault("stream_options", {})["include_usage"] = True
                 if "max_completion_tokens" in request:
@@ -597,6 +626,134 @@ class Recorder:
         """Wait until every exchange of a run is written: the host can exit before the last one."""
         with self.idle:
             return self.idle.wait_for(lambda: not self.active.get(run), timeout)
+
+
+def warm_up_reply(model) -> bytes:
+    """A whole streamed answer that says "ok" and stops, for a warm-up turn."""
+    head = dict(id="warm-up", object="chat.completion.chunk", created=0, model=model or "warm-up")
+    chunks = [
+        dict(head, choices=[dict(index=0, delta=dict(role="assistant", content="ok"))]),
+        dict(
+            head,
+            choices=[dict(index=0, delta={}, finish_reason="stop")],
+            usage=dict(prompt_tokens=0, completion_tokens=0, total_tokens=0),
+        ),
+    ]
+    events = [f"data: {json.dumps(chunk)}\n\n" for chunk in chunks] + ["data: [DONE]\n\n"]
+    return "".join(events).encode()
+
+
+class SelectorProxy:
+    """A loopback proxy in front of a third-party selector: /select and /sync go on unchanged.
+
+    It keeps only each select's outcome, never a prompt, an asset or a path."""
+
+    def __init__(self, select_url, sync_url):
+        import httpx
+
+        routes = {"/select": select_url, "/sync": sync_url}
+        proxy = self
+        self.outcomes = []
+        self._lock = threading.Lock()
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def do_POST(self):
+                body = self.rfile.read(int(self.headers.get("content-length", 0)))
+                target = routes.get(self.path)
+                if target is None:
+                    self.send_error(404)
+                    return
+                try:
+                    response = httpx.post(
+                        target,
+                        content=body,
+                        headers={"Content-Type": "application/json"},
+                        timeout=600,
+                        trust_env=False,
+                    )
+                except httpx.HTTPError:
+                    self.send_error(502)
+                    return
+                if self.path == "/select" and response.status_code == 200:
+                    proxy._saw(response)
+                self.send_response(response.status_code)
+                self.send_header(
+                    "Content-Type", response.headers.get("content-type", "application/json")
+                )
+                self.send_header("Content-Length", str(len(response.content)))
+                self.end_headers()
+                self.wfile.write(response.content)
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def _saw(self, response):
+        try:
+            result = response.json()
+            outcome = str(result.get("outcome"))
+            early = str(result.get("mechanism") or "").endswith(":early")
+        except (ValueError, AttributeError):
+            outcome, early = "invalid", False
+        with self._lock:
+            self.outcomes.append((outcome, early))
+
+    def ready(self) -> bool:
+        """The last select was the selector's full ranking: ranked or no_match, and not early."""
+        with self._lock:
+            if not self.outcomes:
+                return False
+            outcome, early = self.outcomes[-1]
+        return outcome in ("ranked", "no_match") and not early
+
+    def mark(self) -> int:
+        with self._lock:
+            return len(self.outcomes)
+
+    def counts(self, since=0) -> dict:
+        """Select outcomes from `since` on; an early answer counts as "early", not "ranked"."""
+        with self._lock:
+            seen = self.outcomes[since:]
+        return dict(Counter("early" if early else outcome for outcome, early in seen))
+
+    def close(self):
+        self.server.shutdown()
+        self.server.server_close()
+
+
+def gateway_sync_status(gateway_url, token) -> dict:
+    """The gateway's own sync counts (GuidanceSyncStatusV1): no asset name, path or text."""
+    import httpx
+
+    base = gateway_url.removesuffix("/v1")
+    answer = httpx.get(
+        f"{base}/relay/v1/guidance/sync",
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=10,
+        trust_env=False,
+    )
+    answer.raise_for_status()
+    return answer.json()
+
+
+def warm_up(turn, ready, *, wait_s, poll_s=WARM_UP_POLL_S, clock=time.monotonic, sleep=time.sleep):
+    """Run warm-up turns until the selector answers the host's real offer with its full ranking.
+
+    Raises when it is not ready within wait_s, so no turn is measured with a cold selector."""
+    started, exits = clock(), []
+    while True:
+        exits.append(turn(len(exits)))
+        turns = len(exits)
+        if ready():
+            return dict(
+                outcome="ready", turns=turns, s=round(clock() - started, 1), host_exits=exits
+            )
+        if clock() - started >= wait_s:
+            raise RuntimeError(f"the selector is not ready after {turns} warm-up turns and sync")
+        sleep(poll_s)
 
 
 # One folder name: letters, digits, . _ - , never .. or a separator, so a skill stays in its target.
@@ -969,6 +1126,10 @@ def setup_problem(args) -> str | None:
             return f"arm {name} needs --third-party-url"
         if arm.keywords == "local" and not (args.local_manifest and args.local_artifact):
             return f"arm {name} needs --local-manifest and --local-artifact"
+    if getattr(args, "third_party_sync_url", None) and not any(
+        ARMS[name].third_party for name in args.arms.split(",")
+    ):
+        return "--third-party-sync-url needs a third-party arm"
     return None
 
 
@@ -992,6 +1153,21 @@ def main():
     parser.add_argument("--local-artifact")
     parser.add_argument("--local-url", default="http://127.0.0.1:8033")
     parser.add_argument("--third-party-url")
+    parser.add_argument(
+        "--third-party-name",
+        help="The name your selector reports, which the gateway checks. Default: the arm's.",
+    )
+    parser.add_argument("--third-party-version", default="1")
+    parser.add_argument(
+        "--third-party-sync-url",
+        help="Your selector's /sync: sync it with free warm-up turns before the measured ones.",
+    )
+    parser.add_argument(
+        "--sync-wait-s",
+        type=float,
+        default=600.0,
+        help="How long the warm-up may take before the arm stops unmeasured (default 600).",
+    )
     parser.add_argument("--keep-captures", action="store_true", help="Keep raw exchanges for debug")
     parser.add_argument("--arms", default=",".join(ARMS))
     parser.add_argument(
@@ -1033,42 +1209,65 @@ def main():
     env = {**os.environ, "PYTHONPATH": str(ROOT / "src"), "PYTHONDONTWRITEBYTECODE": "1"}
     local = (args.local_manifest, args.local_artifact, args.local_url)
 
-    def one(arm, case, *, gateway_url, token):
-        run = run_name(arm.name, case["id"])
+    def host_turn(arm, run, text, *, route, gateway_url, token):
+        """One host turn in a fresh state folder; its model calls go to the recorder's route."""
         directory = output / "state" / run
         shutil.rmtree(directory, ignore_errors=True)
         directory.mkdir(parents=True)
+        provider = f"http://127.0.0.1:{recorder.port}/{route}/{run}/v1"
+        config = openclaw_config(arm, provider, args.model, gateway_url, tools)
+        (directory / "c.json").write_text(json.dumps(config), "utf-8")
+        return run_host(
+            [
+                str(OPENCLAW),
+                "agent",
+                "exec",
+                "--config",
+                str(directory / "c.json"),
+                "--state-dir",
+                str(directory),
+                "--cwd",
+                str(workspace),
+                "--model",
+                f"glm/{args.model}",
+                "--json",
+                "--timeout",
+                "150",
+                text,
+            ],
+            host_env(output / "home", directory, token),
+            timeout=200,
+        )
+
+    def warm_turn(arm, number, *, gateway_url, token):
+        """A turn only for the plugin's offer: the recorder answers it, and nothing is kept."""
+        run = run_name(f"warmup_{arm.name}", number)
+        with disposable(output / "state" / run, output / "caps" / f"{run}.jsonl", keep=False):
+            return host_turn(
+                arm,
+                run,
+                sample[0]["task_text"],
+                route="warmup",
+                gateway_url=gateway_url,
+                token=token,
+            )
+
+    def one(arm, case, *, gateway_url, token):
+        run = run_name(arm.name, case["id"])
+        directory = output / "state" / run
         capture = output / "caps" / f"{run}.jsonl"
         capture.unlink(missing_ok=True)
-        config = openclaw_config(
-            arm, f"http://127.0.0.1:{recorder.port}/run/{run}/v1", args.model, gateway_url, tools
-        )
-        (directory / "c.json").write_text(json.dumps(config), "utf-8")
         # The run's state and capture go even when grading fails: a capture holds the whole
         # prompt and every model answer, not only the metrics.
         with disposable(directory, capture, keep=args.keep_captures):
-            child = host_env(output / "home", directory, token)
             started = time.time()
-            exit_code = run_host(
-                [
-                    str(OPENCLAW),
-                    "agent",
-                    "exec",
-                    "--config",
-                    str(directory / "c.json"),
-                    "--state-dir",
-                    str(directory),
-                    "--cwd",
-                    str(workspace),
-                    "--model",
-                    f"glm/{args.model}",
-                    "--json",
-                    "--timeout",
-                    "150",
-                    case["task_text"],
-                ],
-                child,
-                timeout=200,
+            exit_code = host_turn(
+                arm,
+                run,
+                case["task_text"],
+                route="run",
+                gateway_url=gateway_url,
+                token=token,
             )
             recorder.wait_idle(run)
             rows = read_jsonl(capture)
@@ -1084,9 +1283,15 @@ def main():
             return outcome
 
     (output / "home").mkdir(exist_ok=True)
+    synced = {}
     for index, name in enumerate(args.arms.split(",")):
         arm = ARMS[name]
-        gateway, gateway_url, token = None, None, None
+        gateway, gateway_url, token, proxy = None, None, None, None
+        selector_url, sync_url = args.third_party_url, None
+        if arm.third_party and args.third_party_sync_url:
+            # The gateway reaches the selector through the proxy, which sees each select outcome.
+            proxy = SelectorProxy(args.third_party_url, args.third_party_sync_url)
+            selector_url, sync_url = f"{proxy.url}/select", f"{proxy.url}/sync"
         if arm.guided:
             arm_dir = output / "gateway" / name
             shutil.rmtree(arm_dir, ignore_errors=True)
@@ -1099,14 +1304,25 @@ def main():
                     arm_dir,
                     port=port,
                     local=local,
-                    third_party_url=args.third_party_url,
+                    third_party_url=selector_url,
                     external=(args.model_base_url, args.model),
+                    sync_url=sync_url,
+                    selector=(args.third_party_name or arm.third_party, args.third_party_version),
                 ),
                 "utf-8",
             )
             gateway, token = start_gateway(toml, env)
             gateway_url = f"http://127.0.0.1:{port}/v1"
         try:
+            if proxy is not None:
+                warm = warm_up(
+                    partial(warm_turn, arm, gateway_url=gateway_url, token=token),
+                    proxy.ready,
+                    wait_s=args.sync_wait_s,
+                )
+                print(f"{name}: selector ready after {warm['turns']} warm-up turns", flush=True)
+                warm["gateway_sync"] = gateway_sync_status(gateway_url, token)
+                synced[name] = dict(warm_up=warm, since=proxy.mark())
             checked = preflight_cases(sample)
             any_hint = False
             for case in checked:
@@ -1147,6 +1363,12 @@ def main():
         finally:
             if gateway is not None:
                 stop_gateway(gateway)
+            if proxy is not None:
+                if name in synced:
+                    # A not_ready in a measured turn left that turn without a hint: count it.
+                    synced[name]["measured_selects"] = proxy.counts(synced[name].pop("since"))
+                    (output / "sync.json").write_text(json.dumps(synced, indent=1), "utf-8")
+                proxy.close()
     runs = read_jsonl(results)
     summary = json.dumps(summarize(runs), indent=1)
     (output / "summary.json").write_text(summary, "utf-8")

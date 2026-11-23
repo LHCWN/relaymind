@@ -394,5 +394,13 @@ real full turns through OpenClaw, the plugin, a gateway and an external model, w
 skills and `--tools` for MCP tools. Run the default arm twice: identical runs differ, and that difference is the
 noise any improvement must beat.
 
+Its third-party arms set `fallback = false`. So, against a selector that builds an index, give
+`--third-party-sync-url` (your selector's `/sync`), and `--third-party-name` and `--third-party-version` with the
+name and version it reports. Before the measured turns, the harness runs warm-up turns that it answers itself, so
+they cost nothing. In each one, the real plugin offers the host's skills with their files, and the gateway syncs the
+selector. The measured turns start once the selector answers with its full ranking. If that takes longer than
+`--sync-wait-s` (600 s by default), the arm stops with no turn measured. `sync.json` in the output folder records the
+warm-up, the gateway's sync counts, and how the selector answered the measured turns.
+
 Results so far are in [EVIDENCE.md](EVIDENCE.md#2026-11-05--per-prompt-guidance-development-runs-284). They are
 development diagnostics: the expected answers are developer-authored, and they do not satisfy AC25 to AC37.

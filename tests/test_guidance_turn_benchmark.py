@@ -1279,3 +1279,216 @@ def test_a_failed_run_leaves_no_capture_or_state(tmp_path):
     with pytest.raises(RuntimeError), harness.disposable(state, capture, keep=False):
         raise RuntimeError("grading failed")
     assert not state.exists() and not capture.exists()
+
+
+# --- an indexing selector synced before the measured turns (spec 0.73 7.7; RM47; AC42) --------
+
+
+def test_the_recorder_answers_a_warm_up_turn_itself_and_records_nothing(tmp_path):
+    """A warm-up turn only makes the plugin offer the host's skills: no model call may be paid."""
+    import socket
+
+    import httpx
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        closed = probe.getsockname()[1]
+    recorder = harness.Recorder(f"http://127.0.0.1:{closed}/v1", "key", tmp_path)
+    try:
+        answer = httpx.post(
+            f"http://127.0.0.1:{recorder.port}/warmup/w1/v1/chat/completions",
+            json=dict(model="m", messages=[], stream=True),
+            timeout=10,
+            trust_env=False,
+        )
+    finally:
+        recorder.close()
+    assert answer.status_code == 200
+    assert answer.headers["content-type"].startswith("text/event-stream")
+    events = [line[5:].strip() for line in answer.text.splitlines() if line.startswith("data:")]
+    assert events[-1] == "[DONE]"
+    chunks = [json.loads(e) for e in events[:-1]]
+    assert chunks[-1]["choices"][0]["finish_reason"] == "stop"
+    assert not (tmp_path / "w1.jsonl").exists()
+
+
+def _selector(outcomes):
+    """A selector double: each /select answers the next outcome, and /sync answers {}."""
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    answers = iter(outcomes)
+
+    class Selector(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_POST(self):
+            self.rfile.read(int(self.headers["content-length"]))
+            if self.path == "/select":
+                outcome, mechanism = next(answers)
+                body = json.dumps(dict(outcome=outcome, mechanism=mechanism)).encode()
+            else:
+                body = b"{}"
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Selector)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+def test_the_selector_proxy_passes_exchanges_on_and_sees_when_the_selector_is_ready():
+    import httpx
+
+    selector = _selector(
+        [
+            ("not_ready", "router"),
+            ("ranked", "router:early"),
+            ("ranked", "router"),
+            ("no_match", "router"),
+            ("not_ready", "router"),
+        ]
+    )
+    base = f"http://127.0.0.1:{selector.server_address[1]}"
+    proxy = harness.SelectorProxy(f"{base}/select", f"{base}/sync")
+    try:
+
+        def post(path):
+            return httpx.post(proxy.url + path, content=b"{}", timeout=10, trust_env=False)
+
+        ready = []
+        for _ in range(3):
+            assert post("/select").status_code == 200
+            ready.append(proxy.ready())
+        assert ready == [False, False, True]
+        assert post("/sync").json() == {}
+        assert post("/other").status_code == 404
+        since = proxy.mark()
+        post("/select")
+        post("/select")
+        assert proxy.counts(since) == {"no_match": 1, "not_ready": 1}
+        assert proxy.counts() == {"not_ready": 2, "ranked": 1, "early": 1, "no_match": 1}
+    finally:
+        proxy.close()
+        selector.shutdown()
+        selector.server_close()
+
+
+def test_a_third_party_arm_syncs_through_the_proxy_when_asked():
+    arm = harness.ARMS["third_party"]
+    local = ("m", "a", "http://127.0.0.1:2")
+    synced = harness.gateway_toml(
+        arm,
+        Path("."),
+        port=1,
+        local=local,
+        third_party_url="http://127.0.0.1:3/select",
+        sync_url="http://127.0.0.1:3/sync",
+    )
+    assert "sync_url = 'http://127.0.0.1:3/sync'" in synced or (
+        'sync_url = "http://127.0.0.1:3/sync"' in synced
+    )
+    plain = harness.gateway_toml(
+        arm, Path("."), port=1, local=local, third_party_url="http://127.0.0.1:3/select"
+    )
+    assert "sync_url" not in plain
+
+
+def test_warm_up_turns_go_on_until_the_selector_is_ready():
+    turns = []
+    state = iter([False, False, True])
+
+    def turn(number):
+        turns.append(number)
+        return 0
+
+    record = harness.warm_up(
+        turn, lambda: next(state), wait_s=60, clock=lambda: 0.0, sleep=lambda s: None
+    )
+    assert turns == [0, 1, 2]
+    assert record["outcome"] == "ready" and record["turns"] == 3
+    assert record["host_exits"] == [0, 0, 0]
+
+
+def test_a_selector_never_ready_stops_the_arm_before_any_measured_turn():
+    ticks = iter(range(100))
+    with pytest.raises(RuntimeError, match="not ready"):
+        harness.warm_up(
+            lambda n: None,
+            lambda: False,
+            wait_s=5,
+            clock=lambda: float(next(ticks)),
+            sleep=lambda s: None,
+        )
+
+
+def test_a_sync_url_needs_a_third_party_arm(monkeypatch):
+    monkeypatch.setenv("RELAYMIND_EXTERNAL_API_KEY", "unit")
+    base = dict(
+        tools=False,
+        catalog_dir="c",
+        cases="d",
+        similar=None,
+        arms="third_party",
+        third_party_url="u",
+        local_manifest="m",
+        local_artifact="a",
+        third_party_sync_url="http://127.0.0.1:3/sync",
+    )
+    assert harness.setup_problem(argparse.Namespace(**base)) is None
+    message = harness.setup_problem(argparse.Namespace(**{**base, "arms": "word"}))
+    assert "--third-party-sync-url" in message
+
+
+def test_a_third_party_arm_names_the_selector_it_measures():
+    """The gateway admits only results from the selector it names, and the report says who chose."""
+    arm = harness.ARMS["third_party"]
+    local = ("m", "a", "http://127.0.0.1:2")
+    named = harness.gateway_toml(
+        arm,
+        Path("."),
+        port=1,
+        local=local,
+        third_party_url="http://127.0.0.1:3/select",
+        selector=("asset-router", "2"),
+    )
+    assert 'name = "asset-router"' in named and 'version = "2"' in named
+    default = harness.gateway_toml(
+        arm, Path("."), port=1, local=local, third_party_url="http://127.0.0.1:3/select"
+    )
+    assert 'name = "example_intent"' in default and 'version = "1"' in default
+
+
+def test_the_gateway_sync_counts_are_read_with_the_application_token():
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    seen = []
+
+    class Gateway(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            seen.append((self.path, self.headers.get("authorization")))
+            body = json.dumps(dict(last_outcome="synced", files_sent=32)).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Gateway)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        port = server.server_address[1]
+        status = harness.gateway_sync_status(f"http://127.0.0.1:{port}/v1", "tok")
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert status == dict(last_outcome="synced", files_sent=32)
+    assert seen == [("/relay/v1/guidance/sync", "Bearer tok")]

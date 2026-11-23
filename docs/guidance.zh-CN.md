@@ -278,4 +278,10 @@ python scripts/guidance_compare.py --baseline builtin=builtin.json --arm mine=my
 
 模型之后是否加载了正确的技能，是另一个问题。`scripts/guidance_turn_benchmark.py` 会通过 OpenClaw、插件、网关和外部模型运行真实的完整对话轮次；用 `--similar holdout` 测试相似技能，用 `--tools` 测试 MCP 工具。请把默认实验组运行两次：相同的运行结果也会有差异，任何改进都必须超过这种噪声。
 
+它的第三方实验组设置了 `fallback = false`。因此，如果选择器会建立索引，请加上 `--third-party-sync-url`（选择器的
+`/sync`），并用 `--third-party-name` 和 `--third-party-version` 给出选择器报告的名称和版本。在测量的轮次之前，
+测试工具会先运行几轮预热轮次，由它自己回答，所以不产生费用。每一轮中，真实的插件会提供主机的技能及其文件，网关会同步
+选择器。选择器用完整排序作答后，测量的轮次才开始。如果超过 `--sync-wait-s`（默认 600 秒），该实验组会停止，不测量任何
+轮次。输出目录中的 `sync.json` 记录预热情况、网关的同步计数，以及选择器对测量轮次的回答。
+
 目前的结果见 [EVIDENCE.md](EVIDENCE.md#2026-11-05--per-prompt-guidance-development-runs-284)。它们只是开发诊断：期望答案由开发者编写，不满足 AC25 到 AC37。
