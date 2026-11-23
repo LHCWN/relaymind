@@ -2791,7 +2791,8 @@ every upload is the record alone and every case is the selector's own answer. It
 of the data's own.
 `tests/test_guidance_turn_benchmark.py` checks the turn harness's warm-up: the recorder answers a warm-up turn
 itself and records nothing, the proxy in front of the selector passes `/select` and `/sync` on and sees the full
-ranking, and an arm whose selector never gets ready stops before any measured turn.
+ranking, and an arm whose selector never gets ready is skipped before any measured turn while the other arms
+still run. A warm-up turn whose host exits non-zero stops the run at once, because the plugin never ran.
 
 Interop with asset-router (RM47, AC42). This checks that the guidance gateway and the real asset-router work
 together. Inference is a deterministic double, so a pass says nothing about ranking quality.

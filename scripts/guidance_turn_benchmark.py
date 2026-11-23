@@ -742,18 +742,37 @@ def gateway_sync_status(gateway_url, token) -> dict:
 def warm_up(turn, ready, *, wait_s, poll_s=WARM_UP_POLL_S, clock=time.monotonic, sleep=time.sleep):
     """Run warm-up turns until the selector answers the host's real offer with its full ranking.
 
-    Raises when it is not ready within wait_s, so no turn is measured with a cold selector."""
+    The outcome is "not_ready" when that does not happen within wait_s. A warm-up turn whose
+    host exits non-zero raises at once: a broken host setup is not a cold selector."""
     started, exits = clock(), []
     while True:
-        exits.append(turn(len(exits)))
-        turns = len(exits)
-        if ready():
-            return dict(
-                outcome="ready", turns=turns, s=round(clock() - started, 1), host_exits=exits
+        code = turn(len(exits))
+        exits.append(code)
+        if code != 0:
+            raise RuntimeError(
+                f"a warm-up turn's host failed with exit {code}, so the plugin never ran"
             )
+        record = dict(turns=len(exits), s=round(clock() - started, 1), host_exits=exits)
+        if ready():
+            return dict(outcome="ready", **record)
         if clock() - started >= wait_s:
-            raise RuntimeError(f"the selector is not ready after {turns} warm-up turns and sync")
+            return dict(outcome="not_ready", **record)
         sleep(poll_s)
+
+
+def warm_arm(name, turn, proxy, synced, *, wait_s, status, **timing) -> bool:
+    """Warm up one third-party arm and record it in `synced`; False when its selector never got
+    ready. Then only that arm is skipped: the other arms still run and the summary is written."""
+    warm = warm_up(turn, proxy.ready, wait_s=wait_s, **timing)
+    warm["gateway_sync"] = status()
+    synced[name] = dict(warm_up=warm, since=proxy.mark())
+    if warm["outcome"] == "ready":
+        print(f"{name}: selector ready after {warm['turns']} warm-up turns", flush=True)
+        return True
+    print(
+        f"{name}: selector not ready after {warm['turns']} warm-up turns; arm skipped", flush=True
+    )
+    return False
 
 
 # One folder name: letters, digits, . _ - , never .. or a separator, so a skill stays in its target.
@@ -1314,15 +1333,15 @@ def main():
             gateway, token = start_gateway(toml, env)
             gateway_url = f"http://127.0.0.1:{port}/v1"
         try:
-            if proxy is not None:
-                warm = warm_up(
-                    partial(warm_turn, arm, gateway_url=gateway_url, token=token),
-                    proxy.ready,
-                    wait_s=args.sync_wait_s,
-                )
-                print(f"{name}: selector ready after {warm['turns']} warm-up turns", flush=True)
-                warm["gateway_sync"] = gateway_sync_status(gateway_url, token)
-                synced[name] = dict(warm_up=warm, since=proxy.mark())
+            if proxy is not None and not warm_arm(
+                name,
+                partial(warm_turn, arm, gateway_url=gateway_url, token=token),
+                proxy,
+                synced,
+                wait_s=args.sync_wait_s,
+                status=partial(gateway_sync_status, gateway_url, token),
+            ):
+                continue  # The finally below still stops the gateway and writes sync.json.
             checked = preflight_cases(sample)
             any_hint = False
             for case in checked:

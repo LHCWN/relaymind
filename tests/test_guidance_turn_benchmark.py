@@ -1414,16 +1414,62 @@ def test_warm_up_turns_go_on_until_the_selector_is_ready():
     assert record["host_exits"] == [0, 0, 0]
 
 
-def test_a_selector_never_ready_stops_the_arm_before_any_measured_turn():
+def test_a_selector_never_ready_ends_the_warm_up_as_not_ready():
     ticks = iter(range(100))
-    with pytest.raises(RuntimeError, match="not ready"):
-        harness.warm_up(
-            lambda n: None,
-            lambda: False,
-            wait_s=5,
-            clock=lambda: float(next(ticks)),
-            sleep=lambda s: None,
-        )
+    record = harness.warm_up(
+        lambda n: 0,
+        lambda: False,
+        wait_s=5,
+        clock=lambda: float(next(ticks)),
+        sleep=lambda s: None,
+    )
+    assert record["outcome"] == "not_ready" and record["turns"] >= 1
+    assert set(record["host_exits"]) == {0}
+
+
+def test_a_host_that_fails_a_warm_up_turn_stops_the_run_at_once():
+    """Review of PR 291: a broken host is not a cold selector, and must not wait 600 s."""
+    turns = []
+
+    def turn(number):
+        turns.append(number)
+        return 3
+
+    with pytest.raises(RuntimeError, match=r"host .*exit 3"):
+        harness.warm_up(turn, lambda: False, wait_s=600, clock=lambda: 0.0, sleep=lambda s: None)
+    assert turns == [0]
+
+
+class _Proxy:
+    def __init__(self, ready):
+        self._ready = ready
+
+    def ready(self):
+        return self._ready
+
+    def mark(self):
+        return 7
+
+
+@pytest.mark.parametrize("ready", [True, False])
+def test_a_cold_selector_skips_only_its_own_arm(ready):
+    """Review of PR 291: the other arms still run and the summary is still written."""
+    synced = {}
+    measure = harness.warm_arm(
+        "third_party",
+        lambda n: 0,
+        _Proxy(ready),
+        synced,
+        wait_s=0,
+        status=lambda: dict(last_outcome="synced"),
+        clock=lambda: 0.0,
+        sleep=lambda s: None,
+    )
+    assert measure is ready
+    warm = synced["third_party"]["warm_up"]
+    assert warm["outcome"] == ("ready" if ready else "not_ready")
+    assert warm["gateway_sync"] == dict(last_outcome="synced")
+    assert synced["third_party"]["since"] == 7
 
 
 def test_a_sync_url_needs_a_third_party_arm(monkeypatch):
