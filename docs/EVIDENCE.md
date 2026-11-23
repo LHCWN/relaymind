@@ -4254,6 +4254,27 @@ Chinese prompts. It got 19 of 20 English prompts right. Before the measured turn
 full ranking after one warm-up turn, because the pilot had already indexed the same skill files; no measured turn
 got `not_ready` (32 `ranked`, 8 `no_match`).
 
+**Chinese prompts.** Of the 70 Chinese one-skill prompts, 24 contain English words and 46 do not. asset-router
+picked first right on 20 of the 24 mixed ones (83%; `no_match` 4%) and on 1 of the 46 pure Chinese ones
+(`no_match` 93%). Its BM25 tokenizer keeps only `[a-z0-9]` in each token, so a pure Chinese prompt has no
+token; only BM25 hits become candidates (`recallUnmatched` false); and with no BM25 score a candidate needs a
+cosine of at least 0.66 to pass `minScore` 0.55. The right skill's `bge-m3` cosine on the pure Chinese prompts was
+0.481 to 0.656 (median 0.573), while by embedding alone it ranked first among the 70 holdout skills on 52% of them
+and in the top 3 on 76%.
+
+Two router config changes on the same holdout and offer (no code change), with RelayMind `88bc83f`'s (unchanged in `d0f8ffd`)
+`--background-catalog` building the same 409 background assets and a fresh router store:
+
+| asset-router config | First pick | MRR | P@3 | R@3 | F1@3 | R@8 | Picks | False picks | Pure Chinese, first pick right |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Default | 50% | 0.55 | 44% | 58% | 0.50 | 62% | 2.58 | 0% | 1 of 46 |
+| `recallUnmatched` true, `recallLimit` 1000 | 51% | 0.55 | 44% | 58% | 0.50 | 63% | 2.61 | 0% | 1 of 46 |
+| The same and `minScore` 0.40 | 60% | 0.70 | 25% | 76% | 0.38 | 91% | 7.96 | 38% | 14 of 46 |
+
+Recall through embeddings alone changes little, because the threshold still drops those candidates. A lower
+threshold recovers much of pure Chinese but returns nearly the full 8 picks, so precision falls and unrelated
+prompts get picks. Metrics: `select_router_experiments.json`.
+
 Cost: about 2.8 million input and 0.1 million output tokens of `glm-5.3-flash` for every run in this entry,
 pilots and probes included, so about $0.5 at Z.AI's listed prices. Turn rows (no prompt text or model answer) are in
 `turn_runs.jsonl`.

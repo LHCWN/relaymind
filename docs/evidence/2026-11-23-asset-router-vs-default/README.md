@@ -7,6 +7,7 @@ Development diagnostics, not acceptance. The written record is in
 | --- | --- |
 | `select_compare.json` | `scripts/guidance_compare.py --by-lane` over the similar-skill holdout: the default (`word`) as the baseline, asset-router, and a GLM picker. Metrics overall and per lane. |
 | `select_router_vs_picker.json` | The same, with asset-router as the baseline and the GLM picker as the arm. |
+| `select_router_experiments.json` | The same comparison with two more asset-router configs: `recallUnmatched` true with `recallLimit` 1000, and that with `minScore` 0.40. |
 | `turn_runs.jsonl` | One line per real turn, four arms over the same 40 prompts: arm, case ID, lane, hinted and loaded names, right or not, token counts and time. |
 | `turn_sync.json` | The asset-router arm's warm-up and how the router answered the measured turns. |
 
