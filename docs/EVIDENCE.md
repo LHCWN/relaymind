@@ -4024,6 +4024,33 @@ loopback, and no real model, host or ranking quality is involved.
   own `src/apps/server/main.ts` in fed mode with its own SQLite store.
 - Command: `python scripts/asset_router_interop.py --rev <commit> --repo <local clone of asset-router>`.
 
+### RelayMind `4de28ad` at asset-router `c092bd1`: 12 of 12 passed, three runs, none skipped
+
+On 2026-11-23, RelayMind `4de28adcbe7c66b27c3974a3a2471c7e4d154927` (clean tree) against asset-router
+`c092bd190b964cd32c47946aab5dbded8c632d64`, the head of LHCWN/asset-router#1 after `3a6c949` (drops the strict JSON
+parser, renames `featureKey`) and `c092bd1` (query features computed on demand instead of a prepare stage). Result:
+[`2026-11-23-guidance-router-interop-4de28ad-c092bd1.json`](evidence/2026-11-23-guidance-router-interop-4de28ad-c092bd1.json).
+The `Router interop` workflow now pins `c092bd1`.
+
+### Turn benchmark warm-up through the real host: ready after two free turns, at `e02157e` and `c092bd1`
+
+Not a measured turn and not a quality result: this checks only that `scripts/guidance_turn_benchmark.py
+--third-party-sync-url` gets an indexing selector ready through the real host before it measures.
+
+- Setup: RelayMind `4de28ad`, the pinned OpenClaw from `integrations/openclaw`, the real `relaymind-guidance`
+  plugin and a launched gateway, against asset-router `e02157e` and then `c092bd1` with the embeddings double and
+  its allowed root set to the run's workspace `skills` folder. `--similar development --arms third_party
+  --per-lane 1 --third-party-name asset-router`.
+- No paid model call: `RELAYMIND_EXTERNAL_API_KEY` was a dummy value and `--model-base-url` a closed loopback
+  port. The recorder answered both warm-up turns itself (host exit 0 each), and the first measured turn then
+  stopped the run with "the model's own API failed", as the harness requires.
+- Result, the same at both commits: the selector answered with its full ranking after 2 warm-up turns (53.6 s and
+  54.1 s). The gateway's sync counts: 54 missing, 54 sent with their files, 54 accepted, 0 rejected. The host offered
+  the 32 installed skills and its 22 bundled ones. The router's store holds 32 skills indexed from their files and
+  22 from their records: the bundled skills' files are outside the router's root, so it refused them, and the
+  gateway's retry without a file was accepted. The one measured turn's selects were all `no_match` (7 and 8 selects,
+  as the host retried the failed model call), with no `not_ready`.
+
 ### RelayMind `08a0d76` at asset-router `e02157e`: 12 of 12 passed, three runs, none skipped
 
 On 2026-11-23, RelayMind `08a0d76048a323215295d7911c23c536e6dfad89` (clean tree) against the same asset-router

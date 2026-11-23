@@ -27,6 +27,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   real plugin offers the host's skills with their files, the gateway syncs after each `not_ready`, and a loopback
   proxy in front of the selector shows when it answers with its full ranking (`--sync-wait-s`, 600 s by default).
   `sync.json` records the warm-up, the gateway's sync counts and the select outcomes of the measured turns.
+  The `Router interop` workflow now pins asset-router `c092bd1`, where all twelve cases pass.
   `--third-party-name` and `--third-party-version` name the selector, which the gateway checks; before, the arms
   always named `example_intent`.
 - Specification 0.72 (#290; RM47; AC42; section 7.7): guidance can keep a third-party selector's index in step
