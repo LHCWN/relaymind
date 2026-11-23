@@ -2796,6 +2796,10 @@ python scripts/asset_router_interop.py --rev <40-hex commit> [--repo <URL or loc
   `pytest -m interop tests/test_guidance_router_interop.py`. `--repo` defaults to the SSH URL of the private
   repository.
 - A run passes only when every interop test ran and passed. A skip or an empty run is `not_validated` and fails.
+- A router may answer early (spec 0.73): `ranked`, with a `mechanism` ending in `:early`, while an embedding is
+  still pending. With the fast embedding double this rarely happens by chance, so the cases that check indexing
+  wait for the full ranking, and one case slows the double to get an early answer on purpose. That case needs the
+  router's default `server.earlyResults: "rank"`.
 - `--result` writes the outcome, the counts and both commits (RelayMind's, with whether it was clean) as JSON.
 - Without the runner, `RELAYMIND_ASSET_ROUTER_DIR=<checkout with node_modules> pytest -m interop` runs the same
   tests; they skip when the variable is unset. `tests/test_router_interop_harness.py` checks the harness itself in

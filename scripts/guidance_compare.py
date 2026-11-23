@@ -25,6 +25,11 @@ Over big workflows, where a prompt needs a whole set of assets:
   set exact    of the picks, the share that are needed
   set picks    picks per prompt
 
+Over all prompts:
+  failed       the selector did not answer, so a fallback did or nothing did
+  early        the selector ranked early, from the features it had indexed so far (spec 0.73),
+               not with its full ranking; such answers count as answers, not failures
+
 Development evidence unless the data has independent labels. The formal gates are in the benchmarks'
 own compare commands; this tool adds metrics and sets no gate.
 """
@@ -59,6 +64,7 @@ def read_report(report: dict) -> tuple[list[dict], int | None]:
                 picks=r["picks"],
                 decision=r["decision"],
                 degraded=r["degraded"],
+                early=_early(r.get("mechanism")),
                 ms=r["ms"],
             )
             for r in report["rows"]
@@ -82,6 +88,7 @@ def read_report(report: dict) -> tuple[list[dict], int | None]:
                 # Selection v2 has no "choose", so whether it asked is unknown, not "no".
                 decision=None,
                 degraded=_fell_back(r),
+                early=_early(((r.get("attempts") or [{}])[0]).get("mechanism")),
                 ms=r["observed_ms"],
             )
             for r in report["rows"]
@@ -101,6 +108,11 @@ def _fell_back(row: dict) -> bool:
     return first.get("outcome", "ranked") not in ("ranked", "no_match") or str(
         first.get("mechanism", "")
     ).endswith("_degraded")
+
+
+def _early(mechanism: object) -> bool:
+    """A selector answer ranked from an earlier stage while later features index (spec 0.73)."""
+    return str(mechanism or "").endswith(":early")
 
 
 def _mean(values: list[float]) -> float | None:
@@ -161,6 +173,7 @@ def metrics(rows: list[dict]) -> dict:
         ),
         workflow_picks=_mean([len(r["picks"]) for r in workflow]),
         degraded=sum(bool(r["degraded"]) for r in rows),
+        early=sum(bool(r.get("early")) for r in rows),
         p50_ms=statistics.median(times) if times else None,
         p95_ms=times[math.ceil(len(times) * 0.95) - 1] if times else None,
     )
@@ -219,9 +232,9 @@ def _cell(value: float | None, percent: bool = True) -> str:
 def table(arms: dict) -> str:
     lines = [
         "| Arm | First pick | MRR | P@3 | R@3 | F1@3 | R@8 | Picks | False picks | Asked | "
-        "Offered | Set found | All found | Set exact | Set picks | Failed | p50 ms | "
+        "Offered | Set found | All found | Set exact | Set picks | Failed | Early | p50 ms | "
         "Wins/losses vs baseline (p) |",
-        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for name, arm in arms.items():
         m, pair = arm["metrics"], arm.get("paired_with_baseline")
@@ -237,7 +250,7 @@ def table(arms: dict) -> str:
             f"{_cell(m['undecided_asked'])} | {_cell(m['undecided_share_offered'])} | "
             f"{_cell(m['workflow_found'])} | {_cell(m['workflow_all_found'])} | "
             f"{_cell(m['workflow_precision'])} | {_cell(m['workflow_picks'], False)} | "
-            f"{m['degraded']} | {p50} | {versus} |"
+            f"{m['degraded']} | {m['early']} | {p50} | {versus} |"
         )
     return "\n".join(lines)
 

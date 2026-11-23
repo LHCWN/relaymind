@@ -12,7 +12,7 @@ codebase.
    RM33 and AC24 specify the M9 OpenClaw integration, added in 0.47 and
    revised in 0.49, 0.50 and 0.70; RM34–RM44 and AC25–AC37 define M10
    recommendations, added in 0.51 and revised through 0.68; RM45–RM47 and AC38–AC42 define per-prompt guidance,
-   added in 0.69, 0.71 and 0.72; the spec is at 0.72).
+   added in 0.69, 0.71 and 0.72 and revised in 0.73; the spec is at 0.73).
    Sections 12.6.6–12.6.7 define recorded automated qualification review and
    the separate automated host experiment. Implementation status
    is recorded in docs/ROADMAP.md. If code and spec disagree,

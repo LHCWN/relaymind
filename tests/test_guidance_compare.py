@@ -360,3 +360,41 @@ def test_two_arms_with_one_name_are_refused(tmp_path, capsys):
     with pytest.raises(SystemExit):
         compare.main(["--baseline", f"word={path}", "--arm", f"word={path}"])
     assert "word" in capsys.readouterr().err
+
+
+def test_an_early_selector_answer_is_counted_apart_and_is_not_a_failure():
+    """Spec 0.73 section 7.7: a mechanism ending in :early is not the selector's full ranking."""
+    report = dict(
+        kind="guidance_similar",
+        tokens={},
+        rows=[
+            dict(
+                case=str(i),
+                lane="en",
+                text="t",
+                expected=["x"],
+                picks=["x"],
+                decision="picks",
+                degraded=False,
+                ms=3,
+                mechanism=mechanism,
+            )
+            for i, mechanism in enumerate(["router.hybrid-bm25:early", "router.hybrid-bm25"])
+        ],
+    )
+    rows, _ = compare.read_report(report)
+    assert [r["early"] for r in rows] == [True, False]
+    m = compare.metrics(rows)
+    assert m["early"] == 1 and m["degraded"] == 0
+    assert "| Early |" in compare.table({"arm": {"metrics": m}})
+
+
+def test_an_early_platform_answer_is_counted_apart_and_is_not_a_fallback():
+    early = [dict(outcome="ranked", mechanism="router.hybrid-bm25:early")]
+    rows, _ = compare.read_report(_platform([_platform_row("c", ["x"], attempts=early)]))
+    assert rows[0]["early"] is True and rows[0]["degraded"] is False
+    assert compare.metrics(rows)["early"] == 1
+
+
+def test_rows_without_a_mechanism_have_no_early_answer():
+    assert compare.metrics(ROWS)["early"] == 0

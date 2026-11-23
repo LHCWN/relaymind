@@ -8,6 +8,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Specification 0.73 (RM47; AC42; section 7.7): a guidance selector may answer early, ranking a pair from the
+  features it has already indexed while the rest is still being indexed. It marks such an answer with a
+  `mechanism` and `score_kind` ending in `:early`. The gateway passes it on like any other ranked answer, with
+  `degraded` false and no sync; a pair whose indexing failed still gets `not_ready` and a sync.
+  `scripts/guidance_compare.py` counts early answers in their own column, since they are not the selector's full
+  ranking. The `interop` suite waits for the router's full ranking before checking indexing, and a new case checks
+  an early answer from asset-router `87b9e06`.
 - Specification 0.72 (#290; RM47; AC42; section 7.7): guidance can keep a third-party selector's index in step
   with the host's skills.
   - The plugin sends each skill's SHA-256, absolute path and size (files up to 1 MiB, at most 64 MiB read whole per

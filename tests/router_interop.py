@@ -124,10 +124,12 @@ class EmbeddingDouble(_Loopback):
 
     `fail_marker`: an input containing it gets HTTP 500, as a failing embedding endpoint would.
     `seed`: changing it changes every vector, as a new embedding model would.
+    `delay`: seconds each call waits, as a slow endpoint would; a router may answer early meanwhile.
     """
 
     fail_marker: str | None = None
     seed: str = "v1"
+    delay: float = 0.0
     calls: int = 0
 
     def vector(self, text: str) -> list[float]:
@@ -145,6 +147,8 @@ class EmbeddingDouble(_Loopback):
             def do_POST(self):
                 body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
                 double.calls += 1
+                if double.delay:
+                    time.sleep(double.delay)
                 text = body.get("input", "")
                 if double.fail_marker and double.fail_marker in text:
                     return self.reply(500)

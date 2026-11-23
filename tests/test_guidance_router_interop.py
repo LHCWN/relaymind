@@ -154,10 +154,19 @@ class Stack:
             self.clock.offset += wait_ms / 1000 + 0.001
 
     def until_router_answers(
-        self, assets: list[dict], task: str = TASK, timeout: float = 30, *, move_clock=True
+        self,
+        assets: list[dict],
+        task: str = TASK,
+        timeout: float = 30,
+        *,
+        move_clock=True,
+        early=False,
     ):
         """Ask until the router answers with something other than not_ready.
 
+        An early answer, ranked from the router's first stage while later features of an offered
+        pair are still indexing, counts only with `early`; otherwise asking goes on until the full
+        ranking answers, because "ranked" alone no longer means "indexed".
         With `move_clock` false the clock never moves, and no sync may start a wait."""
 
         def answered():
@@ -169,7 +178,9 @@ class Stack:
                 )
             last = self.selects()[-1]
             if last.status == 200 and last.response.get("outcome") not in (None, "not_ready"):
-                return answer, last.response
+                if early or not is_early(last.response):
+                    return answer, last.response
+                return None  # Ranked early: no sync started, so there is no wait to pass.
             if move_clock:
                 self.pass_sync_wait()
             return None
@@ -177,10 +188,18 @@ class Stack:
         return poll(answered, timeout, lambda: f"the router never answered: {self.diagnostics()}")
 
     def until_ranked(
-        self, assets: list[dict], task: str = TASK, timeout: float = 30, *, move_clock=True
+        self,
+        assets: list[dict],
+        task: str = TASK,
+        timeout: float = 30,
+        *,
+        move_clock=True,
+        early=False,
     ) -> dict:
         """Ask until the router itself ranks; the gateway's picks must be its candidates."""
-        answer, _ = self.until_router_answers(assets, task, timeout, move_clock=move_clock)
+        answer, _ = self.until_router_answers(
+            assets, task, timeout, move_clock=move_clock, early=early
+        )
         assert answer["chosen_by"] == "third_party", self.diagnostics()
         assert_from_router(self, answer)
         return answer
@@ -206,6 +225,11 @@ class Stack:
             timeout,
             f"router never reported {expected} missing",
         )
+
+
+def is_early(result: dict) -> bool:
+    """A ranked answer from the router's first stage while later features were indexing."""
+    return result.get("mechanism", "").endswith(":early")
 
 
 def assert_from_router(stack: Stack, answer: dict) -> None:
@@ -332,6 +356,25 @@ def test_a_cold_router_is_synced_until_its_own_ranking_answers(stack):
 
     answer = stack.until_ranked(assets)
     assert answer["picks"][0]["name"] == "pdf-merge"
+
+
+def test_an_early_answer_is_passed_on_and_starts_no_sync(stack):
+    """A router may rank from its first stage while later features index (spec 0.73, 7.7).
+
+    The gateway passes that answer on as the router's ranking, with its mechanism, and syncs
+    nothing: the pair is being indexed, so it is not missing. The full ranking follows.
+    """
+    stack.embedder.delay = 2.0  # The body's embedding lands well after its tokens.
+    assets = [pdf_skill(stack)]
+    answer = stack.until_ranked(assets, early=True)
+    result = stack.selects()[-1].response
+    assert is_early(result), f"no early answer: {result['mechanism']}"
+    assert all(c["score_kind"].endswith(":early") for c in result["candidates"])
+    assert answer["picks"][0]["name"] == "pdf-merge"
+    syncs = len(stack.proxy.of("/sync"))
+    stack.embedder.delay = 0.0
+    stack.until_ranked(assets)
+    assert len(stack.proxy.of("/sync")) == syncs  # Early answers asked for no sync.
 
 
 def test_a_mixed_upload_is_answered_pair_by_pair_and_a_refused_file_is_retried_without_it(
