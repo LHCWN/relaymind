@@ -4226,4 +4226,34 @@ tokens (439 calls), about $0.14 at Z.AI's listed prices. Latency is not compared
 machine with four cases at a time, next to the embeddings server (p50 172 ms for word match, against 9 ms on
 2026-11-05; 2,412 ms for asset-router; 2,970 ms for the GLM picker).
 
-**Real turns.** To follow in this entry.
+**Real turns.** `scripts/guidance_turn_benchmark.py --similar holdout --per-lane 20`: 40 one-skill prompts (20
+English, 20 Chinese), the same 40 in every arm (seed 20261105). Real OpenClaw 2026.10.7, the real plugin and a
+launched gateway; the host's model is `glm-5.3-flash` with `reasoning_effort` low. The host offers the 70 holdout
+skills and its 22 bundled skills (92 in all); the catalog is not installed, unlike the 349 skills of 2026-11-05, so
+these numbers do not compare with that run. The guided arms empty the host's listed catalog. asset-router ran as a
+second instance with its own store and the turn workspace as its only root. The turn harness, plugin and gateway are
+the same at `a2bbcd3` and `88bc83f`; the GLM picker arm ran after the other three, on its own.
+
+| Arm | Right skill | English | Chinese | Against the default: won/lost (p) | Hint shown / right | Searched | Median first input | Median total input |
+| --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: |
+| Default | 33 of 40 | 16 | 17 | | | 16 | 7,285 | 14,698 |
+| Default, repeat | 30 of 40 | 14 | 16 | 2/5 (0.45) | | 12 | 7,286 | 14,672 |
+| asset-router, bge-m3 | 29 of 40 | 19 | 10 | 5/9 (0.42) | 32 / 30 | 3 | 2,544 | 5,278 |
+| GLM picker, glm-5.3-flash | 37 of 40 | 18 | 19 | 7/3 (0.34) | 40 / 38 | 1 | 2,472 | 5,041 |
+
+Against asset-router, the GLM picker won 10 prompts and lost 2 (p 0.039), the only difference here outside the
+noise: the two identical default arms differ on 7 prompts. No run failed and no model call failed. The sizes count
+only the host's own model calls. The GLM picker's own call adds about 2,950 input tokens per prompt (from the
+selection run), so its turn costs about 8,000 input tokens, against 5,278 for asset-router and 14,698 for the
+default. Median time per turn: 42.3 s, 43.8 s, 42.6 s and 46.3 s.
+
+asset-router's eight `no_match` answers were all on Chinese prompts. The guided arms set `fallback = false` and
+empty the listed catalog, so those turns had no hint and no list, and seven of the eight missed the skill (the
+default got six of those seven right). This is the same weakness as in selection: asset-router finds too little on
+Chinese prompts. It got 19 of 20 English prompts right. Before the measured turns, asset-router answered with its
+full ranking after one warm-up turn, because the pilot had already indexed the same skill files; no measured turn
+got `not_ready` (32 `ranked`, 8 `no_match`).
+
+Cost: about 2.8 million input and 0.1 million output tokens of `glm-5.3-flash` for every run in this entry,
+pilots and probes included, so about $0.5 at Z.AI's listed prices. Turn rows (no prompt text or model answer) are in
+`turn_runs.jsonl`.

@@ -1896,5 +1896,7 @@ syncs such a selector before it measures, from JSON assets with no file, and `sc
 local `bge-m3` embeddings: asset-router picks better than the default but far below a model picker
 ([evidence](EVIDENCE.md#2026-11-23--asset-router-against-the-default-rm47-ac42)). Open: a selector that keeps
 one version of each asset re-indexes on every switch of version or description (spec section 7.7, open finding).
-Not done: the same sync for recommendations, and any measured turn with real inference (the turn benchmark's
-warm-up ran through the real host, with no model call).
+Real turns with `glm-5.3-flash` show no difference
+from the default in loading the right skill (29 and 33 of 40, within the noise) at about a third of the input
+tokens, and asset-router misses Chinese prompts it answers with `no_match`. Not done: the same sync for
+recommendations.
