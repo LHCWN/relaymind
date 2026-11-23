@@ -1038,7 +1038,8 @@ def test_the_reference_selector_checks_the_file_it_opened_not_only_the_path_it_r
         folder = root / "pdf-merge"
         if folder.is_dir() and not folder.is_symlink():
             folder.rename(root / "pdf-merge-moved")
-            os.symlink(outside / "pdf-merge", folder)
+            # A directory link: on Windows a plain os.symlink would make a file link.
+            os.symlink(outside / "pdf-merge", folder, target_is_directory=True)
         return real_open(path, *args, **kwargs)
 
     monkeypatch.setattr(server.os, "open", swapping_open)
