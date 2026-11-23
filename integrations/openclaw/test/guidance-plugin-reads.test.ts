@@ -114,6 +114,23 @@ describe("the per-turn hashing budget", () => {
     expect(readSkillInfo({ name: "first", source: { filePath: first } }, empty).file).not.toBeNull();
   });
 
+  it("charges the bytes it read, not the size stat reported", () => {
+    // Review of PR 291: a file that grew after stat, or reports a size it does not have, must not
+    // let whole-file reads pass the turn's budget.
+    const paths = ["a", "b", "c", "d"].map(big);
+    const budget = { bytes: 1_000_000 };
+    readSync.mockClear();
+    const files = paths.map((path, i) => {
+      const real = statSync(path);
+      statSync.mockReturnValueOnce(Object.assign(Object.create(Object.getPrototypeOf(real)), real, { size: 0 }));
+      return readSkillInfo({ name: `u${i}`, source: { filePath: path } }, budget).file;
+    });
+    expect(bytesRead()).toBeLessThanOrEqual(1_000_000 + 1 + paths.length * 32_768);
+    expect(files.filter(Boolean)).toHaveLength(1);
+    // A file cut short by the budget is not cached, so a later turn reads it whole.
+    expect(readSkillInfo({ name: "u1", source: { filePath: paths[1] } }, { bytes: 1_000_000 }).file).not.toBeNull();
+  });
+
   it("reads at most 64 MiB of skill files in one turn", async () => {
     const skills = Array.from({ length: 70 }, (_, i) => {
       const path = write(`s${i}`, `---\nname: s${i}\ndescription: Skill ${i}\n---\n` + "x".repeat(1_000_000));

@@ -149,9 +149,14 @@ export function readSkillInfo(entry, budget = { bytes: Infinity }) {
       // skill. The read stops one byte past the limit, so a file that grew after stat is never hashed.
       if (bytes.length >= MAX_FRONT_BYTES) {
         // Past this turn's budget: offered by description now, and not cached, so a later turn reads it.
-        if (size > budget.bytes) return { ...parsed, description: clip(parsed.description, MAX_DESCRIPTION_BYTES), file: null };
-        budget.bytes -= size;
-        bytes = readHead(path, MAX_SKILL_FILE_BYTES + 1);
+        const byDescription = { ...parsed, description: clip(parsed.description, MAX_DESCRIPTION_BYTES), file: null };
+        if (size > budget.bytes) return byDescription;
+        // Charged by the bytes read, not the size stat gave: a file can grow after stat or report a
+        // size it does not have. The read stops one byte past what the budget still allows.
+        const allowed = Math.min(MAX_SKILL_FILE_BYTES, budget.bytes);
+        bytes = readHead(path, allowed + 1);
+        budget.bytes -= bytes.length;
+        if (bytes.length > allowed && allowed < MAX_SKILL_FILE_BYTES) return byDescription;
         parsed = frontmatterOf(bytes);
         if (!parsed) return UNKNOWN;
       }
