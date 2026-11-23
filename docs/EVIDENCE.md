@@ -4024,13 +4024,23 @@ loopback, and no real model, host or ranking quality is involved.
   own `src/apps/server/main.ts` in fed mode with its own SQLite store.
 - Command: `python scripts/asset_router_interop.py --rev <commit> --repo <local clone of asset-router>`.
 
+### RelayMind `2e64195` at asset-router `e02157e`: 11 of 11 passed, three runs, none skipped
+
+On 2026-11-23, RelayMind `2e64195609b46bcdaf69875662f6b39a53d5ca32` (clean tree) against asset-router
+`e02157e8e0012ee42dfc65a615da6370cc2b24cf`, the head of LHCWN/asset-router#1. Its one change after `87b9e06`: a
+lone early candidate answers `decision: choice_required` instead of `confident`, because early scores are not
+comparable with the full ranking. The schemas are unchanged, section 4.6.2 allows either decision for a ranked
+answer, and guidance does not read `decision`. Result:
+[`2026-11-23-guidance-router-interop-2e64195-e02157e.json`](evidence/2026-11-23-guidance-router-interop-2e64195-e02157e.json).
+The `Router interop` workflow now pins `e02157e`.
+
 ### RelayMind `d01f682` at asset-router `87b9e06`: 11 of 11 passed, three runs, none skipped
 
 On 2026-11-23, RelayMind `d01f682848c96c2e51c661dc44dab28f95fbc4da` (clean tree) against asset-router
 `87b9e069bbc2c57bf73933f3a4e82ee6b2ee1078`, the head of LHCWN/asset-router#1 after `63634f0`, `6cf1d16`, `6eb0943`
 and `87b9e06`. The pinned schemas are unchanged. Result:
 [`2026-11-23-guidance-router-interop-d01f682-87b9e06.json`](evidence/2026-11-23-guidance-router-interop-d01f682-87b9e06.json).
-The `Router interop` workflow now pins `87b9e06`.
+The `Router interop` workflow pinned `87b9e06` until `e02157e` above.
 
 `87b9e06` answers early: while an accepted pair's embedding is pending, `/select` ranks with BM25 alone, with
 `mechanism` and every `score_kind` set to `router.hybrid-bm25:early` and raw, unbounded BM25 scores. Spec 0.73

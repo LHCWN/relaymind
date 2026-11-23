@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "outcome": "passed",
+  "relaymind_commit": "2e64195609b46bcdaf69875662f6b39a53d5ca32",
+  "relaymind_clean": true,
+  "router_commit": "e02157e8e0012ee42dfc65a615da6370cc2b24cf",
+  "tests": 11,
+  "passed": 11,
+  "failed": 0,
+  "skipped": 0,
+  "runs": 3,
+  "note": "scripts/asset_router_interop.py --result, three identical runs on Linux with Node 24.22.1; inference is a deterministic embeddings double, not ranking quality. The early-answer case slows the double on purpose."
+}
