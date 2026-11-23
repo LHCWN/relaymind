@@ -23,7 +23,8 @@
   gateway and an external model, including similar skills, MCP tools and the strict limit
   (RM16, RM45, RM46); see `docs/guidance.md`.
 - `guidance_similar_benchmark.py` — the guidance stages or your selector over families of similar
-  skills, with follow-ups, undecided and unrelated prompts (RM16, RM45).
+  skills, with follow-ups, undecided and unrelated prompts (RM16, RM45). `--sync-url` syncs a
+  selector that builds an index before any case runs (RM47).
 - `guidance_compare.py` — precision, recall, F1, MRR and more for any selector against a baseline,
   from reports of either benchmark (RM16, RM40, RM45).
 

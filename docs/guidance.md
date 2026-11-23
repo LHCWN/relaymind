@@ -341,6 +341,14 @@ python scripts/guidance_similar_benchmark.py --split holdout --arm third_party \
 python scripts/guidance_compare.py --baseline word=word.json --arm mine=mine.json --by-lane
 ```
 
+If your selector builds an index and answers `not_ready` to assets it has not indexed, add
+`--sync-url http://127.0.0.1:8940/sync`. The harness then syncs it before any case runs, the same way the gateway
+does, and measures only when the selector answers with its full ranking. If that takes longer than
+`--sync-wait-s` (600 s by default), it stops and measures nothing. These assets are JSON with no `SKILL.md`, so each
+upload carries only the record (`content: null`). The record's name and description are the whole asset, so the
+selector indexes it from that. The report's `sync` field shows how long the sync took. That time is not counted in
+any case's latency.
+
 | Metric | Meaning | Better |
 | --- | --- | --- |
 | First pick | The first pick is right | Higher |

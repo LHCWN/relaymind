@@ -14,6 +14,11 @@ that fit every skill of a family, short follow-ups, and unrelated prompts.
   python scripts/guidance_similar_benchmark.py --split holdout --output mine.json \\
       --arm third_party --selector-url http://127.0.0.1:8940/select --selector-name mine
 
+A selector that builds an index answers not_ready to assets it has not indexed. Add
+--sync-url http://127.0.0.1:8940/sync and the harness syncs it before it measures, as the gateway
+does after each not_ready (spec 0.73 section 7.7; RM47). The assets here are JSON, with no SKILL.md,
+so each upload is the record alone: its name and description are the whole asset.
+
 Compare the reports with scripts/guidance_compare.py.
 
 Development evidence: a model wrote the data and its expected answers, so this is not acceptance.
@@ -34,8 +39,10 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from relaymind.adapters.chat_completions import check_request_options  # noqa: E402
+from relaymind.assets.catalog import MAX_OFFER_RECORDS  # noqa: E402
 from relaymind.guidance import GuidanceSettings, parse_guidance_request, run_guidance  # noqa: E402
 from relaymind.guidance.models import chat_client, local_keyword_client  # noqa: E402
+from relaymind.guidance.sync import GuidanceSync  # noqa: E402
 from relaymind.selection.asset_http import HttpAssetSelector  # noqa: E402
 
 DATA = ROOT / "evaluation/assets/guidance-similar/similar.v1.json"
@@ -46,6 +53,9 @@ ARMS = dict(
     external_picker=dict(keywords="external", picker="external"),
     third_party=dict(primary="http"),
 )
+# The sync warm-up: the prompt it offers the assets with, and how often it asks again.
+WARM_UP_TASK = "warm up the selector index"
+WARM_UP_POLL_S = 0.25
 
 
 def load_cases(split: str, data_path: Path = DATA) -> tuple[list[dict], list[dict]]:
@@ -173,11 +183,14 @@ def arm_problem(
     selector_url,
     api_key_env="RELAYMIND_EXTERNAL_API_KEY",
     model="unset",
+    sync_url=None,
 ) -> str | None:
     """Why an arm cannot run as named, because a report labeled with it would mislead."""
     stages = ARMS[arm]
     if stages.get("primary") == "http" and not selector_url:
         return f"--arm {arm} needs --selector-url"
+    if sync_url and stages.get("primary") != "http":
+        return "--sync-url needs --arm third_party"
     if "external" in (stages.get("keywords"), stages.get("picker")):
         if not model_url:
             return f"--arm {arm} needs --model-base-url"
@@ -189,6 +202,58 @@ def arm_problem(
     if stages.get("keywords") == "local" and not local_url:
         return f"--arm {arm} needs --local-url"
     return None
+
+
+def offer_problem(count: int) -> str | None:
+    """Why --sync-url cannot cover every case: above one offer each prompt offers its own subset."""
+    if count > MAX_OFFER_RECORDS:
+        return f"--sync-url needs at most {MAX_OFFER_RECORDS} assets, not {count}"
+    return None
+
+
+async def sync_selector(
+    assets: list[dict],
+    settings: GuidanceSettings,
+    selector,
+    sync: GuidanceSync,
+    *,
+    wait_s: float,
+    clock=time.monotonic,
+    sleep=asyncio.sleep,
+) -> dict:
+    """Sync a third-party selector with the offered assets before any case runs (spec 0.73 7.7).
+
+    It offers the assets as every case will and syncs after each not_ready, as the gateway does.
+    It stops when the selector answers with its full ranking, not an early one, or after wait_s.
+    The time is setup, never part of a case's latency."""
+    request = parse_guidance_request(dict(schema_version=1, task_text=WARM_UP_TASK, assets=assets))
+    started, selects = clock(), 0
+    while True:
+        heard = []
+        answer = await run_guidance(
+            request,
+            settings,
+            selector=selector,
+            on_not_ready=lambda catalog, files, heard=heard: heard.append((catalog, files)),
+        )
+        selects += 1
+        # The selector's own answer, ranked or no_match: a no_match has chosen_by none.
+        answered = {"stage": "third_party", "outcome": "ok"} in [
+            dict(stage=s["stage"], outcome=s["outcome"]) for s in answer["stages"]
+        ]
+        ready = answered and not answer["mechanism"].endswith(":early")
+        if ready or clock() - started >= wait_s:
+            break
+        if heard:
+            await sync.run(*heard[-1])
+        await sleep(WARM_UP_POLL_S)
+    return dict(
+        outcome="ready" if ready else "not_ready",
+        ms=round((clock() - started) * 1000),
+        selects=selects,
+        # Counts only, as GET /relay/v1/guidance/sync shows them: no asset name or text.
+        status=sync.status(),
+    )
 
 
 def parse_options(values: list[str]) -> dict:
@@ -226,6 +291,15 @@ async def run(args) -> dict:
         shortlist=args.shortlist or defaults.shortlist,
         **arm,
     )
+    synced = None
+    if args.sync_url:
+        if problem := offer_problem(len(assets)):
+            raise SystemExit(problem)
+        sync = GuidanceSync(replace(settings, sync_url=args.sync_url))
+        synced = await sync_selector(assets, settings, selector, sync, wait_s=args.sync_wait_s)
+        if synced["outcome"] != "ready":
+            # Measuring now would report word match under the selector's name.
+            raise SystemExit(f"the selector is not ready after sync: {json.dumps(synced)}")
     tokens = Counter()
 
     def counted(chat):
@@ -292,12 +366,13 @@ async def run(args) -> dict:
             follow_up="the same short phrases; the earlier request is the split's own",
         ),
         tokens=dict(tokens),
+        sync=synced,
         summary=grade(cases, rows),
         rows=rows,
     )
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--split", required=True, choices=("development", "holdout"))
     parser.add_argument("--arm", required=True, choices=sorted(ARMS))
@@ -312,6 +387,16 @@ def main() -> None:
     parser.add_argument("--selector-url", help="For --arm third_party: your selector's /select.")
     parser.add_argument("--selector-name", default="third_party")
     parser.add_argument("--selector-version", default="1")
+    parser.add_argument(
+        "--sync-url",
+        help="For --arm third_party: your selector's /sync. Syncs it before any case runs.",
+    )
+    parser.add_argument(
+        "--sync-wait-s",
+        type=float,
+        default=600.0,
+        help="How long the sync may take before the run stops unmeasured (default 600).",
+    )
     parser.add_argument("--total-ms", type=int)
     parser.add_argument("--shortlist", type=int)
     parser.add_argument(
@@ -319,6 +404,11 @@ def main() -> None:
     )
     parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--limit", type=int)
+    return parser
+
+
+def main() -> None:
+    parser = build_parser()
     args = parser.parse_args()
     if not os.path.exists(args.data):
         parser.error(f"no data file at {args.data}")
@@ -329,6 +419,7 @@ def main() -> None:
         args.selector_url,
         args.api_key_env,
         model=args.model,
+        sync_url=args.sync_url,
     )
     try:
         parse_options(args.request_option)

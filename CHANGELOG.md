@@ -15,6 +15,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `scripts/guidance_compare.py` counts early answers in their own column, since they are not the selector's full
   ranking. The `interop` suite waits for the router's full ranking before checking indexing, and a new case checks
   an early answer from asset-router `87b9e06`.
+- `scripts/guidance_similar_benchmark.py --sync-url` (spec 0.73; RM47; AC42; review of PR 291): a selector that
+  builds an index, such as asset-router, answered `not_ready` to every case, so the `third_party` arm measured word
+  match. The harness now syncs the selector before any case runs and measures only once it answers with its full
+  ranking; otherwise it stops with nothing measured (`--sync-wait-s`, 600 s by default). The assets are JSON with no
+  `SKILL.md`, so each upload is the record alone (`content: null`), and the selector indexes the asset from it.
+  A new `interop` case runs this against asset-router `e02157e`.
 - Specification 0.72 (#290; RM47; AC42; section 7.7): guidance can keep a third-party selector's index in step
   with the host's skills.
   - The plugin sends each skill's SHA-256, absolute path and size (files up to 1 MiB, at most 64 MiB read whole per

@@ -2784,6 +2784,9 @@ Deterministic, with model doubles: `tests/test_guidance.py`, `tests/test_guidanc
 
 Selector sync (spec 0.72; RM47, AC42): `tests/test_guidance_sync.py` drives the guidance endpoint against a fake
 router that answers select and sync, and once against a real loopback server through the launched gateway.
+`tests/test_guidance_similar_benchmark.py` runs the benchmark's `--sync-url` warm-up against the reference selector
+(`scripts/guidance_selector_server.py --sync-root`): without it every case falls back to word match, and with it
+every upload is the record alone and every case is the selector's own answer.
 
 Interop with asset-router (RM47, AC42). This checks that the guidance gateway and the real asset-router work
 together. Inference is a deterministic double, so a pass says nothing about ranking quality.
@@ -2800,6 +2803,9 @@ python scripts/asset_router_interop.py --rev <40-hex commit> [--repo <URL or loc
   still pending. With the fast embedding double this rarely happens by chance, so the cases that check indexing
   wait for the full ranking, and one case slows the double to get an early answer on purpose. That case needs the
   router's default `server.earlyResults: "rank"`.
+- One case runs `scripts/guidance_similar_benchmark.py --sync-url` against the router: its JSON assets have no
+  `SKILL.md`, so every upload has `content: null`, and the router must index each one from its record and then
+  answer every measured case itself.
 - `--result` writes the outcome, the counts and both commits (RelayMind's, with whether it was clean) as JSON.
 - Without the runner, `RELAYMIND_ASSET_ROUTER_DIR=<checkout with node_modules> pytest -m interop` runs the same
   tests; they skip when the variable is unset. `tests/test_router_interop_harness.py` checks the harness itself in

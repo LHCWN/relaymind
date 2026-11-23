@@ -237,6 +237,12 @@ python scripts/guidance_similar_benchmark.py --split holdout --arm third_party \
 python scripts/guidance_compare.py --baseline word=word.json --arm mine=mine.json --by-lane
 ```
 
+如果你的选择器会建立索引，并对尚未索引的资产回答 `not_ready`，请加上 `--sync-url http://127.0.0.1:8940/sync`。
+这样，测试工具会在运行任何用例之前像网关一样同步选择器，并且只在选择器用完整排序作答后才开始测量。如果超过
+`--sync-wait-s`（默认 600 秒），它会停止，不测量任何内容。这些资产来自 JSON，没有 `SKILL.md`，所以每次上传只有记录
+（`content: null`）。记录中的名称和描述就是整个资产，选择器据此建立索引。报告中的 `sync` 字段记录同步用了多长时间，
+这段时间不计入任何用例的延迟。
+
 | 指标 | 含义 | 更好的方向 |
 | --- | --- | --- |
 | First pick | 第一个选择正确 | 越高越好 |

@@ -187,5 +187,8 @@ def test_the_interop_workflow_runs_the_runner_at_a_pinned_commit():
         "tests/router_interop.py",
         "tests/test_guidance_router_interop.py",
         "scripts/asset_router_interop.py",
+        # The benchmark's sync warm-up runs against the router in one interop case.
+        "scripts/guidance_similar_benchmark.py",
+        "evaluation/assets/guidance-similar/similar.v1.json",
     ):
         assert covered(path, triggers["pull_request"]["paths"]), path

@@ -1,8 +1,12 @@
 """The data and harness for similar assets stay sound (RM16, RM45; spec 0.69 section 7.7)."""
 
+import asyncio
 import importlib.util
 import sys
+import threading
+from http.server import ThreadingHTTPServer
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -119,3 +123,111 @@ def test_request_options_are_json_values_and_follow_the_gateway_rules():
     }
     with pytest.raises(ValueError):
         harness.parse_options(["model=other"])
+
+
+# --- a third-party selector that indexes, synced before measuring (spec 0.73 7.7; RM47; AC42) ---
+
+
+@pytest.fixture
+def indexing_selector(tmp_path):
+    """The reference selector with a sync index: not_ready until each offered pair is synced."""
+    from helpers import load_script_module
+    from relaymind.guidance import GuidanceSettings
+
+    server = load_script_module("guidance_selector_server")
+    index = server.SyncIndex([tmp_path])
+    settings = GuidanceSettings(enabled=True)
+    state = dict(uploads=[], sync_fails=False)
+
+    def answer(value):
+        return asyncio.run(server.select(value, settings, name="router", version="1", index=index))
+
+    def sync(value):
+        if state["sync_fails"]:
+            raise ValueError("sync is down")
+        if value["operation"] == "upload":
+            state["uploads"].extend(value["assets"])
+        return index.handle(value)
+
+    http = ThreadingHTTPServer(("127.0.0.1", 0), server.make_handler(answer, sync))
+    threading.Thread(target=http.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{http.server_port}"
+    yield SimpleNamespace(select=f"{base}/select", sync=f"{base}/sync", state=state)
+    http.shutdown()
+
+
+def _third_party(selector, *extra):
+    return harness.build_parser().parse_args(
+        [
+            *("--split", "development", "--arm", "third_party", "--output", "unused.json"),
+            *("--selector-url", selector.select, "--selector-name", "router", "--limit", "6"),
+            *extra,
+        ]
+    )
+
+
+def test_without_sync_an_indexing_selector_answers_no_case(indexing_selector):
+    """The gap of PR 291's review: a cold selector says not_ready, so word match answers."""
+    report = asyncio.run(harness.run(_third_party(indexing_selector)))
+    assert report["sync"] is None
+    assert all(row["degraded"] for row in report["rows"])
+    assert all(row["stages"]["third_party"] == "failed" for row in report["rows"])
+
+
+def test_with_sync_url_the_selector_is_synced_from_the_json_assets_before_measuring(
+    indexing_selector,
+):
+    """JSON assets have no SKILL.md: each upload is the record alone, holding the whole asset."""
+    args = _third_party(indexing_selector, "--sync-url", indexing_selector.sync)
+    report = asyncio.run(harness.run(args))
+    assert report["sync"]["outcome"] == "ready"
+    assert report["sync"]["status"]["last_outcome"] in ("synced", "nothing_missing")
+    assert report["sync"]["status"]["files_sent"] == 0
+    assert all(not row["degraded"] for row in report["rows"])
+    assert all(row["stages"] == {"third_party": "ok"} for row in report["rows"])
+    uploads = indexing_selector.state["uploads"]
+    assets, _ = harness.load_cases("development")
+    assert all(item["content"] is None for item in uploads)
+    assert sorted(item["record"]["description"] for item in uploads) == sorted(
+        a["description"] for a in assets
+    )
+
+
+def test_a_selector_that_never_gets_ready_is_not_measured(indexing_selector):
+    indexing_selector.state["sync_fails"] = True
+    args = _third_party(indexing_selector, "--sync-url", indexing_selector.sync)
+    args.sync_wait_s = 0.5
+    with pytest.raises(SystemExit) as stopped:
+        asyncio.run(harness.run(args))
+    assert "not ready" in str(stopped.value)
+
+
+def test_sync_url_needs_the_third_party_arm():
+    message = harness.arm_problem("word", None, None, None, sync_url="http://127.0.0.1:9/sync")
+    assert "--sync-url" in message
+    sync = "http://127.0.0.1:9/sync"
+    assert harness.arm_problem("third_party", None, None, "http://x/select", sync_url=sync) is None
+
+
+def test_sync_url_is_refused_above_one_offer_of_assets():
+    """Above 1,000 assets each prompt offers its own subset, so no single sync covers the cases."""
+    assert "1000" in harness.offer_problem(1001)
+    assert harness.offer_problem(1000) is None
+
+
+def test_a_no_match_from_the_synced_selector_is_ready(indexing_selector):
+    """A no_match from the selector ranked the whole offer: chosen_by is none, yet it is ready."""
+    from dataclasses import replace
+
+    from relaymind.guidance import GuidanceSettings
+    from relaymind.guidance.sync import GuidanceSync
+    from relaymind.selection.asset_http import HttpAssetSelector
+
+    settings = GuidanceSettings(
+        enabled=True, primary="http", name="router", version="1", url=indexing_selector.select
+    )
+    selector = HttpAssetSelector(name="router", version="1", url=indexing_selector.select)
+    sync = GuidanceSync(replace(settings, sync_url=indexing_selector.sync))
+    assets = [dict(name="pdf-merge", kind="skill", description="Merge pdf documents")]
+    synced = asyncio.run(harness.sync_selector(assets, settings, selector, sync, wait_s=10))
+    assert synced["outcome"] == "ready" and synced["selects"] == 2

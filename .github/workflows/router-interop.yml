@@ -17,6 +17,8 @@ on:
       - tests/router_interop.py
       - tests/test_guidance_router_interop.py
       - scripts/asset_router_interop.py
+      - scripts/guidance_similar_benchmark.py
+      - evaluation/assets/guidance-similar/similar.v1.json
   push:
     branches: [master]
     paths:
@@ -30,6 +32,8 @@ on:
       - tests/router_interop.py
       - tests/test_guidance_router_interop.py
       - scripts/asset_router_interop.py
+      - scripts/guidance_similar_benchmark.py
+      - evaluation/assets/guidance-similar/similar.v1.json
   workflow_dispatch:
     inputs:
       rev:

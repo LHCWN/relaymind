@@ -527,3 +527,36 @@ def test_switching_a_skill_back_and_forth_between_versions_never_starts_the_wait
         assert ranked_hash == skill["content_hash"]
     assert offered[0] == offered[2] and offered[1] == offered[3] and offered[0] != offered[1]
     assert stack.clock.offset == 0.0
+
+
+def test_benchmark_assets_from_json_are_synced_from_their_records_and_ranked(stack):
+    """PR 291 review: benchmark assets come from JSON, with no SKILL.md to read.
+
+    `guidance_similar_benchmark.py --sync-url` syncs the router before it measures. Every upload
+    carries its record and no file, and the router indexes each asset from that record, which
+    holds the whole declared asset, so every measured case is the router's own answer.
+    """
+    from helpers import load_script_module
+
+    bench = load_script_module("guidance_similar_benchmark")
+    args = bench.build_parser().parse_args(
+        [
+            *("--split", "development", "--arm", "third_party", "--output", "unused.json"),
+            *("--selector-url", stack.proxy.url + "/select", "--selector-name", ROUTER_NAME),
+            *("--selector-version", ROUTER_VERSION, "--sync-url", stack.proxy.url + "/sync"),
+            *("--sync-wait-s", "60", "--total-ms", "8000", "--limit", "8"),
+        ]
+    )
+    report = asyncio.run(bench.run(args))
+    assert report["sync"]["outcome"] == "ready", report["sync"]
+    for upload in stack.uploads():
+        assert_valid_sync(upload)
+    items = [i for u in stack.uploads() for i in u.request["assets"]]
+    assets, _ = bench.load_cases("development")
+    assert all(item["content"] is None for item in items)
+    assert {name_of(i["record"]) for i in items} == {a["name"] for a in assets}
+    measured = stack.selects()[-len(report["rows"]) :]
+    assert all(s.response["outcome"] in ("ranked", "no_match") for s in measured)
+    assert not any(is_early(s.response) for s in measured)
+    for row in report["rows"]:
+        assert row["stages"] == {"third_party": "ok"} and row["degraded"] is False, row
