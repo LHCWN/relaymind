@@ -1888,7 +1888,7 @@ Implemented for guidance (#290): the plugin sends each skill's SHA-256, path and
 answer falls back to word match and, with `guidance.sync_url`, starts a `find_missing` then `upload` sync after the
 answer. Deterministic tests use a fake router (`tests/test_guidance_sync.py`). The `interop` suite runs the gateway
 against the real asset-router at an exact commit, locally and in the `Router interop` workflow
-([testing](TESTING.md)); all ten cases pass at asset-router `621b879`
-([evidence](EVIDENCE.md#2026-11-22--guidance-gateway-against-asset-router-rm47-ac42)). Open: a selector that keeps
+([testing](TESTING.md)); all eleven cases pass at asset-router `87b9e06`, which ranks early while an embedding
+is pending (spec 0.73) ([evidence](EVIDENCE.md#2026-11-22--guidance-gateway-against-asset-router-rm47-ac42)). Open: a selector that keeps
 one version of each asset re-indexes on every switch of version or description (spec section 7.7, open finding).
 Not done: the same sync for recommendations, and any run with a real host or real inference.

@@ -4024,6 +4024,36 @@ loopback, and no real model, host or ranking quality is involved.
   own `src/apps/server/main.ts` in fed mode with its own SQLite store.
 - Command: `python scripts/asset_router_interop.py --rev <commit> --repo <local clone of asset-router>`.
 
+### RelayMind `d01f682` at asset-router `87b9e06`: 11 of 11 passed, three runs, none skipped
+
+On 2026-11-23, RelayMind `d01f682848c96c2e51c661dc44dab28f95fbc4da` (clean tree) against asset-router
+`87b9e069bbc2c57bf73933f3a4e82ee6b2ee1078`, the head of LHCWN/asset-router#1 after `63634f0`, `6cf1d16`, `6eb0943`
+and `87b9e06`. The pinned schemas are unchanged. Result:
+[`2026-11-23-guidance-router-interop-d01f682-87b9e06.json`](evidence/2026-11-23-guidance-router-interop-d01f682-87b9e06.json).
+The `Router interop` workflow now pins `87b9e06`.
+
+`87b9e06` answers early: while an accepted pair's embedding is pending, `/select` ranks with BM25 alone, with
+`mechanism` and every `score_kind` set to `router.hybrid-bm25:early` and raw, unbounded BM25 scores. Spec 0.73
+allows this (section 7.7). How it was found, against RelayMind `bd804d2`, with only test-side changes kept outside
+the repository:
+
+- The ten cases passed three times with the router's default `server.earlyResults: "rank"`, and once with
+  `"not_ready"`. A recorder of every `/select` answer showed that none of those runs got an early answer, because
+  the embeddings double answers at once. So those passes said nothing about early answers.
+- With the double slowed by 0.4 s a call, early answers came in every lifecycle case, and two cases failed. Both
+  took the first ranked answer to mean "indexed". The recipe-change case got `ranked`, `confident`, one candidate
+  scoring 2.599, where the description-only full ranking says `no_match`. The restart case counted three embedding
+  calls after the restart: `resume()` finishing the embeddings the restart cut off, with nothing sent again.
+- With `"not_ready"` and the slowed double, the ten cases passed, with 64 `find_missing` calls against 18 for
+  `"rank"` and the same 19 uploads.
+- The router's code and these runs agree that early answers never starve sync: a pair whose indexing failed, or one
+  held incomplete with nothing queued, still answers `not_ready` and is reported missing. Early scores ranged from
+  0.396 to 3.678; full-ranking scores stayed below 1.
+
+The harness now waits for the full ranking before it checks indexing, and an eleventh case slows the double to get
+an early answer on purpose. That case checks that the gateway passes the answer on as the router's ranking, with
+its `mechanism`, and starts no sync. It needs the router's default `"rank"`.
+
 ### RelayMind `8509cc2` at asset-router `621b879`: 10 of 10 passed, three runs, none skipped
 
 RelayMind `8509cc27e2d9f17d88bcf1dff7b4231d3e28f6a9` (clean tree) against asset-router
