@@ -4024,6 +4024,17 @@ loopback, and no real model, host or ranking quality is involved.
   own `src/apps/server/main.ts` in fed mode with its own SQLite store.
 - Command: `python scripts/asset_router_interop.py --rev <commit> --repo <local clone of asset-router>`.
 
+### RelayMind `08a0d76` at asset-router `e02157e`: 12 of 12 passed, three runs, none skipped
+
+On 2026-11-23, RelayMind `08a0d76048a323215295d7911c23c536e6dfad89` (clean tree) against the same asset-router
+`e02157e8e0012ee42dfc65a615da6370cc2b24cf`. The twelfth case answers a PR #291 review question: the similar-assets
+benchmark declares its assets in JSON, with no `SKILL.md`. `guidance_similar_benchmark.py --sync-url` uploads all
+32 development assets with `content: null`. The router accepts each one and indexes it from its record
+(`src/apps/server/sync.ts`, `admit()` returns no body for a null `content`), and then answers every measured case
+itself (`ranked` or `no_match`, never `:early`). Before `--sync-url` existed, the same arm got `not_ready` on every
+case and measured word match. Result:
+[`2026-11-23-guidance-router-interop-08a0d76-e02157e.json`](evidence/2026-11-23-guidance-router-interop-08a0d76-e02157e.json).
+
 ### RelayMind `2e64195` at asset-router `e02157e`: 11 of 11 passed, three runs, none skipped
 
 On 2026-11-23, RelayMind `2e64195609b46bcdaf69875662f6b39a53d5ca32` (clean tree) against asset-router

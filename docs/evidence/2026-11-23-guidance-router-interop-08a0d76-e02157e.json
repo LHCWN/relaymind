@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "outcome": "passed",
+  "relaymind_commit": "08a0d76048a323215295d7911c23c536e6dfad89",
+  "relaymind_clean": true,
+  "router_commit": "e02157e8e0012ee42dfc65a615da6370cc2b24cf",
+  "tests": 12,
+  "passed": 12,
+  "failed": 0,
+  "skipped": 0,
+  "runs": 3,
+  "note": "scripts/asset_router_interop.py --result, three identical runs on Linux with Node 24.22.1; inference is a deterministic embeddings double, not ranking quality. The twelfth case syncs the similar-assets benchmark's JSON assets (content null) before measuring."
+}
