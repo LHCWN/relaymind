@@ -4171,3 +4171,59 @@ their descriptions swapped, showed that this revision ranked with the descriptio
 To check the harness before the router fixes existed, it was also run against a throwaway local copy of
 `c3cc835` patched only for those two issues; the eight cases it had then passed three runs in a row. That copy
 was never pushed and is not compatibility evidence.
+
+## 2026-11-23 — asset-router against the default (RM47, AC42)
+
+Development diagnostics. A model wrote the similar-skill data and its expected answers (see the 2026-11-05 entry),
+so these are not independent labels, loading a skill is not task success, and none of this satisfies AC25 to AC37.
+Metrics are in [`evidence/2026-11-23-asset-router-vs-default/`](evidence/2026-11-23-asset-router-vs-default/README.md).
+The runbook is in [guidance.md](guidance.md#compare-asset-router-with-the-default).
+
+- Machine: Ubuntu 26.04.1 LTS, kernel 7.0.0-43-generic, Intel Xeon (Skylake, IBRS) VM, 8 vCPU, 11 GiB RAM, no GPU;
+  Python 3.14.4, Node 24.22.1, OpenClaw 2026.10.7 (`157d8c2`).
+- RelayMind `a2bbcd3`, clean tree. asset-router `c092bd190b964cd32c47946aab5dbded8c632d64` with its default ranking
+  (`router.hybrid-bm25`), fed mode, a fresh store.
+- Embeddings: llama.cpp `b12237` (`llama-b12237-bin-ubuntu-x64.tar.gz`, SHA-256 `ffd7ccfe…5f68`) serving
+  `ggml-org/bge-m3-Q8_0-GGUF` at `9eba04c` (`bge-m3-q8_0.gguf`, SHA-256 `aa473d51…a173`) on loopback, with
+  `--embeddings --pooling cls -c 8192 -b 8192 -ub 8192 -t 6`. So the router reports `inference: local`.
+- Model picker, as a reference arm: `glm-5.3-flash` at `https://api.z.ai/api/paas/v4`, `reasoning_effort` low.
+  GLM-5.4 was not available to the pay-as-you-go key (HTTP 403, "You do not have permission to access glm-5.4");
+  Z.AI's page says it is for the GLM Coding Plan until its Model API opens.
+- Background: the version 3 source catalog cannot be rebuilt exactly (two Matrix archives changed upstream; see
+  [SOURCE_BENCHMARK.md](SOURCE_BENCHMARK.md)). A private copy of the recipe without those two skills gave 411
+  assets. The background is what `--background-catalog` builds from it: 278 skills and 131 tools, so 479 assets were
+  on offer for the holdout, against 480 in the 2026-11-05 runs.
+
+**Selection.** Holdout, 284 prompts, `scripts/guidance_similar_benchmark.py`, then `scripts/guidance_compare.py`.
+
+| Arm | First pick | MRR | P@3 | R@3 | F1@3 | R@8 | Picks | False picks | Asked | Set found | All found | Set exact | Failed | Against the default: won/lost (p) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Default (word match) | 26% | 0.32 | 17% | 38% | 0.24 | 46% | 5.63 | 12% | 0% | 59% | 36% | 38% | 0 | |
+| asset-router, bge-m3 | 50% | 0.55 | 44% | 58% | 0.50 | 62% | 2.58 | 0% | 0% | 66% | 28% | 68% | 0 | 64/13 (3.0e-09) |
+| GLM picker, glm-5.3-flash | 91% | 0.92 | 87% | 94% | 0.90 | 94% | 1.27 | 6% | 97% | 96% | 83% | 97% | 2 | 150/4 (2.0e-39) |
+
+Against asset-router, the GLM picker won 111 prompts and lost 3 (p 2.4e-29). The default arm matches the
+2026-11-05 run (first pick 26%, set found 59%), so the one missing background asset changes little.
+
+By lane, first pick for one-skill prompts and set found for complex requests:
+
+| Lane | Default | asset-router | GLM picker |
+| --- | ---: | ---: | ---: |
+| English, one skill (70) | 49% | 76% | 93% |
+| Chinese, one skill (70) | 7% | 30% | 89% |
+| English follow-ups (16) | 31% | 50% | 88% |
+| Chinese follow-ups (16) | 0% | 25% | 94% |
+| English complex, set found (32) | 92% | 86% (2/8 against the default, p 0.11) | 95% |
+| Chinese complex, set found (32) | 27% | 46% | 97% |
+
+On unrelated prompts (8 English, 8 Chinese) asset-router made no false pick; the default made one in each language.
+Only the GLM picker asks the user on prompts that fit a whole family (97%), because selection v2 has no `choose`.
+On Chinese one-skill prompts asset-router made 0.76 picks per prompt: it often answers `no_match`.
+
+asset-router answered every case itself (`router.hybrid-bm25`, no early answer, no fallback). Its sync before the
+cases took 135 s for 479 assets and is not in any case's time. The GLM picker used 837,901 input and 21,843 output
+tokens (439 calls), about $0.14 at Z.AI's listed prices. Latency is not compared: everything ran on one 8-vCPU
+machine with four cases at a time, next to the embeddings server (p50 172 ms for word match, against 9 ms on
+2026-11-05; 2,412 ms for asset-router; 2,970 ms for the GLM picker).
+
+**Real turns.** To follow in this entry.

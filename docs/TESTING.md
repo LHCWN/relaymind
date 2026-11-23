@@ -2786,7 +2786,9 @@ Selector sync (spec 0.72; RM47, AC42): `tests/test_guidance_sync.py` drives the 
 router that answers select and sync, and once against a real loopback server through the launched gateway.
 `tests/test_guidance_similar_benchmark.py` runs the benchmark's `--sync-url` warm-up against the reference selector
 (`scripts/guidance_selector_server.py --sync-root`): without it every case falls back to word match, and with it
-every upload is the record alone and every case is the selector's own answer.
+every upload is the record alone and every case is the selector's own answer. It also checks that
+`--background-catalog` offers the skills the turn harness installs and every tool, without a skill named like one
+of the data's own.
 `tests/test_guidance_turn_benchmark.py` checks the turn harness's warm-up: the recorder answers a warm-up turn
 itself and records nothing, the proxy in front of the selector passes `/select` and `/sync` on and sees the full
 ranking, and an arm whose selector never gets ready stops before any measured turn.

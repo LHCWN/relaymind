@@ -285,3 +285,68 @@ python scripts/guidance_compare.py --baseline builtin=builtin.json --arm mine=my
 轮次。输出目录中的 `sync.json` 记录预热情况、网关的同步计数，以及选择器对测量轮次的回答。
 
 目前的结果见 [EVIDENCE.md](EVIDENCE.md#2026-11-05--per-prompt-guidance-development-runs-284)。它们只是开发诊断：期望答案由开发者编写，不满足 AC25 到 AC37。
+
+## 将 asset-router 与默认设置比较
+
+这里用 asset-router 作为第三方选择器、用内置默认设置作为基线，运行两个基准测试（规范 0.73 第 7.7 节；RM47）。选择测试把选出的资产与期望的技能比较；真实轮次检查模型之后是否加载了正确的技能，以及输入有多大。除了主机使用的模型，其余都在你的机器上运行。
+
+**1. 本地嵌入。** asset-router 自己不计算嵌入，它调用兼容 OpenAI 的 `{embeddings.baseUrl}/v1/embeddings`。在回环地址上用多语言模型运行 llama.cpp 的服务器，这样路由器会报告 `inference: local`，可以读取技能文件：
+
+```bash
+# llama.cpp b12237，llama-b12237-bin-ubuntu-x64.tar.gz，
+#   sha256 ffd7ccfe4ca5f176f730988e049630ab0b943c5f1a1b005f1619a7048a745f68
+# ggml-org/bge-m3-Q8_0-GGUF，版本 9eba04c5d75ba5a1595e45de734d36bef4e5cb98，bge-m3-q8_0.gguf，
+#   sha256 aa473d51f451a22f0fcf39ba3330c14bed38a385712b1113440f69df4047a173
+llama-server -m bge-m3-q8_0.gguf --embeddings --pooling cls --host 127.0.0.1 --port 8950 \
+  -c 8192 -b 8192 -ub 8192 -t 6
+```
+
+BGE-M3 用 CLS 词元生成稠密向量。8192 个词元的批次可以一次容纳路由器发送的任何文本（最多 4000 个字符）。
+
+**2. asset-router。** 使用已经执行过 `npm ci` 的检出，例如 `scripts/asset_router_interop.py` 保存在 `~/.cache/relaymind-interop` 中的那个。运行两个实例，每个实例都有自己的工作目录和全新的存储。路由器从该目录读取 `config/local.json`：
+
+```json
+{
+  "skills": {"source": "relaymind"},
+  "store": {"filename": "/abs/router-select/store/index.db"},
+  "embeddings": {"baseUrl": "http://127.0.0.1:8950", "model": "bge-m3", "dimensions": 1024},
+  "server": {"host": "127.0.0.1", "port": 8940, "name": "asset-router", "version": "1"},
+  "sync": {"allowedRoots": []}
+}
+```
+
+```bash
+cd /abs/router-select && node --import <checkout>/node_modules/tsx/dist/loader.mjs \
+  <checkout>/src/apps/server/main.ts
+```
+
+选择测试不发送文件，所以它的实例不需要根目录。真实轮次使用端口 8941、另一个存储，以及 `"allowedRoots": ["/abs/turns/workspace/skills"]`，即轮次测试工具在其 `--output` 下安装技能的目录。启动路由器之前先创建这个目录，因为路由器会丢弃不存在的根目录。
+
+**3. 选择。** 运行默认设置、asset-router，以及作为参考的模型选择器，然后比较：
+
+```bash
+python scripts/guidance_similar_benchmark.py --split holdout --arm word --output word.json
+python scripts/guidance_similar_benchmark.py --split holdout --arm third_party \
+  --selector-url http://127.0.0.1:8940/select --sync-url http://127.0.0.1:8940/sync \
+  --selector-name asset-router --output router.json
+RELAYMIND_EXTERNAL_API_KEY=... python scripts/guidance_similar_benchmark.py --split holdout \
+  --arm external_picker --model-base-url https://host/v1 --model some-model \
+  --request-option reasoning_effort=low --output picker.json
+python scripts/guidance_compare.py --baseline word=word.json --arm asset-router=router.json \
+  --arm picker=picker.json --by-lane
+```
+
+没有背景资产时，提供的只有 70 个 holdout 技能。若要像已记录的运行那样同时提供目录中的技能和工具，请构建源目录（[SOURCE_BENCHMARK.md](SOURCE_BENCHMARK.md)），并给每个实验组加上 `--background-catalog <目录>`。其中的技能就是轮次测试工具作为主机技能安装的那些。请确认路由器报告中的 `sync.outcome` 为 `ready`，并且没有任何一行是 `degraded: true`。
+
+**4. 真实轮次。** 默认实验组运行两次，因为相同的运行结果也会有差异：
+
+```bash
+RELAYMIND_EXTERNAL_API_KEY=... python scripts/guidance_turn_benchmark.py --similar holdout --per-lane 20 \
+  --arms default,default_repeat,third_party --model-base-url https://host/v1 --model some-model \
+  --third-party-url http://127.0.0.1:8941/select --third-party-sync-url http://127.0.0.1:8941/sync \
+  --third-party-name asset-router --output /abs/turns
+```
+
+先用 `--per-lane 2` 做一次短的试运行，并查看其 `summary.json` 中的词元数。输出目录包含 `summary.json`（每个实验组的正确技能、输入大小和时间）、`runs.jsonl`（每个轮次一行）和 `sync.json`（预热情况，以及路由器对测量轮次的回答）。使用 `--similar` 时，主机提供 70 个 holdout 技能和它自带的技能，不安装目录。
+
+**谨慎解读结果。** 在同时运行嵌入服务器的同一台机器上测得的选择延迟不是速度结果。这些数据和期望答案由模型编写，所以结果只是开发诊断，不满足 AC25 到 AC37。目前的结果见 [EVIDENCE.md](EVIDENCE.md#2026-11-23--asset-router-against-the-default-rm47-ac42)。

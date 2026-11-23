@@ -28,6 +28,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   proxy in front of the selector shows when it answers with its full ranking (`--sync-wait-s`, 600 s by default).
   `sync.json` records the warm-up, the gateway's sync counts and the select outcomes of the measured turns.
   The `Router interop` workflow now pins asset-router `c092bd1`, where all twelve cases pass.
+- `docs/guidance.md` and `docs/guidance.zh-CN.md`, "Compare asset-router with the default": a runbook for both
+  benchmarks with asset-router against the built-in default, with local `bge-m3` embeddings through llama.cpp
+  (pinned release and model, with SHA-256). `guidance_similar_benchmark.py --background-catalog` builds the
+  background from a source catalog, with the skills the turn harness installs and every tool. The first results
+  are in EVIDENCE.md. `docs/SOURCE_BENCHMARK.md` records that two Matrix archives pinned by the version 3 recipe
+  changed upstream, so version 3 can no longer be rebuilt exactly.
   `--third-party-name` and `--third-party-version` name the selector, which the gateway checks; before, the arms
   always named `example_intent`.
 - Specification 0.72 (#290; RM47; AC42; section 7.7): guidance can keep a third-party selector's index in step

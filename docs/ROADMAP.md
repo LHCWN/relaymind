@@ -1891,7 +1891,10 @@ against the real asset-router at an exact commit, locally and in the `Router int
 ([testing](TESTING.md)); all twelve cases pass at asset-router `c092bd1`, the pinned commit, and at `e02157e`,
 which ranks early while an embedding is pending (spec 0.73). `scripts/guidance_similar_benchmark.py --sync-url`
 syncs such a selector before it measures, from JSON assets with no file, and `scripts/guidance_turn_benchmark.py
---third-party-sync-url` does it through the real host with warm-up turns that call no model ([evidence](EVIDENCE.md#2026-11-22--guidance-gateway-against-asset-router-rm47-ac42)). Open: a selector that keeps
+--third-party-sync-url` does it through the real host with warm-up turns that call no model
+([evidence](EVIDENCE.md#2026-11-22--guidance-gateway-against-asset-router-rm47-ac42)). A first comparison with
+local `bge-m3` embeddings: asset-router picks better than the default but far below a model picker
+([evidence](EVIDENCE.md#2026-11-23--asset-router-against-the-default-rm47-ac42)). Open: a selector that keeps
 one version of each asset re-indexes on every switch of version or description (spec section 7.7, open finding).
 Not done: the same sync for recommendations, and any measured turn with real inference (the turn benchmark's
 warm-up ran through the real host, with no model call).

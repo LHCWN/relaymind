@@ -25,7 +25,8 @@
   that builds an index with free warm-up turns before the measured ones (RM47).
 - `guidance_similar_benchmark.py` — the guidance stages or your selector over families of similar
   skills, with follow-ups, undecided and unrelated prompts (RM16, RM45). `--sync-url` syncs a
-  selector that builds an index before any case runs (RM47).
+  selector that builds an index before any case runs (RM47); `--background-catalog` offers a
+  source catalog's skills and tools as well.
 - `guidance_compare.py` — precision, recall, F1, MRR and more for any selector against a baseline,
   from reports of either benchmark (RM16, RM40, RM45).
 

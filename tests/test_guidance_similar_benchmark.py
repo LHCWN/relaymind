@@ -231,3 +231,53 @@ def test_a_no_match_from_the_synced_selector_is_ready(indexing_selector):
     assets = [dict(name="pdf-merge", kind="skill", description="Merge pdf documents")]
     synced = asyncio.run(harness.sync_selector(assets, settings, selector, sync, wait_s=10))
     assert synced["outcome"] == "ready" and synced["selects"] == 2
+
+
+def test_a_background_from_a_source_catalog_matches_what_the_turn_harness_installs(tmp_path):
+    """--background-catalog: the skills the turn harness installs and every tool, never a skill
+    named like one of the data's own, each with its record's description (spec 0.73 7.7)."""
+    import json
+
+    taken = harness.load_cases("holdout")[0][0]["name"]
+    catalog = tmp_path / "catalog"
+    (catalog / "e").mkdir(parents=True)
+    for name in ("pdf-merge", taken):
+        (catalog / "e" / f"{name}.md").write_text(f"---\nname: {name}\n---\nBody", "utf-8")
+    (catalog / "e" / "zip.md").write_bytes(b"PK\x03\x04")  # The turn harness skips a ZIP.
+    skill = lambda asset_id, path: dict(  # noqa: E731
+        record=dict(kind="skill", asset_id=asset_id, description=f"About {asset_id} " + "x" * 3000),
+        original_evidence_id=path,
+    )
+    (catalog / "catalog.json").write_text(
+        json.dumps(
+            dict(
+                assets=[
+                    skill("s:pdf", "pdf"),
+                    skill("s:taken", "taken"),
+                    skill("s:zip", "zip"),
+                    dict(
+                        record=dict(
+                            kind="mcp_tool",
+                            asset_id="t:issue",
+                            description="Open an issue",
+                            identity=dict(tool_name="create_issue"),
+                        )
+                    ),
+                ],
+                evidence=[
+                    dict(id="pdf", path="e/pdf-merge.md"),
+                    dict(id="taken", path=f"e/{taken}.md"),
+                    dict(id="zip", path="e/zip.md"),
+                ],
+            )
+        ),
+        "utf-8",
+    )
+    background = harness.background_from_catalog(catalog)
+    assert [(a["name"], a["kind"]) for a in background] == [
+        ("pdf-merge", "skill"),
+        ("create_issue", "mcp_tool"),
+    ]
+    assert background[0]["description"].startswith("About s:pdf")
+    assert len(background[0]["description"].encode()) <= 2048
+    assert background[1]["description"] == "Open an issue"

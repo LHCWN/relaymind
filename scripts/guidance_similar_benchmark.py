@@ -26,9 +26,11 @@ Development evidence: a model wrote the data and its expected answers, so this i
 
 import argparse
 import asyncio
+import importlib.util
 import json
 import os
 import sys
+import tempfile
 import time
 from collections import Counter, defaultdict
 from dataclasses import replace
@@ -42,6 +44,7 @@ from relaymind.adapters.chat_completions import check_request_options  # noqa: E
 from relaymind.assets.catalog import MAX_OFFER_RECORDS  # noqa: E402
 from relaymind.guidance import GuidanceSettings, parse_guidance_request, run_guidance  # noqa: E402
 from relaymind.guidance.models import chat_client, local_keyword_client  # noqa: E402
+from relaymind.guidance.pipeline import MAX_DESCRIPTION_BYTES, clip_bytes  # noqa: E402
 from relaymind.guidance.sync import GuidanceSync  # noqa: E402
 from relaymind.selection.asset_http import HttpAssetSelector  # noqa: E402
 
@@ -204,6 +207,35 @@ def arm_problem(
     return None
 
 
+def background_from_catalog(catalog_dir: Path, data_path: Path = DATA) -> list[dict]:
+    """Background assets from a built source catalog (docs/SOURCE_BENCHMARK.md).
+
+    The skills are the ones scripts/guidance_turn_benchmark.py installs as host skills, so both
+    benchmarks offer the same background, and the tools are every catalog tool. A skill named like
+    one of the data's own skills, in any split, is left out, so no name is offered twice."""
+    spec = importlib.util.spec_from_file_location(
+        "guidance_turn_benchmark", ROOT / "scripts/guidance_turn_benchmark.py"
+    )
+    turns = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(turns)
+    catalog = json.loads((catalog_dir / "catalog.json").read_text("utf-8"))
+    records = {asset["record"]["asset_id"]: asset["record"] for asset in catalog["assets"]}
+    data = json.loads(data_path.read_text("utf-8"))
+    own = {s["name"] for split in data["splits"].values() for f in split for s in f["skills"]}
+    with tempfile.TemporaryDirectory() as folder:
+        skills = turns.install_skills(catalog_dir, Path(folder) / "skills")
+        tools, _ = turns.install_tools(catalog, Path(folder) / "mcp")
+    background, seen = [], set()
+    for kind, names in (("skill", skills), ("mcp_tool", tools)):
+        for asset_id, name in names.items():
+            if (kind, name) in seen or (kind == "skill" and name in own):
+                continue
+            seen.add((kind, name))
+            description = clip_bytes(records[asset_id]["description"], MAX_DESCRIPTION_BYTES)
+            background.append(dict(name=name, kind=kind, description=description))
+    return background
+
+
 def offer_problem(count: int) -> str | None:
     """Why --sync-url cannot cover every case: above one offer each prompt offers its own subset."""
     if count > MAX_OFFER_RECORDS:
@@ -272,6 +304,8 @@ async def run(args) -> dict:
     assets, cases = load_cases(args.split, Path(args.data))
     if args.background:
         assets = [*assets, *json.loads(Path(args.background).read_text("utf-8"))]
+    if args.background_catalog:
+        assets = [*assets, *background_from_catalog(Path(args.background_catalog), Path(args.data))]
     if args.limit:
         cases = cases[: args.limit]
     arm = ARMS[args.arm]
@@ -379,6 +413,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output", required=True)
     parser.add_argument("--data", default=str(DATA))
     parser.add_argument("--background", help="JSON list of extra {name,kind,description} assets.")
+    parser.add_argument(
+        "--background-catalog",
+        help="A built source catalog folder: its skills and tools become background assets.",
+    )
     parser.add_argument("--model-base-url")
     parser.add_argument("--model")
     parser.add_argument("--api-key-env", default="RELAYMIND_EXTERNAL_API_KEY")

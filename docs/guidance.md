@@ -404,3 +404,86 @@ warm-up, the gateway's sync counts, and how the selector answered the measured t
 
 Results so far are in [EVIDENCE.md](EVIDENCE.md#2026-11-05--per-prompt-guidance-development-runs-284). They are
 development diagnostics: the expected answers are developer-authored, and they do not satisfy AC25 to AC37.
+
+## Compare asset-router with the default
+
+This runs both benchmarks with asset-router as the third-party selector and the built-in default as the baseline
+(spec 0.73 section 7.7; RM47). Selection compares picks with the expected skills. Real turns check whether the model
+then loads the right skill, and at what input size. Everything except the host's model runs on your machine.
+
+**1. Local embeddings.** asset-router does not embed text itself. It calls an OpenAI-compatible
+`{embeddings.baseUrl}/v1/embeddings`. Run llama.cpp's server with a multilingual model on loopback, so the router
+reports `inference: local` and may read skill files:
+
+```bash
+# llama.cpp b12237, llama-b12237-bin-ubuntu-x64.tar.gz,
+#   sha256 ffd7ccfe4ca5f176f730988e049630ab0b943c5f1a1b005f1619a7048a745f68
+# ggml-org/bge-m3-Q8_0-GGUF at 9eba04c5d75ba5a1595e45de734d36bef4e5cb98, bge-m3-q8_0.gguf,
+#   sha256 aa473d51f451a22f0fcf39ba3330c14bed38a385712b1113440f69df4047a173
+llama-server -m bge-m3-q8_0.gguf --embeddings --pooling cls --host 127.0.0.1 --port 8950 \
+  -c 8192 -b 8192 -ub 8192 -t 6
+```
+
+BGE-M3 makes its dense vectors from the CLS token. The 8,192-token batch holds any text the router sends (at most
+4,000 characters) in one piece.
+
+**2. asset-router.** Use a checkout with `npm ci` done, such as the one `scripts/asset_router_interop.py` keeps in
+`~/.cache/relaymind-interop`. Run two instances, each from its own working folder with a fresh store. The router
+reads `config/local.json` from that folder:
+
+```json
+{
+  "skills": {"source": "relaymind"},
+  "store": {"filename": "/abs/router-select/store/index.db"},
+  "embeddings": {"baseUrl": "http://127.0.0.1:8950", "model": "bge-m3", "dimensions": 1024},
+  "server": {"host": "127.0.0.1", "port": 8940, "name": "asset-router", "version": "1"},
+  "sync": {"allowedRoots": []}
+}
+```
+
+```bash
+cd /abs/router-select && node --import <checkout>/node_modules/tsx/dist/loader.mjs \
+  <checkout>/src/apps/server/main.ts
+```
+
+The selection benchmark sends no files, so its instance needs no roots. For real turns, use port 8941, another
+store, and `"allowedRoots": ["/abs/turns/workspace/skills"]`, the folder where the turn harness installs skills under
+its `--output`. Create that folder before you start the router, because the router drops a root that does not exist.
+
+**3. Selection.** Run the default, asset-router and, as a reference, a model picker. Then compare:
+
+```bash
+python scripts/guidance_similar_benchmark.py --split holdout --arm word --output word.json
+python scripts/guidance_similar_benchmark.py --split holdout --arm third_party \
+  --selector-url http://127.0.0.1:8940/select --sync-url http://127.0.0.1:8940/sync \
+  --selector-name asset-router --output router.json
+RELAYMIND_EXTERNAL_API_KEY=... python scripts/guidance_similar_benchmark.py --split holdout \
+  --arm external_picker --model-base-url https://host/v1 --model some-model \
+  --request-option reasoning_effort=low --output picker.json
+python scripts/guidance_compare.py --baseline word=word.json --arm asset-router=router.json \
+  --arm picker=picker.json --by-lane
+```
+
+Without a background the offer is only the 70 holdout skills. To offer the catalog's skills and tools too, as the
+recorded runs do, build the source catalog ([SOURCE_BENCHMARK.md](SOURCE_BENCHMARK.md)) and add
+`--background-catalog <catalog folder>` to every arm. Its skills are the ones the turn harness installs as host
+skills. Check that the router report's `sync.outcome` is `ready` and that no row has `degraded: true`.
+
+**4. Real turns.** The default arm runs twice, because identical runs differ:
+
+```bash
+RELAYMIND_EXTERNAL_API_KEY=... python scripts/guidance_turn_benchmark.py --similar holdout --per-lane 20 \
+  --arms default,default_repeat,third_party --model-base-url https://host/v1 --model some-model \
+  --third-party-url http://127.0.0.1:8941/select --third-party-sync-url http://127.0.0.1:8941/sync \
+  --third-party-name asset-router --output /abs/turns
+```
+
+Run a short pilot first with `--per-lane 2`, and read the token counts in its `summary.json`. The output folder holds
+`summary.json` (right skill, input sizes and time per arm), `runs.jsonl` (one line per turn) and `sync.json` (the
+warm-up and how the router answered the measured turns). With `--similar`, the host offers the 70 holdout skills and
+its own bundled skills; the catalog is not installed.
+
+**Read the results with care.** Selection latency on one machine that also runs the embeddings server is not a
+speed result. These data and expected answers were written by a model, so the results are development diagnostics
+and do not satisfy AC25 to AC37. Results so far are in
+[EVIDENCE.md](EVIDENCE.md#2026-11-23--asset-router-against-the-default-rm47-ac42).

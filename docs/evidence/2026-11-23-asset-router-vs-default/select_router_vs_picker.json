@@ -1,0 +1,67 @@
+{
+ "arms": {
+  "asset-router": {
+   "metrics": {
+    "prompts": 284,
+    "positive_prompts": 172,
+    "first_pick": 0.5,
+    "mrr": 0.5471899224806202,
+    "precision_at_3": 0.44017094017094016,
+    "recall_at_3": 0.5755813953488372,
+    "f1_at_3": 0.4988503497871924,
+    "recall_at_8": 0.622093023255814,
+    "picks_per_prompt": 2.5813953488372094,
+    "unrelated_prompts": 16,
+    "unrelated_false_picks": 0.0,
+    "undecided_prompts": 32,
+    "undecided_asked": 0.0,
+    "undecided_share_offered": 0.4453125,
+    "workflow_prompts": 64,
+    "workflow_found": 0.6609375,
+    "workflow_all_found": 0.28125,
+    "workflow_precision": 0.6801525297619048,
+    "workflow_picks": 4.46875,
+    "degraded": 0,
+    "early": 0,
+    "p50_ms": 2412.5,
+    "p95_ms": 3171
+   },
+   "input_tokens": null
+  },
+  "glm-picker": {
+   "metrics": {
+    "prompts": 284,
+    "positive_prompts": 172,
+    "first_pick": 0.9069767441860465,
+    "mrr": 0.9219961240310078,
+    "precision_at_3": 0.8691860465116279,
+    "recall_at_3": 0.936046511627907,
+    "f1_at_3": 0.9013781223083549,
+    "recall_at_8": 0.9418604651162791,
+    "picks_per_prompt": 1.2732558139534884,
+    "unrelated_prompts": 16,
+    "unrelated_false_picks": 0.0625,
+    "undecided_prompts": 32,
+    "undecided_asked": 0.96875,
+    "undecided_share_offered": 0.9265625,
+    "workflow_prompts": 64,
+    "workflow_found": 0.95625,
+    "workflow_all_found": 0.828125,
+    "workflow_precision": 0.9697916666666667,
+    "workflow_picks": 3.921875,
+    "degraded": 2,
+    "early": 0,
+    "p50_ms": 2970.5,
+    "p95_ms": 5626
+   },
+   "input_tokens": 837901,
+   "paired_with_baseline": {
+    "wins": 111,
+    "losses": 3,
+    "same": 122,
+    "sign_test_p": 2.378716074312675e-29
+   }
+  }
+ },
+ "lanes": {}
+}
