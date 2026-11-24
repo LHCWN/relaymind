@@ -27,10 +27,14 @@
   skills, with follow-ups, undecided and unrelated prompts (RM16, RM45). `--sync-url` syncs a
   selector that builds an index before any case runs (RM47); `--background-catalog` offers a
   source catalog's skills and tools as well.
-- `guidance_compare.py` — precision, recall, F1, MRR and more for any selector against a baseline,
-  from reports of either benchmark (RM16, RM40, RM45).
+- `guidance_compare.py` — macro and micro precision and recall first, overall and per language,
+  then first pick, MRR and more, for any selector against a baseline, from reports of either
+  benchmark (RM16, RM40, RM45; spec 0.74).
+- `guidance_embedding_probe.py --url <loopback embeddings>` — where an embedding model ranks the
+  right skill of each similar-skill prompt by embedding alone, and on what cosine scale, with no
+  selector involved (RM45, RM47).
 
-The five guidance scripts above are developer tools. They and the recorded evidence ran on macOS and
+The seven scripts above are developer tools. They and the recorded evidence ran on macOS and
 Linux. Their unit tests also run on Windows in CI, but no real benchmark run was made on Windows.
 - `source_asset_benchmark.py` — acquire pinned originals, build offline inputs,
   run identical source-backed skill/MCP cases, compare internal JSON diagnostics

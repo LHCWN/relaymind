@@ -8,6 +8,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Specification 0.74 (RM45; RM47; section 7.7): macro precision and macro recall are the main metrics for
+  comparing selectors. They cover one-skill prompts and big workflows. Every pick counts, and a prompt with no pick
+  scores 0 for precision. For a one-skill prompt, recall is 1 when any acceptable asset was picked; for a workflow,
+  it is the share of its needed set. `scripts/guidance_compare.py` leads its table with macro and micro precision
+  and recall and a sign test on each, and prints them per prompt language under "By language". Before, its P@3
+  left out prompts with no pick, so a selector that often answered `no_match` looked precise: on 2026-11-24 one
+  arm showed P@3 76% and macro precision 49%. P@3 and the other earlier columns stay, as secondary metrics.
+- `docs/guidance.md` and `docs/guidance.zh-CN.md`, "Compare your selector with the default, step by step":
+  the asset-router runbook is now general for any third-party selector, with asset-router as the worked example.
+  It adds how to serve another embedding model through llama.cpp (granite, nomic and SKILLRET recipes, a
+  conversion step and a vector check), and why asset-router's `minScore` must be set for each model. Results
+  with four embedding models are in EVIDENCE.md.
 - Specification 0.73 (RM47; AC42; section 7.7): a guidance selector may answer early, ranking a pair from the
   features it has already indexed while the rest is still being indexed. It marks such an answer with a
   `mechanism` and `score_kind` ending in `:early`. The gateway passes it on like any other ranked answer, with

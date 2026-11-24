@@ -2778,7 +2778,8 @@ No production MCP operation, runtime snapshot or AC35 acceptance is enabled.
 
 Deterministic, with model doubles: `tests/test_guidance.py`, `tests/test_guidance_api.py`,
 `tests/test_guidance_selectors.py`, `tests/test_guidance_docs.py`,
-`tests/test_guidance_compare.py`, `tests/test_guidance_similar_benchmark.py`,
+`tests/test_guidance_compare.py`, `tests/test_guidance_embedding_probe.py`,
+`tests/test_guidance_similar_benchmark.py`,
 `tests/test_guidance_turn_benchmark.py`, `tests/test_matrix_benchmark_v3.py`, and in
 `integrations/openclaw`, `test/guidance-plugin.test.ts`.
 

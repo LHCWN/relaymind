@@ -1,0 +1,3290 @@
+{
+ "arms": {
+  "word": {
+   "metrics": {
+    "prompts": 284,
+    "answer_prompts": 236,
+    "macro_precision": 0.19307909604519777,
+    "macro_recall": 0.49519774011299433,
+    "micro_precision": 0.1619718309859155,
+    "micro_recall": 0.539906103286385,
+    "positive_prompts": 172,
+    "first_pick": 0.2558139534883721,
+    "mrr": 0.324515503875969,
+    "precision_at_3": 0.1707070707070707,
+    "recall_at_3": 0.37790697674418605,
+    "f1_at_3": 0.23517951572502088,
+    "recall_at_8": 0.45930232558139533,
+    "picks_per_prompt": 5.633720930232558,
+    "unrelated_prompts": 16,
+    "unrelated_false_picks": 0.125,
+    "undecided_prompts": 32,
+    "undecided_asked": 0.0,
+    "undecided_share_offered": 0.38125,
+    "workflow_prompts": 64,
+    "workflow_found": 0.5916666666666667,
+    "workflow_all_found": 0.359375,
+    "workflow_precision": 0.37881324404761907,
+    "workflow_picks": 7.046875,
+    "degraded": 0,
+    "early": 0,
+    "p50_ms": 172.0,
+    "p95_ms": 259
+   },
+   "input_tokens": null,
+   "by_language": {
+    "en": {
+     "answer_prompts": 118,
+     "macro_precision": 0.3318401937046005,
+     "macro_recall": 0.8252824858757063,
+     "micro_precision": 0.2503364737550471,
+     "micro_recall": 0.8732394366197183
+    },
+    "zh": {
+     "answer_prompts": 118,
+     "macro_precision": 0.054317998385795,
+     "macro_recall": 0.16511299435028248,
+     "micro_precision": 0.06499261447562776,
+     "micro_recall": 0.20657276995305165
+    }
+   }
+  },
+  "asset-router-bge-m3": {
+   "metrics": {
+    "prompts": 284,
+    "answer_prompts": 236,
+    "macro_precision": 0.37894471347861175,
+    "macro_recall": 0.6326271186440678,
+    "micro_precision": 0.37534246575342467,
+    "micro_recall": 0.6431924882629108,
+    "positive_prompts": 172,
+    "first_pick": 0.5,
+    "mrr": 0.5471899224806202,
+    "precision_at_3": 0.44017094017094016,
+    "recall_at_3": 0.5755813953488372,
+    "f1_at_3": 0.4988503497871924,
+    "recall_at_8": 0.622093023255814,
+    "picks_per_prompt": 2.5813953488372094,
+    "unrelated_prompts": 16,
+    "unrelated_false_picks": 0.0,
+    "undecided_prompts": 32,
+    "undecided_asked": 0.0,
+    "undecided_share_offered": 0.4453125,
+    "workflow_prompts": 64,
+    "workflow_found": 0.6609375,
+    "workflow_all_found": 0.28125,
+    "workflow_precision": 0.6801525297619048,
+    "workflow_picks": 4.46875,
+    "degraded": 0,
+    "early": 0,
+    "p50_ms": 2412.5,
+    "p95_ms": 3171
+   },
+   "input_tokens": null,
+   "by_language": {
+    "en": {
+     "answer_prompts": 118,
+     "macro_precision": 0.39510694108151734,
+     "macro_recall": 0.9121468926553673,
+     "micro_precision": 0.3321678321678322,
+     "micro_recall": 0.892018779342723
+    },
+    "zh": {
+     "answer_prompts": 118,
+     "macro_precision": 0.36278248587570616,
+     "macro_recall": 0.3531073446327683,
+     "micro_precision": 0.5316455696202531,
+     "micro_recall": 0.39436619718309857
+    }
+   },
+   "paired_precision": {
+    "wins": 118,
+    "losses": 27,
+    "same": 91,
+    "sign_test_p": 9.117043873611709e-15
+   },
+   "paired_recall": {
+    "wins": 49,
+    "losses": 12,
+    "same": 175,
+    "sign_test_p": 1.969878418086636e-06
+   },
+   "paired_with_baseline": {
+    "wins": 64,
+    "losses": 13,
+    "same": 159,
+    "sign_test_p": 3.0236347515742237e-09
+   }
+  },
+  "asset-router-granite": {
+   "metrics": {
+    "prompts": 284,
+    "answer_prompts": 236,
+    "macro_precision": 0.23574455205811137,
+    "macro_recall": 0.6609463276836157,
+    "micro_precision": 0.2368633791430881,
+    "micro_recall": 0.687793427230047,
+    "positive_prompts": 172,
+    "first_pick": 0.4941860465116279,
+    "mrr": 0.545514950166113,
+    "precision_at_3": 0.35014005602240894,
+    "recall_at_3": 0.5872093023255814,
+    "f1_at_3": 0.4386955539725837,
+    "recall_at_8": 0.6337209302325582,
+    "picks_per_prompt": 4.604651162790698,
+    "unrelated_prompts": 16,
+    "unrelated_false_picks": 0.5,
+    "undecided_prompts": 32,
+    "undecided_asked": 0.0,
+    "undecided_share_offered": 0.4421875,
+    "workflow_prompts": 64,
+    "workflow_found": 0.7341145833333333,
+    "workflow_all_found": 0.34375,
+    "workflow_precision": 0.4598028273809524,
+    "workflow_picks": 6.953125,
+    "degraded": 0,
+    "early": 0,
+    "p50_ms": 4211.0,
+    "p95_ms": 6138
+   },
+   "input_tokens": null,
+   "by_language": {
+    "en": {
+     "answer_prompts": 118,
+     "macro_precision": 0.2055084745762712,
+     "macro_recall": 0.9427966101694916,
+     "micro_precision": 0.2055084745762712,
+     "micro_recall": 0.9107981220657277
+    },
+    "zh": {
+     "answer_prompts": 118,
+     "macro_precision": 0.26598062953995155,
+     "macro_recall": 0.3790960451977401,
+     "micro_precision": 0.3378839590443686,
+     "micro_recall": 0.4647887323943662
+    }
+   },
+   "paired_precision": {
+    "wins": 70,
+    "losses": 50,
+    "same": 116,
+    "sign_test_p": 0.08240747932752655
+   },
+   "paired_recall": {
+    "wins": 58,
+    "losses": 7,
+    "same": 171,
+    "sign_test_p": 4.270521620792361e-11
+   },
+   "paired_with_baseline": {
+    "wins": 72,
+    "losses": 10,
+    "same": 154,
+    "sign_test_p": 1.0224592793857492e-12
+   }
+  },
+  "asset-router-nomic": {
+   "metrics": {
+    "prompts": 284,
+    "answer_prompts": 236,
+    "macro_precision": 0.49059725585149316,
+    "macro_recall": 0.4552966101694915,
+    "micro_precision": 0.6487455197132617,
+    "micro_recall": 0.42488262910798125,
+    "positive_prompts": 172,
+    "first_pick": 0.436046511627907,
+    "mrr": 0.45542635658914726,
+    "precision_at_3": 0.7565543071161048,
+    "recall_at_3": 0.47674418604651164,
+    "f1_at_3": 0.584907659168756,
+    "recall_at_8": 0.47674418604651164,
+    "picks_per_prompt": 0.8837209302325582,
+    "unrelated_prompts": 16,
+    "unrelated_false_picks": 0.0,
+    "undecided_prompts": 32,
+    "undecided_asked": 0.0,
+    "undecided_share_offered": 0.3015625,
+    "workflow_prompts": 64,
+    "workflow_found": 0.39765625,
+    "workflow_all_found": 0.015625,
+    "workflow_precision": 0.8866921768707483,
+    "workflow_picks": 1.984375,
+    "degraded": 0,
+    "early": 0,
+    "p50_ms": 4252.5,
+    "p95_ms": 6374
+   },
+   "input_tokens": null,
+   "by_language": {
+    "en": {
+     "answer_prompts": 118,
+     "macro_precision": 0.6132566585956416,
+     "macro_recall": 0.6572033898305084,
+     "micro_precision": 0.6176470588235294,
+     "micro_recall": 0.5915492957746479
+    },
+    "zh": {
+     "answer_prompts": 118,
+     "macro_precision": 0.3679378531073446,
+     "macro_recall": 0.2533898305084746,
+     "micro_precision": 0.7333333333333333,
+     "micro_recall": 0.25821596244131456
+    }
+   },
+   "paired_precision": {
+    "wins": 117,
+    "losses": 25,
+    "same": 94,
+    "sign_test_p": 1.9856569224439697e-15
+   },
+   "paired_recall": {
+    "wins": 25,
+    "losses": 46,
+    "same": 165,
+    "sign_test_p": 0.016994652573436377
+   },
+   "paired_with_baseline": {
+    "wins": 46,
+    "losses": 39,
+    "same": 151,
+    "sign_test_p": 0.5154257318839004
+   }
+  },
+  "asset-router-skillret": {
+   "metrics": {
+    "prompts": 284,
+    "answer_prompts": 236,
+    "macro_precision": 0.1694915254237288,
+    "macro_recall": 0.12620056497175142,
+    "micro_precision": 0.9534883720930233,
+    "micro_recall": 0.09624413145539906,
+    "positive_prompts": 172,
+    "first_pick": 0.14534883720930233,
+    "mrr": 0.14825581395348839,
+    "precision_at_3": 0.9615384615384616,
+    "recall_at_3": 0.1511627906976744,
+    "f1_at_3": 0.2612540192926045,
+    "recall_at_8": 0.1511627906976744,
+    "picks_per_prompt": 0.16279069767441862,
+    "unrelated_prompts": 16,
+    "unrelated_false_picks": 0.0,
+    "undecided_prompts": 32,
+    "undecided_asked": 0.0,
+    "undecided_share_offered": 0.084375,
+    "workflow_prompts": 64,
+    "workflow_found": 0.05911458333333333,
+    "workflow_all_found": 0.0,
+    "workflow_precision": 1.0,
+    "workflow_picks": 0.234375,
+    "degraded": 0,
+    "early": 0,
+    "p50_ms": 7069.0,
+    "p95_ms": 11186
+   },
+   "input_tokens": null,
+   "by_language": {
+    "en": {
+     "answer_prompts": 118,
+     "macro_precision": 0.2288135593220339,
+     "macro_recall": 0.18545197740112995,
+     "micro_precision": 0.9333333333333333,
+     "micro_recall": 0.13145539906103287
+    },
+    "zh": {
+     "answer_prompts": 118,
+     "macro_precision": 0.11016949152542373,
+     "macro_recall": 0.06694915254237288,
+     "micro_precision": 1.0,
+     "micro_recall": 0.06103286384976526
+    }
+   },
+   "paired_precision": {
+    "wins": 34,
+    "losses": 96,
+    "same": 106,
+    "sign_test_p": 4.9442756005441277e-08
+   },
+   "paired_recall": {
+    "wins": 3,
+    "losses": 108,
+    "same": 125,
+    "sign_test_p": 1.7566946283140407e-28
+   },
+   "paired_with_baseline": {
+    "wins": 12,
+    "losses": 83,
+    "same": 141,
+    "sign_test_p": 3.211393990185144e-14
+   }
+  },
+  "glm-picker": {
+   "metrics": {
+    "prompts": 284,
+    "answer_prompts": 236,
+    "macro_precision": 0.8947437449556094,
+    "macro_recall": 0.9457627118644067,
+    "micro_precision": 0.8617021276595744,
+    "micro_recall": 0.9507042253521126,
+    "positive_prompts": 172,
+    "first_pick": 0.9069767441860465,
+    "mrr": 0.9219961240310078,
+    "precision_at_3": 0.8691860465116279,
+    "recall_at_3": 0.936046511627907,
+    "f1_at_3": 0.9013781223083549,
+    "recall_at_8": 0.9418604651162791,
+    "picks_per_prompt": 1.2732558139534884,
+    "unrelated_prompts": 16,
+    "unrelated_false_picks": 0.0625,
+    "undecided_prompts": 32,
+    "undecided_asked": 0.96875,
+    "undecided_share_offered": 0.9265625,
+    "workflow_prompts": 64,
+    "workflow_found": 0.95625,
+    "workflow_all_found": 0.828125,
+    "workflow_precision": 0.9697916666666667,
+    "workflow_picks": 3.921875,
+    "degraded": 2,
+    "early": 0,
+    "p50_ms": 2970.5,
+    "p95_ms": 5626
+   },
+   "input_tokens": 837901,
+   "by_language": {
+    "en": {
+     "answer_prompts": 118,
+     "macro_precision": 0.888135593220339,
+     "macro_recall": 0.9348870056497175,
+     "micro_precision": 0.8620689655172413,
+     "micro_recall": 0.9389671361502347
+    },
+    "zh": {
+     "answer_prompts": 118,
+     "macro_precision": 0.9013518966908797,
+     "macro_recall": 0.9566384180790961,
+     "micro_precision": 0.8613445378151261,
+     "micro_recall": 0.9624413145539906
+    }
+   },
+   "paired_precision": {
+    "wins": 209,
+    "losses": 1,
+    "same": 26,
+    "sign_test_p": 2.5645629367748064e-61
+   },
+   "paired_recall": {
+    "wins": 121,
+    "losses": 4,
+    "same": 111,
+    "sign_test_p": 4.709971235072482e-31
+   },
+   "paired_with_baseline": {
+    "wins": 150,
+    "losses": 4,
+    "same": 82,
+    "sign_test_p": 2.0268000885785706e-39
+   }
+  }
+ },
+ "lanes": {
+  "complex_en": {
+   "word": {
+    "metrics": {
+     "prompts": 32,
+     "answer_prompts": 32,
+     "macro_precision": 0.6287202380952381,
+     "macro_recall": 0.9182291666666667,
+     "micro_precision": 0.5812807881773399,
+     "micro_recall": 0.9291338582677166,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 32,
+     "workflow_found": 0.9182291666666667,
+     "workflow_all_found": 0.71875,
+     "workflow_precision": 0.6287202380952381,
+     "workflow_picks": 6.34375,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 189.0,
+     "p95_ms": 261
+    },
+    "input_tokens": null
+   },
+   "asset-router-bge-m3": {
+    "metrics": {
+     "prompts": 32,
+     "answer_prompts": 32,
+     "macro_precision": 0.5980654761904762,
+     "macro_recall": 0.8635416666666667,
+     "micro_precision": 0.5555555555555556,
+     "micro_recall": 0.8661417322834646,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 32,
+     "workflow_found": 0.8635416666666667,
+     "workflow_all_found": 0.53125,
+     "workflow_precision": 0.5980654761904762,
+     "workflow_picks": 6.1875,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 2464.0,
+     "p95_ms": 3896
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 9,
+     "losses": 13,
+     "same": 10,
+     "sign_test_p": 0.5234670639038086
+    },
+    "paired_recall": {
+     "wins": 2,
+     "losses": 8,
+     "same": 22,
+     "sign_test_p": 0.109375
+    },
+    "paired_with_baseline": {
+     "wins": 2,
+     "losses": 8,
+     "same": 22,
+     "sign_test_p": 0.109375
+    }
+   },
+   "asset-router-granite": {
+    "metrics": {
+     "prompts": 32,
+     "answer_prompts": 32,
+     "macro_precision": 0.43359375,
+     "macro_recall": 0.8828125,
+     "micro_precision": 0.43359375,
+     "micro_recall": 0.8740157480314961,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 32,
+     "workflow_found": 0.8828125,
+     "workflow_all_found": 0.59375,
+     "workflow_precision": 0.43359375,
+     "workflow_picks": 8.0,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 4706.5,
+     "p95_ms": 5850
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 2,
+     "losses": 20,
+     "same": 10,
+     "sign_test_p": 0.00012111663818359375
+    },
+    "paired_recall": {
+     "wins": 3,
+     "losses": 7,
+     "same": 22,
+     "sign_test_p": 0.34375
+    },
+    "paired_with_baseline": {
+     "wins": 3,
+     "losses": 7,
+     "same": 22,
+     "sign_test_p": 0.34375
+    }
+   },
+   "asset-router-nomic": {
+    "metrics": {
+     "prompts": 32,
+     "answer_prompts": 32,
+     "macro_precision": 0.7808779761904762,
+     "macro_recall": 0.5171875,
+     "micro_precision": 0.7222222222222222,
+     "micro_recall": 0.5118110236220472,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 32,
+     "workflow_found": 0.5171875,
+     "workflow_all_found": 0.03125,
+     "workflow_precision": 0.8329365079365079,
+     "workflow_picks": 2.8125,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 3754.5,
+     "p95_ms": 6086
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 19,
+     "losses": 7,
+     "same": 6,
+     "sign_test_p": 0.028959274291992188
+    },
+    "paired_recall": {
+     "wins": 0,
+     "losses": 24,
+     "same": 8,
+     "sign_test_p": 1.1920928955078125e-07
+    },
+    "paired_with_baseline": {
+     "wins": 0,
+     "losses": 24,
+     "same": 8,
+     "sign_test_p": 1.1920928955078125e-07
+    }
+   },
+   "asset-router-skillret": {
+    "metrics": {
+     "prompts": 32,
+     "answer_prompts": 32,
+     "macro_precision": 0.25,
+     "macro_recall": 0.058854166666666666,
+     "micro_precision": 1.0,
+     "micro_recall": 0.06299212598425197,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 32,
+     "workflow_found": 0.058854166666666666,
+     "workflow_all_found": 0.0,
+     "workflow_precision": 1.0,
+     "workflow_picks": 0.25,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 10063.0,
+     "p95_ms": 13897
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 5,
+     "losses": 24,
+     "same": 3,
+     "sign_test_p": 0.0005461126565933228
+    },
+    "paired_recall": {
+     "wins": 0,
+     "losses": 32,
+     "same": 0,
+     "sign_test_p": 4.656612873077393e-10
+    },
+    "paired_with_baseline": {
+     "wins": 0,
+     "losses": 32,
+     "same": 0,
+     "sign_test_p": 4.656612873077393e-10
+    }
+   },
+   "glm-picker": {
+    "metrics": {
+     "prompts": 32,
+     "answer_prompts": 32,
+     "macro_precision": 0.978125,
+     "macro_recall": 0.9473958333333333,
+     "micro_precision": 0.975609756097561,
+     "micro_recall": 0.9448818897637795,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 32,
+     "workflow_found": 0.9473958333333333,
+     "workflow_all_found": 0.78125,
+     "workflow_precision": 0.978125,
+     "workflow_picks": 3.84375,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 1784.0,
+     "p95_ms": 3620
+    },
+    "input_tokens": 837901,
+    "paired_precision": {
+     "wins": 26,
+     "losses": 0,
+     "same": 6,
+     "sign_test_p": 2.9802322387695312e-08
+    },
+    "paired_recall": {
+     "wins": 6,
+     "losses": 4,
+     "same": 22,
+     "sign_test_p": 0.75390625
+    },
+    "paired_with_baseline": {
+     "wins": 6,
+     "losses": 4,
+     "same": 22,
+     "sign_test_p": 0.75390625
+    }
+   }
+  },
+  "complex_zh": {
+   "word": {
+    "metrics": {
+     "prompts": 32,
+     "answer_prompts": 32,
+     "macro_precision": 0.12890625,
+     "macro_recall": 0.26510416666666664,
+     "micro_precision": 0.13306451612903225,
+     "micro_recall": 0.25984251968503935,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 32,
+     "workflow_found": 0.26510416666666664,
+     "workflow_all_found": 0.0,
+     "workflow_precision": 0.12890625,
+     "workflow_picks": 7.75,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 201.5,
+     "p95_ms": 251
+    },
+    "input_tokens": null
+   },
+   "asset-router-bge-m3": {
+    "metrics": {
+     "prompts": 32,
+     "answer_prompts": 32,
+     "macro_precision": 0.7622395833333333,
+     "macro_recall": 0.4583333333333333,
+     "micro_precision": 0.6477272727272727,
+     "micro_recall": 0.44881889763779526,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 32,
+     "workflow_found": 0.4583333333333333,
+     "workflow_all_found": 0.03125,
+     "workflow_precision": 0.7622395833333333,
+     "workflow_picks": 2.75,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 2432.5,
+     "p95_ms": 4158
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 30,
+     "losses": 0,
+     "same": 2,
+     "sign_test_p": 1.862645149230957e-09
+    },
+    "paired_recall": {
+     "wins": 18,
+     "losses": 3,
+     "same": 11,
+     "sign_test_p": 0.0014896392822265625
+    },
+    "paired_with_baseline": {
+     "wins": 18,
+     "losses": 3,
+     "same": 11,
+     "sign_test_p": 0.0014896392822265625
+    }
+   },
+   "asset-router-granite": {
+    "metrics": {
+     "prompts": 32,
+     "answer_prompts": 32,
+     "macro_precision": 0.48601190476190476,
+     "macro_recall": 0.5854166666666667,
+     "micro_precision": 0.3862433862433862,
+     "micro_recall": 0.5748031496062992,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 32,
+     "workflow_found": 0.5854166666666667,
+     "workflow_all_found": 0.09375,
+     "workflow_precision": 0.48601190476190476,
+     "workflow_picks": 5.90625,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 4812.0,
+     "p95_ms": 6177
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 28,
+     "losses": 0,
+     "same": 4,
+     "sign_test_p": 7.450580596923828e-09
+    },
+    "paired_recall": {
+     "wins": 25,
+     "losses": 0,
+     "same": 7,
+     "sign_test_p": 5.960464477539063e-08
+    },
+    "paired_with_baseline": {
+     "wins": 25,
+     "losses": 0,
+     "same": 7,
+     "sign_test_p": 5.960464477539063e-08
+    }
+   },
+   "asset-router-nomic": {
+    "metrics": {
+     "prompts": 32,
+     "answer_prompts": 32,
+     "macro_precision": 0.7708333333333334,
+     "macro_recall": 0.278125,
+     "micro_precision": 0.918918918918919,
+     "micro_recall": 0.2677165354330709,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 32,
+     "workflow_found": 0.278125,
+     "workflow_all_found": 0.0,
+     "workflow_precision": 0.9487179487179488,
+     "workflow_picks": 1.15625,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 3844.5,
+     "p95_ms": 5579
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 26,
+     "losses": 4,
+     "same": 2,
+     "sign_test_p": 5.947612226009369e-05
+    },
+    "paired_recall": {
+     "wins": 8,
+     "losses": 8,
+     "same": 16,
+     "sign_test_p": 1.0
+    },
+    "paired_with_baseline": {
+     "wins": 8,
+     "losses": 8,
+     "same": 16,
+     "sign_test_p": 1.0
+    }
+   },
+   "asset-router-skillret": {
+    "metrics": {
+     "prompts": 32,
+     "answer_prompts": 32,
+     "macro_precision": 0.21875,
+     "macro_recall": 0.059375,
+     "micro_precision": 1.0,
+     "micro_recall": 0.05511811023622047,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 32,
+     "workflow_found": 0.059375,
+     "workflow_all_found": 0.0,
+     "workflow_precision": 1.0,
+     "workflow_picks": 0.21875,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 9952.5,
+     "p95_ms": 13359
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 7,
+     "losses": 17,
+     "same": 8,
+     "sign_test_p": 0.06391465663909912
+    },
+    "paired_recall": {
+     "wins": 1,
+     "losses": 21,
+     "same": 10,
+     "sign_test_p": 1.0967254638671875e-05
+    },
+    "paired_with_baseline": {
+     "wins": 1,
+     "losses": 21,
+     "same": 10,
+     "sign_test_p": 1.0967254638671875e-05
+    }
+   },
+   "glm-picker": {
+    "metrics": {
+     "prompts": 32,
+     "answer_prompts": 32,
+     "macro_precision": 0.9614583333333333,
+     "macro_recall": 0.9651041666666667,
+     "micro_precision": 0.9609375,
+     "micro_recall": 0.968503937007874,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 32,
+     "workflow_found": 0.9651041666666667,
+     "workflow_all_found": 0.875,
+     "workflow_precision": 0.9614583333333333,
+     "workflow_picks": 4.0,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 4603.0,
+     "p95_ms": 5912
+    },
+    "input_tokens": 837901,
+    "paired_precision": {
+     "wins": 32,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 4.656612873077393e-10
+    },
+    "paired_recall": {
+     "wins": 32,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 4.656612873077393e-10
+    },
+    "paired_with_baseline": {
+     "wins": 32,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 4.656612873077393e-10
+    }
+   }
+  },
+  "en": {
+   "word": {
+    "metrics": {
+     "prompts": 70,
+     "answer_prompts": 70,
+     "macro_precision": 0.23183673469387753,
+     "macro_recall": 0.8142857142857143,
+     "micro_precision": 0.13163972286374134,
+     "micro_recall": 0.8142857142857143,
+     "positive_prompts": 70,
+     "first_pick": 0.4857142857142857,
+     "mrr": 0.5973809523809525,
+     "precision_at_3": 0.31400966183574874,
+     "recall_at_3": 0.6857142857142857,
+     "f1_at_3": 0.43076073450227803,
+     "recall_at_8": 0.8142857142857143,
+     "picks_per_prompt": 6.185714285714286,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 169.5,
+     "p95_ms": 205
+    },
+    "input_tokens": null
+   },
+   "asset-router-bge-m3": {
+    "metrics": {
+     "prompts": 70,
+     "answer_prompts": 70,
+     "macro_precision": 0.3444897959183673,
+     "macro_recall": 0.9142857142857143,
+     "micro_precision": 0.22614840989399293,
+     "micro_recall": 0.9142857142857143,
+     "positive_prompts": 70,
+     "first_pick": 0.7571428571428571,
+     "mrr": 0.8178571428571428,
+     "precision_at_3": 0.41304347826086957,
+     "recall_at_3": 0.8571428571428571,
+     "f1_at_3": 0.5574572127139364,
+     "recall_at_8": 0.9142857142857143,
+     "picks_per_prompt": 4.042857142857143,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 2505.5,
+     "p95_ms": 3159
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 43,
+     "losses": 11,
+     "same": 16,
+     "sign_test_p": 1.4013057456185862e-05
+    },
+    "paired_recall": {
+     "wins": 8,
+     "losses": 1,
+     "same": 61,
+     "sign_test_p": 0.0390625
+    },
+    "paired_with_baseline": {
+     "wins": 20,
+     "losses": 1,
+     "same": 49,
+     "sign_test_p": 2.09808349609375e-05
+    }
+   },
+   "asset-router-granite": {
+    "metrics": {
+     "prompts": 70,
+     "answer_prompts": 70,
+     "macro_precision": 0.11964285714285715,
+     "macro_recall": 0.9571428571428572,
+     "micro_precision": 0.11964285714285715,
+     "micro_recall": 0.9571428571428572,
+     "positive_prompts": 70,
+     "first_pick": 0.7714285714285715,
+     "mrr": 0.8382312925170068,
+     "precision_at_3": 0.2952380952380952,
+     "recall_at_3": 0.8857142857142857,
+     "f1_at_3": 0.44285714285714284,
+     "recall_at_8": 0.9571428571428572,
+     "picks_per_prompt": 8.0,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 4314.5,
+     "p95_ms": 6110
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 10,
+     "losses": 25,
+     "same": 35,
+     "sign_test_p": 0.01667384780012071
+    },
+    "paired_recall": {
+     "wins": 10,
+     "losses": 0,
+     "same": 60,
+     "sign_test_p": 0.001953125
+    },
+    "paired_with_baseline": {
+     "wins": 22,
+     "losses": 2,
+     "same": 46,
+     "sign_test_p": 3.5881996154785156e-05
+    }
+   },
+   "asset-router-nomic": {
+    "metrics": {
+     "prompts": 70,
+     "answer_prompts": 70,
+     "macro_precision": 0.5620408163265306,
+     "macro_recall": 0.7142857142857143,
+     "micro_precision": 0.5434782608695652,
+     "micro_recall": 0.7142857142857143,
+     "positive_prompts": 70,
+     "first_pick": 0.6714285714285714,
+     "mrr": 0.6928571428571428,
+     "precision_at_3": 0.7407407407407407,
+     "recall_at_3": 0.7142857142857143,
+     "f1_at_3": 0.7272727272727273,
+     "recall_at_8": 0.7142857142857143,
+     "picks_per_prompt": 1.3142857142857143,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 4760.0,
+     "p95_ms": 6153
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 41,
+     "losses": 9,
+     "same": 20,
+     "sign_test_p": 5.614100093254137e-06
+    },
+    "paired_recall": {
+     "wins": 2,
+     "losses": 9,
+     "same": 59,
+     "sign_test_p": 0.0654296875
+    },
+    "paired_with_baseline": {
+     "wins": 19,
+     "losses": 6,
+     "same": 45,
+     "sign_test_p": 0.01463329792022705
+    }
+   },
+   "asset-router-skillret": {
+    "metrics": {
+     "prompts": 70,
+     "answer_prompts": 70,
+     "macro_precision": 0.2571428571428571,
+     "macro_recall": 0.2714285714285714,
+     "micro_precision": 0.9047619047619048,
+     "micro_recall": 0.2714285714285714,
+     "positive_prompts": 70,
+     "first_pick": 0.2571428571428571,
+     "mrr": 0.2642857142857143,
+     "precision_at_3": 0.9473684210526315,
+     "recall_at_3": 0.2714285714285714,
+     "f1_at_3": 0.4219617520049352,
+     "recall_at_8": 0.2714285714285714,
+     "picks_per_prompt": 0.3,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 6948.5,
+     "p95_ms": 10630
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 15,
+     "losses": 38,
+     "same": 17,
+     "sign_test_p": 0.0021901868838920535
+    },
+    "paired_recall": {
+     "wins": 0,
+     "losses": 38,
+     "same": 32,
+     "sign_test_p": 7.275957614183426e-12
+    },
+    "paired_with_baseline": {
+     "wins": 6,
+     "losses": 22,
+     "same": 42,
+     "sign_test_p": 0.0037191659212112427
+    }
+   },
+   "glm-picker": {
+    "metrics": {
+     "prompts": 70,
+     "answer_prompts": 70,
+     "macro_precision": 0.8607142857142858,
+     "macro_recall": 0.9428571428571428,
+     "micro_precision": 0.75,
+     "micro_recall": 0.9428571428571428,
+     "positive_prompts": 70,
+     "first_pick": 0.9285714285714286,
+     "mrr": 0.9357142857142857,
+     "precision_at_3": 0.8642857142857143,
+     "recall_at_3": 0.9428571428571428,
+     "f1_at_3": 0.901863354037267,
+     "recall_at_8": 0.9428571428571428,
+     "picks_per_prompt": 1.2571428571428571,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 1577.5,
+     "p95_ms": 3735
+    },
+    "input_tokens": 837901,
+    "paired_precision": {
+     "wins": 57,
+     "losses": 1,
+     "same": 12,
+     "sign_test_p": 4.0939474033052647e-16
+    },
+    "paired_recall": {
+     "wins": 9,
+     "losses": 0,
+     "same": 61,
+     "sign_test_p": 0.00390625
+    },
+    "paired_with_baseline": {
+     "wins": 31,
+     "losses": 0,
+     "same": 39,
+     "sign_test_p": 9.313225746154785e-10
+    }
+   }
+  },
+  "follow_up_en": {
+   "word": {
+    "metrics": {
+     "prompts": 16,
+     "answer_prompts": 16,
+     "macro_precision": 0.17559523809523808,
+     "macro_recall": 0.6875,
+     "micro_precision": 0.102803738317757,
+     "micro_recall": 0.6875,
+     "positive_prompts": 16,
+     "first_pick": 0.3125,
+     "mrr": 0.4375,
+     "precision_at_3": 0.21875,
+     "recall_at_3": 0.5,
+     "f1_at_3": 0.30434782608695654,
+     "recall_at_8": 0.6875,
+     "picks_per_prompt": 6.6875,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 224.5,
+     "p95_ms": 341
+    },
+    "input_tokens": null
+   },
+   "asset-router-bge-m3": {
+    "metrics": {
+     "prompts": 16,
+     "answer_prompts": 16,
+     "macro_precision": 0.21063988095238095,
+     "macro_recall": 1.0,
+     "micro_precision": 0.17582417582417584,
+     "micro_recall": 1.0,
+     "positive_prompts": 16,
+     "first_pick": 0.5,
+     "mrr": 0.7,
+     "precision_at_3": 0.28125,
+     "recall_at_3": 0.8125,
+     "f1_at_3": 0.41785714285714287,
+     "recall_at_8": 1.0,
+     "picks_per_prompt": 5.6875,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 2501.0,
+     "p95_ms": 2861
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 10,
+     "losses": 3,
+     "same": 3,
+     "sign_test_p": 0.09228515625
+    },
+    "paired_recall": {
+     "wins": 5,
+     "losses": 0,
+     "same": 11,
+     "sign_test_p": 0.0625
+    },
+    "paired_with_baseline": {
+     "wins": 4,
+     "losses": 1,
+     "same": 11,
+     "sign_test_p": 0.375
+    }
+   },
+   "asset-router-granite": {
+    "metrics": {
+     "prompts": 16,
+     "answer_prompts": 16,
+     "macro_precision": 0.125,
+     "macro_recall": 1.0,
+     "micro_precision": 0.125,
+     "micro_recall": 1.0,
+     "positive_prompts": 16,
+     "first_pick": 0.5625,
+     "mrr": 0.7297619047619047,
+     "precision_at_3": 0.29166666666666663,
+     "recall_at_3": 0.875,
+     "f1_at_3": 0.4375,
+     "recall_at_8": 1.0,
+     "picks_per_prompt": 8.0,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 4205.0,
+     "p95_ms": 8469
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 5,
+     "losses": 5,
+     "same": 6,
+     "sign_test_p": 1.0
+    },
+    "paired_recall": {
+     "wins": 5,
+     "losses": 0,
+     "same": 11,
+     "sign_test_p": 0.0625
+    },
+    "paired_with_baseline": {
+     "wins": 5,
+     "losses": 1,
+     "same": 10,
+     "sign_test_p": 0.21875
+    }
+   },
+   "asset-router-nomic": {
+    "metrics": {
+     "prompts": 16,
+     "answer_prompts": 16,
+     "macro_precision": 0.5020833333333333,
+     "macro_recall": 0.6875,
+     "micro_precision": 0.5,
+     "micro_recall": 0.6875,
+     "positive_prompts": 16,
+     "first_pick": 0.5,
+     "mrr": 0.5833333333333334,
+     "precision_at_3": 0.6805555555555555,
+     "recall_at_3": 0.6875,
+     "f1_at_3": 0.684010152284264,
+     "recall_at_8": 0.6875,
+     "picks_per_prompt": 1.375,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 5056.0,
+     "p95_ms": 7454
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 10,
+     "losses": 3,
+     "same": 3,
+     "sign_test_p": 0.09228515625
+    },
+    "paired_recall": {
+     "wins": 3,
+     "losses": 3,
+     "same": 10,
+     "sign_test_p": 1.0
+    },
+    "paired_with_baseline": {
+     "wins": 4,
+     "losses": 1,
+     "same": 11,
+     "sign_test_p": 0.375
+    }
+   },
+   "asset-router-skillret": {
+    "metrics": {
+     "prompts": 16,
+     "answer_prompts": 16,
+     "macro_precision": 0.0625,
+     "macro_recall": 0.0625,
+     "micro_precision": 1.0,
+     "micro_recall": 0.0625,
+     "positive_prompts": 16,
+     "first_pick": 0.0625,
+     "mrr": 0.0625,
+     "precision_at_3": 1.0,
+     "recall_at_3": 0.0625,
+     "f1_at_3": 0.11764705882352941,
+     "recall_at_8": 0.0625,
+     "picks_per_prompt": 0.0625,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 7753.0,
+     "p95_ms": 10139
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 1,
+     "losses": 10,
+     "same": 5,
+     "sign_test_p": 0.01171875
+    },
+    "paired_recall": {
+     "wins": 0,
+     "losses": 10,
+     "same": 6,
+     "sign_test_p": 0.001953125
+    },
+    "paired_with_baseline": {
+     "wins": 0,
+     "losses": 4,
+     "same": 12,
+     "sign_test_p": 0.125
+    }
+   },
+   "glm-picker": {
+    "metrics": {
+     "prompts": 16,
+     "answer_prompts": 16,
+     "macro_precision": 0.828125,
+     "macro_recall": 0.875,
+     "micro_precision": 0.6666666666666666,
+     "micro_recall": 0.875,
+     "positive_prompts": 16,
+     "first_pick": 0.875,
+     "mrr": 0.875,
+     "precision_at_3": 0.8333333333333334,
+     "recall_at_3": 0.875,
+     "f1_at_3": 0.8536585365853658,
+     "recall_at_8": 0.875,
+     "picks_per_prompt": 1.3125,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 1537.0,
+     "p95_ms": 4034
+    },
+    "input_tokens": 837901,
+    "paired_precision": {
+     "wins": 13,
+     "losses": 0,
+     "same": 3,
+     "sign_test_p": 0.000244140625
+    },
+    "paired_recall": {
+     "wins": 3,
+     "losses": 0,
+     "same": 13,
+     "sign_test_p": 0.25
+    },
+    "paired_with_baseline": {
+     "wins": 9,
+     "losses": 0,
+     "same": 7,
+     "sign_test_p": 0.00390625
+    }
+   }
+  },
+  "follow_up_zh": {
+   "word": {
+    "metrics": {
+     "prompts": 16,
+     "answer_prompts": 16,
+     "macro_precision": 0.0,
+     "macro_recall": 0.0,
+     "micro_precision": 0.0,
+     "micro_recall": 0.0,
+     "positive_prompts": 16,
+     "first_pick": 0.0,
+     "mrr": 0.0,
+     "precision_at_3": 0.0,
+     "recall_at_3": 0.0,
+     "f1_at_3": 0.0,
+     "recall_at_8": 0.0,
+     "picks_per_prompt": 5.0625,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 239.5,
+     "p95_ms": 300
+    },
+    "input_tokens": null
+   },
+   "asset-router-bge-m3": {
+    "metrics": {
+     "prompts": 16,
+     "answer_prompts": 16,
+     "macro_precision": 0.17447916666666666,
+     "macro_recall": 0.3125,
+     "micro_precision": 0.29411764705882354,
+     "micro_recall": 0.3125,
+     "positive_prompts": 16,
+     "first_pick": 0.25,
+     "mrr": 0.2604166666666667,
+     "precision_at_3": 0.4444444444444444,
+     "recall_at_3": 0.25,
+     "f1_at_3": 0.32,
+     "recall_at_8": 0.3125,
+     "picks_per_prompt": 1.0625,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 2222.0,
+     "p95_ms": 2809
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 5,
+     "losses": 0,
+     "same": 11,
+     "sign_test_p": 0.0625
+    },
+    "paired_recall": {
+     "wins": 5,
+     "losses": 0,
+     "same": 11,
+     "sign_test_p": 0.0625
+    },
+    "paired_with_baseline": {
+     "wins": 4,
+     "losses": 0,
+     "same": 12,
+     "sign_test_p": 0.125
+    }
+   },
+   "asset-router-granite": {
+    "metrics": {
+     "prompts": 16,
+     "answer_prompts": 16,
+     "macro_precision": 0.15625,
+     "macro_recall": 0.25,
+     "micro_precision": 0.18181818181818182,
+     "micro_recall": 0.25,
+     "positive_prompts": 16,
+     "first_pick": 0.25,
+     "mrr": 0.25,
+     "precision_at_3": 0.4444444444444444,
+     "recall_at_3": 0.25,
+     "f1_at_3": 0.32,
+     "recall_at_8": 0.25,
+     "picks_per_prompt": 1.375,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 3860.5,
+     "p95_ms": 7886
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 4,
+     "losses": 0,
+     "same": 12,
+     "sign_test_p": 0.125
+    },
+    "paired_recall": {
+     "wins": 4,
+     "losses": 0,
+     "same": 12,
+     "sign_test_p": 0.125
+    },
+    "paired_with_baseline": {
+     "wins": 4,
+     "losses": 0,
+     "same": 12,
+     "sign_test_p": 0.125
+    }
+   },
+   "asset-router-nomic": {
+    "metrics": {
+     "prompts": 16,
+     "answer_prompts": 16,
+     "macro_precision": 0.1953125,
+     "macro_recall": 0.25,
+     "micro_precision": 0.36363636363636365,
+     "micro_recall": 0.25,
+     "positive_prompts": 16,
+     "first_pick": 0.25,
+     "mrr": 0.25,
+     "precision_at_3": 0.8333333333333334,
+     "recall_at_3": 0.25,
+     "f1_at_3": 0.3846153846153846,
+     "recall_at_8": 0.25,
+     "picks_per_prompt": 0.6875,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 4224.5,
+     "p95_ms": 7091
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 4,
+     "losses": 0,
+     "same": 12,
+     "sign_test_p": 0.125
+    },
+    "paired_recall": {
+     "wins": 4,
+     "losses": 0,
+     "same": 12,
+     "sign_test_p": 0.125
+    },
+    "paired_with_baseline": {
+     "wins": 4,
+     "losses": 0,
+     "same": 12,
+     "sign_test_p": 0.125
+    }
+   },
+   "asset-router-skillret": {
+    "metrics": {
+     "prompts": 16,
+     "answer_prompts": 16,
+     "macro_precision": 0.0,
+     "macro_recall": 0.0,
+     "micro_precision": 0.0,
+     "micro_recall": 0.0,
+     "positive_prompts": 16,
+     "first_pick": 0.0,
+     "mrr": 0.0,
+     "precision_at_3": 0.0,
+     "recall_at_3": 0.0,
+     "f1_at_3": 0.0,
+     "recall_at_8": 0.0,
+     "picks_per_prompt": 0.0,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 3381.0,
+     "p95_ms": 10838
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 0,
+     "losses": 0,
+     "same": 16,
+     "sign_test_p": 1.0
+    },
+    "paired_recall": {
+     "wins": 0,
+     "losses": 0,
+     "same": 16,
+     "sign_test_p": 1.0
+    },
+    "paired_with_baseline": {
+     "wins": 0,
+     "losses": 0,
+     "same": 16,
+     "sign_test_p": 1.0
+    }
+   },
+   "glm-picker": {
+    "metrics": {
+     "prompts": 16,
+     "answer_prompts": 16,
+     "macro_precision": 0.8958333333333334,
+     "macro_recall": 0.9375,
+     "micro_precision": 0.8333333333333334,
+     "micro_recall": 0.9375,
+     "positive_prompts": 16,
+     "first_pick": 0.9375,
+     "mrr": 0.9375,
+     "precision_at_3": 0.8958333333333334,
+     "recall_at_3": 0.9375,
+     "f1_at_3": 0.9161931818181818,
+     "recall_at_8": 0.9375,
+     "picks_per_prompt": 1.125,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 3696.5,
+     "p95_ms": 6694
+    },
+    "input_tokens": 837901,
+    "paired_precision": {
+     "wins": 15,
+     "losses": 0,
+     "same": 1,
+     "sign_test_p": 6.103515625e-05
+    },
+    "paired_recall": {
+     "wins": 15,
+     "losses": 0,
+     "same": 1,
+     "sign_test_p": 6.103515625e-05
+    },
+    "paired_with_baseline": {
+     "wins": 15,
+     "losses": 0,
+     "same": 1,
+     "sign_test_p": 6.103515625e-05
+    }
+   }
+  },
+  "no_signal_en": {
+   "word": {
+    "metrics": {
+     "prompts": 16,
+     "answer_prompts": 0,
+     "macro_precision": null,
+     "macro_recall": null,
+     "micro_precision": null,
+     "micro_recall": null,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 16,
+     "undecided_asked": 0.0,
+     "undecided_share_offered": 0.7625,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 104.5,
+     "p95_ms": 172
+    },
+    "input_tokens": null
+   },
+   "asset-router-bge-m3": {
+    "metrics": {
+     "prompts": 16,
+     "answer_prompts": 0,
+     "macro_precision": null,
+     "macro_recall": null,
+     "micro_precision": null,
+     "micro_recall": null,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 16,
+     "undecided_asked": 0.0,
+     "undecided_share_offered": 0.890625,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 2369.5,
+     "p95_ms": 2990
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_recall": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_with_baseline": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    }
+   },
+   "asset-router-granite": {
+    "metrics": {
+     "prompts": 16,
+     "answer_prompts": 0,
+     "macro_precision": null,
+     "macro_recall": null,
+     "micro_precision": null,
+     "micro_recall": null,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 16,
+     "undecided_asked": 0.0,
+     "undecided_share_offered": 0.884375,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 4337.5,
+     "p95_ms": 7350
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_recall": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_with_baseline": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    }
+   },
+   "asset-router-nomic": {
+    "metrics": {
+     "prompts": 16,
+     "answer_prompts": 0,
+     "macro_precision": null,
+     "macro_recall": null,
+     "micro_precision": null,
+     "micro_recall": null,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 16,
+     "undecided_asked": 0.0,
+     "undecided_share_offered": 0.603125,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 4786.0,
+     "p95_ms": 6738
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_recall": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_with_baseline": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    }
+   },
+   "asset-router-skillret": {
+    "metrics": {
+     "prompts": 16,
+     "answer_prompts": 0,
+     "macro_precision": null,
+     "macro_recall": null,
+     "micro_precision": null,
+     "micro_recall": null,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 16,
+     "undecided_asked": 0.0,
+     "undecided_share_offered": 0.16875,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 7111.0,
+     "p95_ms": 10455
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_recall": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_with_baseline": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    }
+   },
+   "glm-picker": {
+    "metrics": {
+     "prompts": 16,
+     "answer_prompts": 0,
+     "macro_precision": null,
+     "macro_recall": null,
+     "micro_precision": null,
+     "micro_recall": null,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 16,
+     "undecided_asked": 1.0,
+     "undecided_share_offered": 0.93125,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 1637.0,
+     "p95_ms": 5219
+    },
+    "input_tokens": 837901,
+    "paired_precision": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_recall": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_with_baseline": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    }
+   }
+  },
+  "no_signal_zh": {
+   "word": {
+    "metrics": {
+     "prompts": 16,
+     "answer_prompts": 0,
+     "macro_precision": null,
+     "macro_recall": null,
+     "micro_precision": null,
+     "micro_recall": null,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 16,
+     "undecided_asked": 0.0,
+     "undecided_share_offered": 0.0,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 135.0,
+     "p95_ms": 190
+    },
+    "input_tokens": null
+   },
+   "asset-router-bge-m3": {
+    "metrics": {
+     "prompts": 16,
+     "answer_prompts": 0,
+     "macro_precision": null,
+     "macro_recall": null,
+     "micro_precision": null,
+     "micro_recall": null,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 16,
+     "undecided_asked": 0.0,
+     "undecided_share_offered": 0.0,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 2037.0,
+     "p95_ms": 2740
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_recall": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_with_baseline": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    }
+   },
+   "asset-router-granite": {
+    "metrics": {
+     "prompts": 16,
+     "answer_prompts": 0,
+     "macro_precision": null,
+     "macro_recall": null,
+     "micro_precision": null,
+     "micro_recall": null,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 16,
+     "undecided_asked": 0.0,
+     "undecided_share_offered": 0.0,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 3572.0,
+     "p95_ms": 4210
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_recall": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_with_baseline": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    }
+   },
+   "asset-router-nomic": {
+    "metrics": {
+     "prompts": 16,
+     "answer_prompts": 0,
+     "macro_precision": null,
+     "macro_recall": null,
+     "micro_precision": null,
+     "micro_recall": null,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 16,
+     "undecided_asked": 0.0,
+     "undecided_share_offered": 0.0,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 3760.5,
+     "p95_ms": 5014
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_recall": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_with_baseline": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    }
+   },
+   "asset-router-skillret": {
+    "metrics": {
+     "prompts": 16,
+     "answer_prompts": 0,
+     "macro_precision": null,
+     "macro_recall": null,
+     "micro_precision": null,
+     "micro_recall": null,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 16,
+     "undecided_asked": 0.0,
+     "undecided_share_offered": 0.0,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 1753.5,
+     "p95_ms": 4168
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_recall": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_with_baseline": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    }
+   },
+   "glm-picker": {
+    "metrics": {
+     "prompts": 16,
+     "answer_prompts": 0,
+     "macro_precision": null,
+     "macro_recall": null,
+     "micro_precision": null,
+     "micro_recall": null,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 16,
+     "undecided_asked": 0.9375,
+     "undecided_share_offered": 0.921875,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 3496.5,
+     "p95_ms": 7447
+    },
+    "input_tokens": 837901,
+    "paired_precision": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_recall": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_with_baseline": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    }
+   }
+  },
+  "unrelated_en": {
+   "word": {
+    "metrics": {
+     "prompts": 8,
+     "answer_prompts": 0,
+     "macro_precision": null,
+     "macro_recall": null,
+     "micro_precision": null,
+     "micro_recall": null,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 8,
+     "unrelated_false_picks": 0.125,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 150.0,
+     "p95_ms": 188
+    },
+    "input_tokens": null
+   },
+   "asset-router-bge-m3": {
+    "metrics": {
+     "prompts": 8,
+     "answer_prompts": 0,
+     "macro_precision": null,
+     "macro_recall": null,
+     "micro_precision": null,
+     "micro_recall": null,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 8,
+     "unrelated_false_picks": 0.0,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 2231.0,
+     "p95_ms": 3000
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_recall": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_with_baseline": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    }
+   },
+   "asset-router-granite": {
+    "metrics": {
+     "prompts": 8,
+     "answer_prompts": 0,
+     "macro_precision": null,
+     "macro_recall": null,
+     "micro_precision": null,
+     "micro_recall": null,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 8,
+     "unrelated_false_picks": 1.0,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 5049.0,
+     "p95_ms": 6239
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_recall": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_with_baseline": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    }
+   },
+   "asset-router-nomic": {
+    "metrics": {
+     "prompts": 8,
+     "answer_prompts": 0,
+     "macro_precision": null,
+     "macro_recall": null,
+     "micro_precision": null,
+     "micro_recall": null,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 8,
+     "unrelated_false_picks": 0.0,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 3259.0,
+     "p95_ms": 4111
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_recall": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_with_baseline": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    }
+   },
+   "asset-router-skillret": {
+    "metrics": {
+     "prompts": 8,
+     "answer_prompts": 0,
+     "macro_precision": null,
+     "macro_recall": null,
+     "micro_precision": null,
+     "micro_recall": null,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 8,
+     "unrelated_false_picks": 0.0,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 7295.5,
+     "p95_ms": 9099
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_recall": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_with_baseline": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    }
+   },
+   "glm-picker": {
+    "metrics": {
+     "prompts": 8,
+     "answer_prompts": 0,
+     "macro_precision": null,
+     "macro_recall": null,
+     "micro_precision": null,
+     "micro_recall": null,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 8,
+     "unrelated_false_picks": 0.125,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 3879.5,
+     "p95_ms": 7107
+    },
+    "input_tokens": 837901,
+    "paired_precision": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_recall": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_with_baseline": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    }
+   }
+  },
+  "unrelated_zh": {
+   "word": {
+    "metrics": {
+     "prompts": 8,
+     "answer_prompts": 0,
+     "macro_precision": null,
+     "macro_recall": null,
+     "micro_precision": null,
+     "micro_recall": null,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 8,
+     "unrelated_false_picks": 0.125,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 126.5,
+     "p95_ms": 204
+    },
+    "input_tokens": null
+   },
+   "asset-router-bge-m3": {
+    "metrics": {
+     "prompts": 8,
+     "answer_prompts": 0,
+     "macro_precision": null,
+     "macro_recall": null,
+     "micro_precision": null,
+     "micro_recall": null,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 8,
+     "unrelated_false_picks": 0.0,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 2082.0,
+     "p95_ms": 2767
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_recall": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_with_baseline": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    }
+   },
+   "asset-router-granite": {
+    "metrics": {
+     "prompts": 8,
+     "answer_prompts": 0,
+     "macro_precision": null,
+     "macro_recall": null,
+     "micro_precision": null,
+     "micro_recall": null,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 8,
+     "unrelated_false_picks": 0.0,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 4142.0,
+     "p95_ms": 4477
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_recall": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_with_baseline": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    }
+   },
+   "asset-router-nomic": {
+    "metrics": {
+     "prompts": 8,
+     "answer_prompts": 0,
+     "macro_precision": null,
+     "macro_recall": null,
+     "micro_precision": null,
+     "micro_recall": null,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 8,
+     "unrelated_false_picks": 0.0,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 3704.5,
+     "p95_ms": 4299
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_recall": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_with_baseline": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    }
+   },
+   "asset-router-skillret": {
+    "metrics": {
+     "prompts": 8,
+     "answer_prompts": 0,
+     "macro_precision": null,
+     "macro_recall": null,
+     "micro_precision": null,
+     "micro_recall": null,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 8,
+     "unrelated_false_picks": 0.0,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 2909.5,
+     "p95_ms": 3145
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_recall": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_with_baseline": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    }
+   },
+   "glm-picker": {
+    "metrics": {
+     "prompts": 8,
+     "answer_prompts": 0,
+     "macro_precision": null,
+     "macro_recall": null,
+     "micro_precision": null,
+     "micro_recall": null,
+     "positive_prompts": 0,
+     "first_pick": null,
+     "mrr": null,
+     "precision_at_3": null,
+     "recall_at_3": null,
+     "f1_at_3": null,
+     "recall_at_8": null,
+     "picks_per_prompt": null,
+     "unrelated_prompts": 8,
+     "unrelated_false_picks": 0.0,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 2670.0,
+     "p95_ms": 9246
+    },
+    "input_tokens": 837901,
+    "paired_precision": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_recall": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    },
+    "paired_with_baseline": {
+     "wins": 0,
+     "losses": 0,
+     "same": 0,
+     "sign_test_p": 1.0
+    }
+   }
+  },
+  "zh": {
+   "word": {
+    "metrics": {
+     "prompts": 70,
+     "answer_prompts": 70,
+     "macro_precision": 0.03263605442176871,
+     "macro_recall": 0.15714285714285714,
+     "micro_precision": 0.031609195402298854,
+     "micro_recall": 0.15714285714285714,
+     "positive_prompts": 70,
+     "first_pick": 0.07142857142857142,
+     "mrr": 0.1,
+     "precision_at_3": 0.046153846153846156,
+     "recall_at_3": 0.12857142857142856,
+     "f1_at_3": 0.06792452830188679,
+     "recall_at_8": 0.15714285714285714,
+     "picks_per_prompt": 4.9714285714285715,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 162.0,
+     "p95_ms": 226
+    },
+    "input_tokens": null
+   },
+   "asset-router-bge-m3": {
+    "metrics": {
+     "prompts": 70,
+     "answer_prompts": 70,
+     "macro_precision": 0.22321428571428573,
+     "macro_recall": 0.3142857142857143,
+     "micro_precision": 0.41509433962264153,
+     "micro_recall": 0.3142857142857143,
+     "positive_prompts": 70,
+     "first_pick": 0.3,
+     "mrr": 0.30714285714285716,
+     "precision_at_3": 0.608974358974359,
+     "recall_at_3": 0.3142857142857143,
+     "f1_at_3": 0.4146002777226741,
+     "recall_at_8": 0.3142857142857143,
+     "picks_per_prompt": 0.7571428571428571,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 2396.0,
+     "p95_ms": 2811
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 21,
+     "losses": 0,
+     "same": 49,
+     "sign_test_p": 9.5367431640625e-07
+    },
+    "paired_recall": {
+     "wins": 11,
+     "losses": 0,
+     "same": 59,
+     "sign_test_p": 0.0009765625
+    },
+    "paired_with_baseline": {
+     "wins": 16,
+     "losses": 0,
+     "same": 54,
+     "sign_test_p": 3.0517578125e-05
+    }
+   },
+   "asset-router-granite": {
+    "metrics": {
+     "prompts": 70,
+     "answer_prompts": 70,
+     "macro_precision": 0.1904761904761905,
+     "macro_recall": 0.3142857142857143,
+     "micro_precision": 0.2682926829268293,
+     "micro_recall": 0.3142857142857143,
+     "positive_prompts": 70,
+     "first_pick": 0.2571428571428571,
+     "mrr": 0.2782312925170068,
+     "precision_at_3": 0.5061728395061729,
+     "recall_at_3": 0.3,
+     "f1_at_3": 0.37672281776416533,
+     "recall_at_8": 0.3142857142857143,
+     "picks_per_prompt": 1.1714285714285715,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 3988.0,
+     "p95_ms": 5743
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 21,
+     "losses": 0,
+     "same": 49,
+     "sign_test_p": 9.5367431640625e-07
+    },
+    "paired_recall": {
+     "wins": 11,
+     "losses": 0,
+     "same": 59,
+     "sign_test_p": 0.0009765625
+    },
+    "paired_with_baseline": {
+     "wins": 13,
+     "losses": 0,
+     "same": 57,
+     "sign_test_p": 0.000244140625
+    }
+   },
+   "asset-router-nomic": {
+    "metrics": {
+     "prompts": 70,
+     "answer_prompts": 70,
+     "macro_precision": 0.22321428571428573,
+     "macro_recall": 0.24285714285714285,
+     "micro_precision": 0.6296296296296297,
+     "micro_recall": 0.24285714285714285,
+     "positive_prompts": 70,
+     "first_pick": 0.22857142857142856,
+     "mrr": 0.2357142857142857,
+     "precision_at_3": 0.8333333333333334,
+     "recall_at_3": 0.24285714285714285,
+     "f1_at_3": 0.3761061946902655,
+     "recall_at_8": 0.24285714285714285,
+     "picks_per_prompt": 0.38571428571428573,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 4145.5,
+     "p95_ms": 6417
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 17,
+     "losses": 2,
+     "same": 51,
+     "sign_test_p": 0.000728607177734375
+    },
+    "paired_recall": {
+     "wins": 8,
+     "losses": 2,
+     "same": 60,
+     "sign_test_p": 0.109375
+    },
+    "paired_with_baseline": {
+     "wins": 11,
+     "losses": 0,
+     "same": 59,
+     "sign_test_p": 0.0009765625
+    }
+   },
+   "asset-router-skillret": {
+    "metrics": {
+     "prompts": 70,
+     "answer_prompts": 70,
+     "macro_precision": 0.08571428571428572,
+     "macro_recall": 0.08571428571428572,
+     "micro_precision": 1.0,
+     "micro_recall": 0.08571428571428572,
+     "positive_prompts": 70,
+     "first_pick": 0.08571428571428572,
+     "mrr": 0.08571428571428572,
+     "precision_at_3": 1.0,
+     "recall_at_3": 0.08571428571428572,
+     "f1_at_3": 0.15789473684210528,
+     "recall_at_8": 0.08571428571428572,
+     "picks_per_prompt": 0.08571428571428572,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 0,
+     "early": 0,
+     "p50_ms": 3566.5,
+     "p95_ms": 10227
+    },
+    "input_tokens": null,
+    "paired_precision": {
+     "wins": 6,
+     "losses": 7,
+     "same": 57,
+     "sign_test_p": 1.0
+    },
+    "paired_recall": {
+     "wins": 2,
+     "losses": 7,
+     "same": 61,
+     "sign_test_p": 0.1796875
+    },
+    "paired_with_baseline": {
+     "wins": 5,
+     "losses": 4,
+     "same": 61,
+     "sign_test_p": 1.0
+    }
+   },
+   "glm-picker": {
+    "metrics": {
+     "prompts": 70,
+     "answer_prompts": 70,
+     "macro_precision": 0.8751360544217688,
+     "macro_recall": 0.9571428571428572,
+     "micro_precision": 0.7282608695652174,
+     "micro_recall": 0.9571428571428572,
+     "positive_prompts": 70,
+     "first_pick": 0.8857142857142857,
+     "mrr": 0.9154761904761904,
+     "precision_at_3": 0.8761904761904762,
+     "recall_at_3": 0.9428571428571428,
+     "f1_at_3": 0.9083021690351534,
+     "recall_at_8": 0.9571428571428572,
+     "picks_per_prompt": 1.3142857142857143,
+     "unrelated_prompts": 0,
+     "unrelated_false_picks": null,
+     "undecided_prompts": 0,
+     "undecided_asked": null,
+     "undecided_share_offered": null,
+     "workflow_prompts": 0,
+     "workflow_found": null,
+     "workflow_all_found": null,
+     "workflow_precision": null,
+     "workflow_picks": null,
+     "degraded": 2,
+     "early": 0,
+     "p50_ms": 3453.5,
+     "p95_ms": 6645
+    },
+    "input_tokens": 837901,
+    "paired_precision": {
+     "wins": 66,
+     "losses": 0,
+     "same": 4,
+     "sign_test_p": 2.710505431213761e-20
+    },
+    "paired_recall": {
+     "wins": 56,
+     "losses": 0,
+     "same": 14,
+     "sign_test_p": 2.7755575615628914e-17
+    },
+    "paired_with_baseline": {
+     "wins": 57,
+     "losses": 0,
+     "same": 13,
+     "sign_test_p": 1.3877787807814457e-17
+    }
+   }
+  }
+ }
+}

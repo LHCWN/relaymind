@@ -191,6 +191,9 @@ _GENERATOR_ANCHORS = {
     ),
     "docs/SPECIFICATION.md": frozenset(
         {
+            # 0.74 macro precision and recall for comparing selectors (RM45, RM47); subject to the
+            # owner's review.
+            ("26a303034e3274df0a6c6c5739e54b7d19c49c4ac2672105bec779186f11fc0f", 678907),
             # 0.73 early selector answers (RM47, AC42; #290); subject to the owner's review.
             ("d58d6822f305d9066608886eeb1ba70ef1a031e2cb2ef055f33a28acabcc047c", 677676),
             # 0.72 guidance selector sync (RM47, AC42; #290); subject to the owner's review.

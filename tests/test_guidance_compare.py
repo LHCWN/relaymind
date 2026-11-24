@@ -19,6 +19,7 @@ def row(case, lane, kind, right, picks, **extra):
         case=case,
         lane=lane,
         kind=kind,
+        language=compare.language_of(lane),
         acceptable=right,
         picks=picks,
         decision=extra.get("decision", "picks" if picks else "no_match"),
@@ -398,3 +399,157 @@ def test_an_early_platform_answer_is_counted_apart_and_is_not_a_fallback():
 
 def test_rows_without_a_mechanism_have_no_early_answer():
     assert compare.metrics(ROWS)["early"] == 0
+
+
+# Spec 0.74 section 7.7: macro precision and macro recall are the main metrics (RM45, RM47).
+
+
+def test_macro_precision_and_recall_count_every_pick_and_score_no_pick_as_zero():
+    m = compare.metrics(ROWS)
+    # Positive prompts only: a 1/1, b 1/4, c 0/1, d nothing picked, so 0.
+    assert m["answer_prompts"] == 4
+    assert m["macro_precision"] == pytest.approx((1 + 1 / 4 + 0 + 0) / 4)
+    assert m["macro_recall"] == pytest.approx((1 + 1 + 0 + 0) / 4)
+    # Micro: 2 right picks of 6 picks; 2 of 4 needed assets found.
+    assert m["micro_precision"] == pytest.approx(2 / 6)
+    assert m["micro_recall"] == pytest.approx(2 / 4)
+
+
+def test_one_acceptable_asset_is_enough_for_a_one_skill_prompt():
+    """Acceptable assets of a one-skill prompt are alternatives: any one answers it."""
+    m = compare.metrics([row("a", "en", "positive", ["x", "x2"], ["x", "x2", "w"])])
+    assert m["macro_precision"] == pytest.approx(2 / 3)
+    assert m["macro_recall"] == 1.0
+    assert m["micro_recall"] == 1.0
+
+
+def test_a_workflow_needs_its_whole_set_for_full_recall():
+    rows = [
+        row("a", "complex_en", "workflow", ["p", "q", "r"], ["p", "q", "x", "y"]),
+        row("b", "en", "positive", ["x"], ["x"]),
+    ]
+    m = compare.metrics(rows)
+    assert m["answer_prompts"] == 2
+    assert m["macro_precision"] == pytest.approx((2 / 4 + 1) / 2)
+    assert m["macro_recall"] == pytest.approx((2 / 3 + 1) / 2)
+    assert m["micro_precision"] == pytest.approx(3 / 5)
+    assert m["micro_recall"] == pytest.approx(3 / 4)
+
+
+def test_unrelated_and_family_prompts_stay_out_of_macro_precision_and_recall():
+    """There, picking nothing or asking is the right answer; they keep their own metrics."""
+    rows = [
+        row("a", "en", "positive", ["x"], ["x"]),
+        row("b", "unrelated_en", "negative", [], ["z"]),
+        row("c", "no_signal_en", "ambiguous", ["p", "q"], ["z"]),
+    ]
+    m = compare.metrics(rows)
+    assert (m["answer_prompts"], m["macro_precision"], m["macro_recall"]) == (1, 1.0, 1.0)
+
+
+def test_no_prompt_with_an_answer_leaves_macro_precision_and_recall_unknown():
+    m = compare.metrics([row("a", "unrelated_en", "negative", [], [])])
+    assert m["macro_precision"] is None and m["macro_recall"] is None
+    assert m["micro_precision"] is None and m["micro_recall"] is None
+
+
+@pytest.mark.parametrize(
+    "lane, language",
+    [
+        ("en", "en"),
+        ("zh", "zh"),
+        ("complex_zh", "zh"),
+        ("follow_up_en", "en"),
+        ("zh_to_en", "zh"),
+        ("en_to_en", "en"),
+        ("tie", None),
+    ],
+)
+def test_the_language_of_a_lane_is_its_prompt_language(lane, language):
+    assert compare.language_of(lane) == language
+
+
+def test_macro_precision_and_recall_are_split_by_language():
+    by = compare.by_language(ROWS)
+    assert set(by) == {"en", "zh"}
+    assert by["en"]["macro_precision"] == pytest.approx((1 + 1 / 4) / 2)
+    assert by["en"]["macro_recall"] == 1.0
+    assert by["zh"]["macro_precision"] == 0.0
+    assert by["zh"]["macro_recall"] == 0.0
+
+
+def test_the_paired_test_is_also_run_on_precision_and_recall_per_prompt():
+    base = [
+        row("a", "en", "positive", ["x"], ["x", "w", "v"]),
+        row("b", "en", "positive", ["x"], []),
+    ]
+    arm = [
+        row("a", "en", "positive", ["x"], ["x"]),  # same recall, better precision
+        row("b", "en", "positive", ["x"], ["w"]),  # recall still 0, precision still 0
+    ]
+    assert compare.paired(base, arm, score="precision")["wins"] == 1
+    assert compare.paired(base, arm, score="recall")["same"] == 2
+    # The default stays the first pick, so earlier reports read the same.
+    assert compare.paired(base, arm) == compare.paired(base, arm, score="first_pick")
+
+
+def test_the_table_leads_with_macro_precision_and_recall():
+    m = compare.metrics(ROWS)
+    header = compare.table({"arm": {"metrics": m}}).splitlines()[0]
+    assert header.startswith("| Arm | Macro P | Macro R | Micro P | Micro R |")
+
+
+def test_the_command_prints_macro_precision_and_recall_by_language(tmp_path, capsys):
+    rows = [
+        dict(
+            case=c,
+            lane=lane,
+            text="t",
+            expected=["x"],
+            picks=picks,
+            decision="picks",
+            degraded=False,
+            ms=3,
+        )
+        for c, lane, picks in [("1", "en", ["x"]), ("2", "zh", ["w"])]
+    ]
+    path, out = tmp_path / "r.json", tmp_path / "o.json"
+    path.write_text(json.dumps(dict(kind="guidance_similar", tokens={}, rows=rows)))
+    compare.main(["--baseline", f"floor={path}", "--arm", f"mine={path}", "--output", str(out)])
+    shown = capsys.readouterr().out
+    assert "By language" in shown and "| floor | en |" in shown and "| mine | zh |" in shown
+    saved = json.loads(out.read_text())["arms"]["mine"]
+    assert saved["by_language"]["en"]["macro_precision"] == 1.0
+    assert saved["paired_precision"]["same"] == 2 and saved["paired_recall"]["same"] == 2
+
+
+def test_a_report_row_carries_its_prompt_language():
+    """read_report sets the language once: a source case's own, else the lane's."""
+    similar = dict(
+        kind="guidance_similar",
+        rows=[
+            dict(
+                case="1",
+                lane="complex_zh",
+                expected=["x"],
+                picks=[],
+                decision="no_match",
+                degraded=False,
+                ms=1,
+            )
+        ],
+    )
+    assert compare.read_report(similar)[0][0]["language"] == "zh"
+    source = _platform([_platform_row("c", ["x"])])
+    source["input_document"]["cases"][0]["query_language"] = "zh"
+    assert compare.read_report(source)[0][0]["language"] == "zh"
+    assert compare.read_report(_platform([_platform_row("c", ["x"])]))[0][0]["language"] == "en"
+
+
+def test_a_mixed_language_source_case_is_its_own_language_row():
+    """Spec 0.74: a source case's query_language decides, so code-switched prompts are not lost."""
+    report = _platform([_platform_row("c", ["x"])], cases=("c",))
+    report["input_document"]["cases"][0].update(lane="code_switch", query_language="mixed")
+    rows, _ = compare.read_report(report)
+    assert compare.language_of("code_switch") is None
+    assert set(compare.by_language(rows)) == {"mixed"}

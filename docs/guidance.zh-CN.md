@@ -243,11 +243,22 @@ python scripts/guidance_compare.py --baseline word=word.json --arm mine=mine.jso
 （`content: null`）。记录中的名称和描述就是整个资产，选择器据此建立索引。报告中的 `sync` 字段记录同步用了多长时间，
 这段时间不计入任何用例的延迟。
 
-| 指标 | 含义 | 更好的方向 |
+评价选择器时，首先看**宏平均精确率和宏平均召回率**（规范 0.74）。它们在有答案可找的提示词上计算：单技能提示词和大型工作流。每个选择都计入，没有任何选择的提示词记为 0，所以选择器不能靠不作答显得精确。工具还会在 "By language" 下按提示词语言分别给出这两个指标。
+
+| 主要指标 | 含义 | 更好的方向 |
+| --- | --- | --- |
+| Macro P | 各提示词中正确选择所占比例的平均值；没有选择的提示词记为 0 | 越高越好 |
+| Macro R | 各提示词找到多少的平均值：单技能提示词选中任一可接受资产记为 1；大型工作流记为所需那组资产中被选中的比例 | 越高越好 |
+| Micro P, Micro R | 同样的指标，但把所有选择和所有所需资产合在一起计算 | 越高越好 |
+| P wins/losses, R wins/losses (p) | 只有一方精确率或召回率更好的提示词数，并附符号检验 | 胜场越多越好 |
+
+降低阈值通常会提高召回率、降低精确率。请把两者放在一起看，不要只看其中一个。其余指标用来解释结果：
+
+| 次要指标 | 含义 | 更好的方向 |
 | --- | --- | --- |
 | First pick | 第一个选择正确 | 越高越好 |
 | MRR | 第一个正确选择排名的倒数的平均值，没有时为 0 | 越高越好 |
-| P@3 | 前 3 个选择中正确的比例。没有任何选择的提示词不计入 | 越高越好 |
+| P@3 | 前 3 个选择中正确的比例。没有任何选择的提示词不计入，所以经常回答 `no_match` 的选择器在这里显得比实际更好 | 越高越好 |
 | R@3, R@8 | 前 3 或前 8 个选择中包含正确答案 | 越高越好 |
 | F1@3 | 2 x P@3 x R@3 / (P@3 + R@3) | 越高越好 |
 | Picks | 每条提示词实际给出的选择数 | 越低越好 |
@@ -259,7 +270,7 @@ python scripts/guidance_compare.py --baseline word=word.json --arm mine=mine.jso
 | Set exact | 大型工作流的选择中确实需要的比例 | 越高越好 |
 | Set picks | 大型工作流每条提示词的选择数 | 接近所需数量 |
 | Failed | 某个步骤或选择器失败 | 越低越好 |
-| Wins/losses (p) | 只有一方第一个选择正确的提示词数，并附符号检验 | 胜场越多越好 |
+| First pick wins/losses (p) | 只有一方第一个选择正确（或找到工作流所需资产更多）的提示词数，并附符号检验 | 胜场越多越好 |
 
 选择协议 v2 没有 `choose`，所以第三方选择器的 Asked 显示为 0%，平台基准测试的报告显示为 "-"。Failed 统计的是选择器自己没有作答的情况，即使后备方案作答了也算。同一个提示词重复运行多次，在符号检验中只算一次。请在 `--split development` 上开发，在 `--split holdout` 上报告结果，不要针对 holdout 调参。无关提示词和简短的追问语句在两个划分中相同，所以这两条通道不是留出数据。
 
@@ -286,24 +297,71 @@ python scripts/guidance_compare.py --baseline builtin=builtin.json --arm mine=my
 
 目前的结果见 [EVIDENCE.md](EVIDENCE.md#2026-11-05--per-prompt-guidance-development-runs-284)。它们只是开发诊断：期望答案由开发者编写，不满足 AC25 到 AC37。
 
-## 将 asset-router 与默认设置比较
+## 逐步将你的选择器与默认设置比较
 
-这里用 asset-router 作为第三方选择器、用内置默认设置作为基线，运行两个基准测试（规范 0.73 第 7.7 节；RM47）。选择测试把选出的资产与期望的技能比较；真实轮次检查模型之后是否加载了正确的技能，以及输入有多大。除了主机使用的模型，其余都在你的机器上运行。
+这里用任意第三方选择器、以内置默认设置为基线，运行两个基准测试（规范 0.74 第 7.7 节；RM47）。选择测试把选出的资产与期望的技能比较；真实轮次检查主机的模型之后是否加载了正确的技能，以及输入有多大。最后以 asset-router 为例；第 1 到 5 步对任何选择器都适用。
 
-**1. 本地嵌入。** asset-router 自己不计算嵌入，它调用兼容 OpenAI 的 `{embeddings.baseUrl}/v1/embeddings`。在回环地址上用多语言模型运行 llama.cpp 的服务器，这样路由器会报告 `inference: local`，可以读取技能文件：
+**1. 选择器需要什么。**
+
+- 支持选择协议 v2 的 `POST /select`，见[接入你自己的算法](#接入你自己的算法)。它会报告 `name` 和 `version`。把同样的值传给测试工具，因为网关会检查它们。
+- `POST /sync`：只有当选择器会建立索引，并对尚未索引的资产回答 `not_ready` 时才需要。见[让选择器保持同步](#让选择器保持同步)。不建立索引的选择器不需要同步。
+- 它监听回环地址。如果它会调用模型（例如嵌入模型），也在回环地址上运行这个模型。这样选择器可以报告 `inference: local`，没有提示词离开本机。
+
+**2. 启动两个实例。** 一个用于选择测试，一个用于真实轮次。两个实例各自使用全新的存储或索引，因为两次运行提供的资产不同。用于真实轮次的实例只从测试工具安装技能的目录读取技能文件，即 `<轮次输出目录>/workspace/skills`。如果你的选择器会丢弃不存在的根目录，请在启动它之前创建这个目录。
+
+**3. 选择。** 在相同的提示词上运行默认设置、你的选择器，以及作为参考的模型选择器：
 
 ```bash
-# llama.cpp b12237，llama-b12237-bin-ubuntu-x64.tar.gz，
+python scripts/guidance_similar_benchmark.py --split holdout --arm word --output word.json
+python scripts/guidance_similar_benchmark.py --split holdout --arm third_party \
+  --selector-url http://127.0.0.1:<port>/select --sync-url http://127.0.0.1:<port>/sync \
+  --selector-name <name> --selector-version <version> --output mine.json
+RELAYMIND_EXTERNAL_API_KEY=... python scripts/guidance_similar_benchmark.py --split holdout \
+  --arm external_picker --model-base-url https://host/v1 --model some-model \
+  --request-option reasoning_effort=low --output picker.json
+python scripts/guidance_compare.py --baseline word=word.json --arm mine=mine.json \
+  --arm picker=picker.json --by-lane --output compare.json
+```
+
+不建立索引的选择器去掉 `--sync-url`。没有背景时，只提供 70 个 holdout 技能。如果要像已记录的运行那样同时提供目录中的技能和工具，请构建源目录（[SOURCE_BENCHMARK.md](SOURCE_BENCHMARK.md)），并给每个实验组加上 `--background-catalog <目录文件夹>`。读数字之前，先确认报告的 `sync.outcome` 是 `ready`，没有任何行是 `degraded: true`，并且 Failed 和 Early 都是 0。在 `--split development` 上调参，只为报告运行一次 holdout。
+
+慢的选择器（例如在 CPU 上使用大型嵌入模型的选择器）可能超过网关的时间限制。这时该行会回退到关键词匹配，并显示 `degraded: true`。用 `--total-ms`（例如 60000）给这样的选择器更多时间，用 `--sync-wait-s` 给较长的首次索引更多时间。记录这两个值，并重新运行任何带有 `degraded` 行的报告。在整个运行结束之前，保持选择器及其模型服务器运行。
+
+**4. 真实轮次。** 默认实验组运行两次，因为相同的运行结果也会不同：
+
+```bash
+RELAYMIND_EXTERNAL_API_KEY=... python scripts/guidance_turn_benchmark.py --similar holdout --per-lane 20 \
+  --arms default,default_repeat,third_party --model-base-url https://host/v1 --model some-model \
+  --third-party-url http://127.0.0.1:<turn port>/select \
+  --third-party-sync-url http://127.0.0.1:<turn port>/sync \
+  --third-party-name <name> --third-party-version <version> --output /abs/turns
+```
+
+先用 `--per-lane 2` 做一次简短的试运行，并查看其 `summary.json` 中的 token 数。输出目录包含 `summary.json`（每个实验组的正确技能数、输入大小和时间）、`runs.jsonl`（每轮一行）和 `sync.json`（预热情况，以及选择器如何回答测量的轮次）。使用 `--similar` 时，主机提供 70 个 holdout 技能和它自带的技能；不安装目录。要把一个选择器加入已有的运行，只运行它的实验组（`--arms third_party`），并使用相同的 `--similar`、`--per-lane`、`--seed` 和模型。这样它的行可以与之前的行逐个提示词配对。
+
+在测量的轮次之前，测试工具会检查两个提示词；如果两者都没有得到提示，它就会停止（"no prompt got a hint"）。在当前阈值下几乎处处回答 `no_match` 的选择器会在这里停止，没有运行的选择器也一样。真实轮次中网关的时间限制固定为 12 秒。
+
+**5. 解读结果。**
+
+- 先看 **Macro P 和 Macro R**，包括整体和 "By language" 下的数值。P wins/losses 和 R wins/losses 说明差异是否超过噪声。一个提高其中一个、降低另一个的改动是取舍，不是提升。
+- 同时看无关提示词上的误选。对每个提示词都选点什么的选择器召回率很高，但会在这里失败。
+- 在真实轮次中，把每种语言的正确技能数与两次默认运行比较。两次默认运行本身就在若干提示词上不同。统计得到 `no_match` 的轮次（`sync.json` 中的 `measured_selects`：预热之后每轮一次选择，包括检查提示词，因为它们也是测量的轮次）：有引导的实验组会隐藏技能列表，所以这样的轮次既没有提示也没有列表。
+- 在同时运行选择器所用模型的同一台机器上测得的选择延迟不是速度结果。这些数据和期望答案由模型编写，所以结果只是开发诊断，不满足 AC25 到 AC37。
+
+### 示例：使用本地嵌入的 asset-router
+
+asset-router 自己不计算嵌入。它调用兼容 OpenAI 的 `{embeddings.baseUrl}/v1/embeddings`，把提示词与每个资产的描述比较。在回环地址上用 llama.cpp 的服务器提供嵌入模型，这样路由器会报告 `inference: local`，可以读取技能文件：
+
+```bash
+# llama.cpp b12237, llama-b12237-bin-ubuntu-x64.tar.gz,
 #   sha256 ffd7ccfe4ca5f176f730988e049630ab0b943c5f1a1b005f1619a7048a745f68
-# ggml-org/bge-m3-Q8_0-GGUF，版本 9eba04c5d75ba5a1595e45de734d36bef4e5cb98，bge-m3-q8_0.gguf，
+# ggml-org/bge-m3-Q8_0-GGUF at 9eba04c5d75ba5a1595e45de734d36bef4e5cb98, bge-m3-q8_0.gguf,
 #   sha256 aa473d51f451a22f0fcf39ba3330c14bed38a385712b1113440f69df4047a173
 llama-server -m bge-m3-q8_0.gguf --embeddings --pooling cls --host 127.0.0.1 --port 8950 \
   -c 8192 -b 8192 -ub 8192 -t 6
 ```
 
-BGE-M3 用 CLS 词元生成稠密向量。8192 个词元的批次可以一次容纳路由器发送的任何文本（最多 4000 个字符）。
-
-**2. asset-router。** 使用已经执行过 `npm ci` 的检出，例如 `scripts/asset_router_interop.py` 保存在 `~/.cache/relaymind-interop` 中的那个。运行两个实例，每个实例都有自己的工作目录和全新的存储。路由器从该目录读取 `config/local.json`：
+使用已经执行过 `npm ci` 的 asset-router 检出，例如 `scripts/asset_router_interop.py` 保存在 `~/.cache/relaymind-interop` 中的那个。每个实例在自己的工作目录中运行，并从该目录读取 `config/local.json`：
 
 ```json
 {
@@ -320,33 +378,37 @@ cd /abs/router-select && node --import <checkout>/node_modules/tsx/dist/loader.m
   <checkout>/src/apps/server/main.ts
 ```
 
-选择测试不发送文件，所以它的实例不需要根目录。真实轮次使用端口 8941、另一个存储，以及 `"allowedRoots": ["/abs/turns/workspace/skills"]`，即轮次测试工具在其 `--output` 下安装技能的目录。启动路由器之前先创建这个目录，因为路由器会丢弃不存在的根目录。
+选择测试的实例不需要根目录。真实轮次使用端口 8941、另一个存储，以及 `"allowedRoots": ["/abs/turns/workspace/skills"]`。
 
-**3. 选择。** 运行默认设置、asset-router，以及作为参考的模型选择器，然后比较：
+**其他嵌入模型。** llama.cpp 能作为嵌入提供的任何模型都可以。设置 `embeddings.model`，把 `embeddings.dimensions` 设为模型的向量维度，并使用全新的存储，因为两个模型的向量不能混用。下面这些已经测量过（结果见 [EVIDENCE.md](EVIDENCE.md#2026-11-24--asset-router-with-four-embedding-models-rm47-ac42)）：
 
-```bash
-python scripts/guidance_similar_benchmark.py --split holdout --arm word --output word.json
-python scripts/guidance_similar_benchmark.py --split holdout --arm third_party \
-  --selector-url http://127.0.0.1:8940/select --sync-url http://127.0.0.1:8940/sync \
-  --selector-name asset-router --output router.json
-RELAYMIND_EXTERNAL_API_KEY=... python scripts/guidance_similar_benchmark.py --split holdout \
-  --arm external_picker --model-base-url https://host/v1 --model some-model \
-  --request-option reasoning_effort=low --output picker.json
-python scripts/guidance_compare.py --baseline word=word.json --arm asset-router=router.json \
-  --arm picker=picker.json --by-lane
-```
+| 模型 | GGUF | `--pooling` | `dimensions` | 说明 |
+| --- | --- | --- | ---: | --- |
+| `bge-m3` | `ggml-org/bge-m3-Q8_0-GGUF`，见上 | `cls` | 1024 | asset-router 的 `minScore` 默认值是按这个模型设定的 |
+| `ibm-granite/granite-embedding-97m-multilingual-r2`，`835ad14` | 未发布；转换为 F16 | `cls` | 384 | 9700 万参数 |
+| `nomic-ai/nomic-embed-text-v2-moe-GGUF`，`ffbcf4c`，`nomic-embed-text-v2-moe.Q8_0.gguf`（sha256 `06e7a7e5…3cff`） | 已发布 | `mean` | 768 | 每段文本最多 512 个 token：用 `-c 2048 -np 4 -b 512 -ub 512` 启动；训练时使用 `search_query: ` 和 `search_document: ` 前缀，asset-router 不会发送 |
+| `ThakiCloud/SKILLRET-Embedding-0.6B`，`67f1594` | 未发布；转换为 Q8_0 | `last` | 1024 | 针对英文技能检索微调；训练时查询带有 `Instruct: … Query:` 提示，asset-router 不会发送 |
 
-没有背景资产时，提供的只有 70 个 holdout 技能。若要像已记录的运行那样同时提供目录中的技能和工具，请构建源目录（[SOURCE_BENCHMARK.md](SOURCE_BENCHMARK.md)），并给每个实验组加上 `--background-catalog <目录>`。其中的技能就是轮次测试工具作为主机技能安装的那些。请确认路由器报告中的 `sync.outcome` 为 `ready`，并且没有任何一行是 `degraded: true`。
-
-**4. 真实轮次。** 默认实验组运行两次，因为相同的运行结果也会有差异：
+要转换没有 GGUF 的模型，请按固定修订版下载，把它的 `model.safetensors` 与 Hugging Face 列出的 SHA-256 核对，再用同一个 llama.cpp 版本的转换脚本：
 
 ```bash
-RELAYMIND_EXTERNAL_API_KEY=... python scripts/guidance_turn_benchmark.py --similar holdout --per-lane 20 \
-  --arms default,default_repeat,third_party --model-base-url https://host/v1 --model some-model \
-  --third-party-url http://127.0.0.1:8941/select --third-party-sync-url http://127.0.0.1:8941/sync \
-  --third-party-name asset-router --output /abs/turns
+python <llama.cpp b12237 source>/convert_hf_to_gguf.py <model folder> --outtype q8_0 \
+  --outfile model-q8_0.gguf
 ```
 
-先用 `--per-lane 2` 做一次短的试运行，并查看其 `summary.json` 中的词元数。输出目录包含 `summary.json`（每个实验组的正确技能、输入大小和时间）、`runs.jsonl`（每个轮次一行）和 `sync.json`（预热情况，以及路由器对测量轮次的回答）。使用 `--similar` 时，主机提供 70 个 holdout 技能和它自带的技能，不安装目录。
+然后检查服务器的向量与原始模型一致。用 `sentence-transformers` 和 `/v1/embeddings` 分别嵌入几段英文和中文文本：每一对的余弦应不低于 0.99。错误的 `--pooling` 产生的向量看起来仍然合理，所以这一步不能省略。
 
-**谨慎解读结果。** 在同时运行嵌入服务器的同一台机器上测得的选择延迟不是速度结果。这些数据和期望答案由模型编写，所以结果只是开发诊断，不满足 AC25 到 AC37。目前的结果见 [EVIDENCE.md](EVIDENCE.md#2026-11-23--asset-router-against-the-default-rm47-ac42)。
+**为每个模型设置 `minScore`。** asset-router 只保留得分高于 `minScore`（默认 0.55）的候选，而这个值是按 `bge-m3` 设定的。不同模型的分数尺度差别很大。在 holdout 上，正确技能与英文提示词的余弦中位数：`bge-m3` 为 0.60，granite 为 0.87，nomic 为 0.54，SKILLRET 为 0.42。因此在默认阈值下，granite 几乎全部保留，nomic 和 SKILLRET 几乎全部丢弃。换用其他模型时，先在不涉及选择器的情况下看它的分数尺度，以及仅靠嵌入的排序效果：
+
+```bash
+python scripts/guidance_embedding_probe.py --url http://127.0.0.1:8950 --split development \
+  --output probe.json
+```
+
+它分别针对英文、中英混合和纯中文提示词，报告正确技能在该划分的技能中排第一或进入前 3 的次数，以及它的余弦（最小值、中位数、最大值）。`--query-prefix` 和 `--document-prefix` 可以显示模型的提示前缀会带来什么。然后在路由器配置中设置阈值，在 `--split development` 上按宏平均精确率和宏平均召回率调整，再只运行一次 holdout：
+
+```json
+"router": {"selected": "router.hybrid-bm25", "routers": {"router.hybrid-bm25": {"minScore": 0.40}}}
+```
+
+asset-router 的 BM25 阶段在每个 token 中只保留 `[a-z0-9]`，并且除非 `recallUnmatched` 为 true，只有 BM25 命中的资产才会成为候选。所以没有拉丁字母单词的提示词无论用哪个嵌入模型都会得到 `no_match`。
