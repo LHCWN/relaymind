@@ -9,6 +9,12 @@ third-party selector, on the same prompts through the same gateway path:
 
 External stages read RELAYMIND_EXTERNAL_BASE_URL, RELAYMIND_EXTERNAL_MODEL and
 RELAYMIND_EXTERNAL_API_KEY. Development tooling: it is not part of a running gateway.
+
+With one or more --sync-root DIR it is also a reference selector for guidance selector sync
+(spec 0.72 section 7.7; RM47): it answers POST /sync, reads a skill file only when its real path is
+under a root and its size and SHA-256 match, and answers not_ready to a select that offers a pair it
+has not indexed. Its index is in memory and only records which pairs it has; it still ranks with
+the descriptions of the select, so it shows the protocol, not a better ranking.
 """
 
 import argparse
@@ -16,8 +22,11 @@ import asyncio
 import hashlib
 import json
 import os
+import stat
 import sys
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from types import SimpleNamespace
 
 from relaymind.guidance import GuidanceSettings, parse_guidance_request, run_guidance
@@ -29,9 +38,115 @@ from relaymind.guidance.pipeline import (
     clip_end,
 )
 from relaymind.recommendations.limits import MAX_TASK_BYTES
+from relaymind.schema_util import StrictValidator, first_schema_error, load_packaged_schema
 from relaymind.selection.asset_contract import parse_asset_request, parse_asset_result
 
 MAX_BODY = 33 * 1024 * 1024
+MAX_SKILL_FILE_BYTES = 1024 * 1024
+_SYNC_REQUEST = StrictValidator(
+    load_packaged_schema("relaymind.guidance", "asset_sync_request.v1.json")
+)
+
+
+class SyncIndex:
+    """An in-memory index of {asset_id, content_hash} pairs, fed by guidance selector sync."""
+
+    def __init__(self, roots, inference="local"):
+        # Roots are compared as real paths, so a link inside a root cannot lead out of it.
+        self.roots = [Path(root).resolve(strict=True) for root in roots]
+        self.inference = inference
+        self._pairs = set()
+        self._lock = threading.Lock()
+
+    def ready(self, catalog) -> bool:
+        with self._lock:
+            return all((r["asset_id"], r["content_hash"]) in self._pairs for r in catalog)
+
+    def handle(self, value):
+        """One AssetSyncRequestV1 to one AssetSyncResponseV1; raises on an invalid request."""
+        if first_schema_error(_SYNC_REQUEST, value) is not None:
+            raise ValueError("invalid sync request")
+        operation = value["operation"]
+        missing = results = None
+        if operation == "find_missing":
+            with self._lock:
+                missing = [
+                    pair
+                    for pair in value["assets"]
+                    if (pair["asset_id"], pair["content_hash"]) not in self._pairs
+                ]
+        else:
+            results = [self._take(item) for item in value["assets"]]
+        return dict(
+            schema_version=1,
+            operation=operation,
+            inference=self.inference,
+            missing=missing,
+            results=results,
+        )
+
+    def _take(self, item):
+        record, content = item["record"], item["content"]
+        pair = (record["asset_id"], record["content_hash"])
+        # Without a file the record alone is indexed, as the protocol allows.
+        reason = None if content is None else self._check(content, record["content_hash"])
+        if reason is None:
+            with self._lock:
+                self._pairs.add(pair)
+        return dict(
+            asset_id=pair[0],
+            content_hash=pair[1],
+            status="accepted" if reason is None else "rejected",
+            reason=reason,
+        )
+
+    def _real(self, path):
+        """The real path of `path` when it lies under a root; None when it does not."""
+        real = Path(path).resolve(strict=True)
+        return real if any(real.is_relative_to(root) for root in self.roots) else None
+
+    def _check(self, content, content_hash):
+        try:
+            real = self._real(content["path"])
+        # A NUL in the path is a ValueError; it is still one rejected pair, not a failed upload.
+        except (OSError, RuntimeError, ValueError):
+            return "unreadable"
+        if real is None:
+            return "outside_roots"
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        try:
+            fd = os.open(real, flags)
+        except OSError:
+            return "unreadable"
+        try:
+            opened = os.fstat(fd)
+            if not stat.S_ISREG(opened.st_mode):
+                return "unreadable"
+            # Some filesystems do not report a file ID. It cannot establish identity.
+            if opened.st_ino == 0:
+                return "unreadable"
+            # A folder on the path may have become a link since the roots were checked: the path
+            # must still lead, under a root, to the very file that is open.
+            try:
+                again = self._real(content["path"])
+                now = again and again.stat()
+            except (OSError, RuntimeError, ValueError):
+                return "unreadable"
+            if not now or (now.st_dev, now.st_ino) != (opened.st_dev, opened.st_ino):
+                return "outside_roots"
+            with os.fdopen(fd, "rb", closefd=False) as file:
+                data = file.read(MAX_SKILL_FILE_BYTES + 1)
+        except OSError:
+            return "unreadable"
+        finally:
+            os.close(fd)
+        if len(data) > MAX_SKILL_FILE_BYTES:
+            return "too_large"
+        if len(data) != content["size_bytes"]:
+            return "size_mismatch"
+        if hashlib.sha256(data).hexdigest() != content_hash:
+            return "hash_mismatch"
+        return None
 
 
 def _label(record):
@@ -39,9 +154,28 @@ def _label(record):
     return identity.get("exposed_name") or identity.get("package_id") or record["asset_id"]
 
 
-async def select(value, settings, *, name, version, keywords=None, picker=None):
-    """One SelectionRequestV2 through run_guidance to one SelectionResultV2."""
+async def select(value, settings, *, name, version, keywords=None, picker=None, index=None):
+    """One SelectionRequestV2 through run_guidance to one SelectionResultV2.
+
+    With a SyncIndex, a select that offers a pair it has not indexed is `not_ready`."""
     data = parse_asset_request(value).data
+    if index is not None and not index.ready(data["catalog"]):
+        return parse_asset_result(
+            dict(
+                schema_version=2,
+                recommendation_id=data["recommendation_id"],
+                catalog_revision=data["catalog_revision"],
+                host_snapshot_revision=data["host_snapshot_revision"],
+                selector=dict(name=name, version=version),
+                mechanism="guidance_sync_index",
+                outcome="not_ready",
+                decision=None,
+                candidates=[],
+                index_revision=None,
+                elapsed_ms=0,
+                usage_claims=None,
+            )
+        ).to_json_object()
     by_key = {}
     assets = []
     for record in data["catalog"]:
@@ -103,8 +237,11 @@ async def select(value, settings, *, name, version, keywords=None, picker=None):
     return parse_asset_result(result).to_json_object()
 
 
-def make_handler(answer):
-    """A request handler for POST /select; answer(request) gives the result."""
+def make_handler(answer, sync=None):
+    """A request handler for POST /select, and POST /sync when `sync` is given.
+
+    answer(request) gives the select result and sync(request) the sync answer."""
+    routes = {"/select": answer} | ({"/sync": sync} if sync is not None else {})
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a):  # Never log a prompt.
@@ -112,11 +249,12 @@ def make_handler(answer):
 
         def do_POST(self):
             size = int(self.headers.get("content-length", 0))
-            if self.path != "/select" or size > MAX_BODY:
-                self.send_error(404 if self.path != "/select" else 413)
+            route = routes.get(self.path)
+            if route is None or size > MAX_BODY:
+                self.send_error(404 if route is None else 413)
                 return
             try:
-                body, status = json.dumps(answer(json.loads(self.rfile.read(size)))).encode(), 200
+                body, status = json.dumps(route(json.loads(self.rfile.read(size)))).encode(), 200
             except Exception:
                 body, status = b"{}", 500
             self.send_response(status)
@@ -138,6 +276,13 @@ def main():
     parser.add_argument("--local-url", default="http://127.0.0.1:8033")
     parser.add_argument("--total-ms", type=int, default=60000)
     parser.add_argument("--unpicked-limit", type=int, default=8)
+    parser.add_argument(
+        "--sync-root",
+        action="append",
+        default=[],
+        help="serve guidance selector sync and read skill files only under this directory",
+    )
+    parser.add_argument("--inference", choices=("local", "remote"), default="local")
     args = parser.parse_args()
     settings = GuidanceSettings(
         enabled=True,
@@ -168,6 +313,8 @@ def main():
     keywords = {"local": local, "external": external, "none": None}
     picker = external if args.picker == "external" else None
 
+    index = SyncIndex(args.sync_root, args.inference) if args.sync_root else None
+
     def answer(value):
         return asyncio.run(
             select(
@@ -177,11 +324,15 @@ def main():
                 version=args.version,
                 keywords=keywords[args.keywords],
                 picker=picker,
+                index=index,
             )
         )
 
     print(f"Serving on http://127.0.0.1:{args.port}/select", file=sys.stderr)
-    ThreadingHTTPServer(("127.0.0.1", args.port), make_handler(answer)).serve_forever()
+    if index is not None:
+        print(f"Serving sync on http://127.0.0.1:{args.port}/sync", file=sys.stderr)
+    handler = make_handler(answer, index.handle if index is not None else None)
+    ThreadingHTTPServer(("127.0.0.1", args.port), handler).serve_forever()
 
 
 if __name__ == "__main__":

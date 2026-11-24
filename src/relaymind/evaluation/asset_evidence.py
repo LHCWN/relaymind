@@ -191,6 +191,10 @@ _GENERATOR_ANCHORS = {
     ),
     "docs/SPECIFICATION.md": frozenset(
         {
+            # 0.73 early selector answers (RM47, AC42; #290); subject to the owner's review.
+            ("d58d6822f305d9066608886eeb1ba70ef1a031e2cb2ef055f33a28acabcc047c", 677676),
+            # 0.72 guidance selector sync (RM47, AC42; #290); subject to the owner's review.
+            ("6ea4296d7331e0dd51741c3bce71341ea9e8ba6e7292cff7c7a465898ba5ae38", 675452),
             # 0.71 OpenClaw guidance setup helper (AC41); subject to the owner's review.
             ("75018663060a792aaa0f1176ff6510df1530253349a5df7b440d74214886a97a", 660727),
             # 0.70 OpenClaw plugin declared range and install helper; subject to the owner's review.

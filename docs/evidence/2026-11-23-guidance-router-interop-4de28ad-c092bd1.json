@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "outcome": "passed",
+  "relaymind_commit": "4de28adcbe7c66b27c3974a3a2471c7e4d154927",
+  "relaymind_clean": true,
+  "router_commit": "c092bd190b964cd32c47946aab5dbded8c632d64",
+  "tests": 12,
+  "passed": 12,
+  "failed": 0,
+  "skipped": 0,
+  "runs": 3,
+  "note": "scripts/asset_router_interop.py --result, three identical runs on Linux with Node 24.22.1; inference is a deterministic embeddings double, not ranking quality."
+}

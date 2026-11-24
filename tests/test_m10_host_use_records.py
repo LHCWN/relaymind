@@ -28,6 +28,7 @@ import pytest
 import yaml
 
 from relaymind.evaluation.asset_qualification_record import known_host_limitations, load_record
+from test_openclaw_host_transport import link_directory
 
 ROOT = Path(__file__).resolve().parents[1]
 HOST = "integrations/openclaw/node_modules/openclaw/"
@@ -587,12 +588,7 @@ def build_recorded_adapter(commit, root):
         current / "package-lock.json"
     )
     modules = package / "node_modules"
-    if sys.platform == "win32":
-        import _winapi
-
-        _winapi.CreateJunction(str(current / "node_modules"), str(modules))
-    else:
-        modules.symlink_to(current / "node_modules", target_is_directory=True)
+    link_directory(current / "node_modules", modules)
     for config in ("tsconfig.build.json", "tsconfig.control-ui.json"):
         result = subprocess.run(
             [shutil.which("node"), str(modules / "typescript/bin/tsc"), "-p", config],

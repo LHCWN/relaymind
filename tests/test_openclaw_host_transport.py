@@ -17,6 +17,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import threading
 from pathlib import Path
 
@@ -87,16 +88,45 @@ def require_node_build_dependencies() -> None:
         pytest.skip(reason)
 
 
-def run_tsc(*args: str) -> None:
-    """Compile the plugin with its pinned TypeScript; a failure raises."""
+def run_tsc(*args: str, package: Path = PACKAGE) -> None:
+    """Compile the plugin in `package` with its pinned TypeScript; a failure raises.
+
+    Other workers import the shared dist/, so a build of the shared package must name its
+    own --outDir; a full build belongs in a private_package() copy.
+    """
+    own_out = any(a == "--outDir" or a.startswith("--outDir=") for a in args)
+    if package.resolve() == PACKAGE.resolve() and not own_out:
+        raise ValueError("this would rewrite the shared dist/; build in private_package()")
     subprocess.run(
-        [_node(), str(PACKAGE / "node_modules/typescript/bin/tsc"), *args],
-        cwd=PACKAGE,
+        [_node(), str(package / "node_modules/typescript/bin/tsc"), *args],
+        cwd=package,
         check=True,
         capture_output=True,
         text=True,
         timeout=30,
     )
+
+
+def link_directory(target: Path, link: Path) -> None:
+    """Make `link` point at the directory `target`: a junction on Windows, else a symlink."""
+    if sys.platform == "win32":
+        import _winapi
+
+        _winapi.CreateJunction(str(target), str(link))
+    else:
+        link.symlink_to(target, target_is_directory=True)
+
+
+def private_package(root: Path) -> Path:
+    """A copy of the plugin package at `root`, without its dist/, for a test to build in.
+
+    Tests in other workers import the shared dist/; building there deletes and rewrites
+    files they may be reading. The copy reaches the locked dependencies through a link
+    to the package's own node_modules.
+    """
+    shutil.copytree(PACKAGE, root, ignore=shutil.ignore_patterns("node_modules", "dist"))
+    link_directory(PACKAGE / "node_modules", root / "node_modules")
+    return root
 
 
 def test_node_is_found_on_path_as_the_harness_finds_it(monkeypatch, tmp_path):

@@ -13,14 +13,20 @@
 ## Current
 
 - `guidance_selector_server.py` — serve the built-in guidance stages as a selection v2
-  service, so the benchmark compares them like any third-party selector (RM40, RM45).
+  service, so the benchmark compares them like any third-party selector (RM40, RM45). With
+  `--sync-root DIR` it is also a reference selector for guidance selector sync (RM47).
+- `asset_router_interop.py --rev <commit>` — run the guidance gateway against the real asset-router
+  at one exact commit, with deterministic inference (RM47, AC42; `pytest -m interop`).
 - `example_intent_selector.py` — a complete third-party selector with no RelayMind imports,
   with optional keywords and a picker through any OpenAI-compatible model (RM28, RM45).
 - `guidance_turn_benchmark.py` — real full turns through OpenClaw, the guidance plugin, a
   gateway and an external model, including similar skills, MCP tools and the strict limit
-  (RM16, RM45, RM46); see `docs/guidance.md`.
+  (RM16, RM45, RM46); see `docs/guidance.md`. `--third-party-sync-url` syncs a selector
+  that builds an index with free warm-up turns before the measured ones (RM47).
 - `guidance_similar_benchmark.py` — the guidance stages or your selector over families of similar
-  skills, with follow-ups, undecided and unrelated prompts (RM16, RM45).
+  skills, with follow-ups, undecided and unrelated prompts (RM16, RM45). `--sync-url` syncs a
+  selector that builds an index before any case runs (RM47); `--background-catalog` offers a
+  source catalog's skills and tools as well.
 - `guidance_compare.py` — precision, recall, F1, MRR and more for any selector against a baseline,
   from reports of either benchmark (RM16, RM40, RM45).
 

@@ -1881,3 +1881,22 @@ twice against the real host 2026.10.7 in an isolated home on Linux, with a fake 
 plugin was loaded with no diagnostics and the configuration held one load path and the expected settings. This is a functional check, not platform qualification. Not run:
 Windows, macOS, a full guided turn after this setup, and any OpenClaw release other than 2026.10.7. The host's list has
 names only, so tools have no description until an operator adds one.
+
+## Guidance selector sync (spec 0.72; RM47; AC42)
+
+Implemented for guidance (#290): the plugin sends each skill's SHA-256, path and size; a `not_ready` selector
+answer falls back to word match and, with `guidance.sync_url`, starts a `find_missing` then `upload` sync after the
+answer. Deterministic tests use a fake router (`tests/test_guidance_sync.py`). The `interop` suite runs the gateway
+against the real asset-router at an exact commit, locally and in the `Router interop` workflow
+([testing](TESTING.md)); all twelve cases pass at asset-router `c092bd1`, the pinned commit, and at `e02157e`,
+which ranks early while an embedding is pending (spec 0.73). `scripts/guidance_similar_benchmark.py --sync-url`
+syncs such a selector before it measures, from JSON assets with no file, and `scripts/guidance_turn_benchmark.py
+--third-party-sync-url` does it through the real host with warm-up turns that call no model
+([evidence](EVIDENCE.md#2026-11-22--guidance-gateway-against-asset-router-rm47-ac42)). A first comparison with
+local `bge-m3` embeddings: asset-router picks better than the default but far below a model picker
+([evidence](EVIDENCE.md#2026-11-23--asset-router-against-the-default-rm47-ac42)). Open: a selector that keeps
+one version of each asset re-indexes on every switch of version or description (spec section 7.7, open finding).
+Real turns with `glm-5.3-flash` show no difference
+from the default in loading the right skill (29 and 33 of 40, within the noise) at about a third of the input
+tokens, and asset-router misses Chinese prompts it answers with `no_match`. Not done: the same sync for
+recommendations.

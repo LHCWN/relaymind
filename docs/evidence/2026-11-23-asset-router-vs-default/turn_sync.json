@@ -1,0 +1,29 @@
+{
+ "third_party": {
+  "warm_up": {
+   "outcome": "ready",
+   "turns": 1,
+   "s": 28.4,
+   "host_exits": [
+    0
+   ],
+   "gateway_sync": {
+    "schema_version": 1,
+    "enabled": true,
+    "running": false,
+    "last_outcome": "none",
+    "last_inference": null,
+    "missing": 0,
+    "accepted": 0,
+    "rejected": 0,
+    "files_sent": 0,
+    "consecutive_failures": 0,
+    "retry_after_ms": 0
+   }
+  },
+  "measured_selects": {
+   "ranked": 32,
+   "no_match": 8
+  }
+ }
+}

@@ -19,8 +19,18 @@
         "properties": {
           "name": {"type": "string", "minLength": 1},
           "kind": {"enum": ["skill", "mcp_tool"]},
-          "description": {"type": "string"}
-        }
+          "description": {"type": "string"},
+          "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}(?![\\s\\S])"},
+          "path": {"type": "string", "minLength": 1},
+          "size_bytes": {"type": "integer", "minimum": 0, "maximum": 1048576}
+        },
+        "dependentRequired": {
+          "content_hash": ["path", "size_bytes"],
+          "path": ["content_hash", "size_bytes"],
+          "size_bytes": ["content_hash", "path"]
+        },
+        "if": {"properties": {"kind": {"const": "mcp_tool"}}},
+        "then": {"not": {"anyOf": [{"required": ["content_hash"]}, {"required": ["path"]}, {"required": ["size_bytes"]}]}}
       }
     }
   }

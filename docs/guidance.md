@@ -4,7 +4,7 @@
 
 A user writes a prompt in OpenClaw. RelayMind proposes the few skills and tools that prompt needs, and
 the model sees those instead of a long list. If you choose, OpenClaw can also be limited to them.
-Requirements RM45 and RM46, specification section 7.7.
+Requirements RM45 to RM47, specification section 7.7.
 
 The gateway proposes only. It never runs anything or grants a permission. If it is slow or fails, the turn
 goes on without a hint and without a limit, and OpenClaw's own search still works.
@@ -159,7 +159,7 @@ A request looks like this (shortened):
  "deadline_ms":7990,"candidate_limit":10,
  "catalog":[{"schema_version":1,"asset_id":"host:skill:pdf-merge","kind":"skill","source_id":"host",
    "source_locator":"host://skill/pdf-merge","source_version":null,"captured_at":"1970-01-01T00:00:00Z",
-   "content_hash":"<sha256 of the description>","description":"Merge pdf documents","language_tags":[],
+   "content_hash":"<sha256 of SKILL.md>","description":"Merge pdf documents","language_tags":[],
    "dependencies":[],"availability":"unknown","stale":false,
    "identity":{"package_id":"pdf-merge","package_version":null}}]}
 ```
@@ -181,7 +181,8 @@ The rules:
 - `mechanism` is your own label. Do not use `lexical_overlap`, `gateway_lexical_fallback` or the built-in
   selector names; they are refused.
 - If nothing fits, answer `"outcome":"no_match","decision":"no_match","candidates":[]`.
-- A failure or an invalid answer falls back to word match with `degraded: true`, unless `fallback = false`.
+- A failure, an invalid answer or `"outcome":"not_ready"` falls back to word match with `degraded: true`,
+  unless `fallback = false`.
 - A selector proposes. The gateway admits only exact offered records, and nothing runs because of a pick.
 
 Above 1,000 host assets your selector gets the best 1,000 by word match; the built-in stages take up to
@@ -203,12 +204,89 @@ A request carries no skill body, so read it from `filePath`. `source_locator` is
 a few seconds each: run it in the background.
 
 Treat this as a warm-up. Each request's list decides what may be picked, and it can differ per agent and session.
-Match an indexed record by `identity.package_id`, the skill's name. `content_hash` covers only the description as
-sent, shortened and redacted, so a skill's body can change while the hash stays the same: check the file as well.
+Match an indexed record by `identity.package_id`, the skill's name. The plugin sends each skill's SHA-256, so a
+skill's `content_hash` is the hash of its `SKILL.md` and changes with the body. A skill whose file is larger than
+1 MiB has no such hash: its `content_hash` covers only the description as sent, shortened and redacted.
 
 For MCP tools the request's `input_schema` is the placeholder `{"type":"object"}`, because OpenClaw's `mcp probe`
 lists names only. A selector that needs real schemas asks the servers itself with `tools/list`; `openclaw mcp show`
 prints how to reach them.
+
+## Keep your selector in sync
+
+A selector that indexes skill bodies can let the gateway tell it what changed (spec 0.72, RM47). Add
+`sync_url = "http://127.0.0.1:8940/sync"` to the `[guidance]` table above. When your selector answers
+`"outcome":"not_ready"`, the gateway falls back to word match for that turn and, after it answers, sends up to
+three POSTs to that URL:
+
+1. `{"schema_version":1,"operation":"find_missing","feeder_id":"guidance","assets":[{"asset_id","content_hash"}]}`
+   with every offered record. Answer `{"schema_version":1,"operation":"find_missing","inference":"local",
+   "missing":[...],"results":null}` with the pairs you have not indexed.
+2. `{"schema_version":1,"operation":"upload","feeder_id":"guidance","assets":[{"record","content"}]}` with only
+   those. `record` is the exact record of the select request. `content` is
+   `{"kind":"file","path":"/abs/SKILL.md","size_bytes":812}` for a skill, and `null` for a tool or a skill with
+   no file. Answer `"missing":null` and one result for each pair:
+   `{"asset_id","content_hash","status":"accepted","reason":null}` once you have taken it for indexing, or
+   `"status":"rejected"` with `"reason"` one of `hash_mismatch`, `size_mismatch`, `outside_roots`, `too_large`,
+   `unreadable` or `invalid_record`.
+
+Read the file yourself, only when its real path, with every symbolic link resolved, is under folders your
+operator allowed, and check its size and SHA-256 against `size_bytes` and `content_hash`. Index each asset by its
+exact `asset_id` and `content_hash`, and answer `not_ready` to a select that offers a pair you have not indexed.
+Report a pair as missing when you have neither indexed it nor are indexing it, so a pair whose indexing failed is
+missing again. Say `"inference":"remote"` if your embedding or
+tag model is not on this machine: the gateway then sends no paths, unless the operator sets
+`sync_allow_remote = true`. The gateway never reads or sends a skill body, and at most one sync runs at a time.
+
+A skill you rejected with its file is sent once more without it, so you can index it from its record. A pair you
+rejected without a file is not sent again until its hash changes. A sync that fails waits 30 s before the next one,
+twice as long after each further failure, up to 10 minutes. A sync that only sends you again records you accepted
+before waits the same way, because you took them and did not index them; a changed record, such as a new
+description for the same file, is new. A sync whose missing pairs you all rejected before waits too. Each exchange gets `sync_ms`, 60 s by default, apart from
+the turn's own time, and a failed sync changes no answer. `GET /relay/v1/guidance/sync` with the application token
+shows the counts of the last sync that ended and the wait, with no asset names or paths. A sync whose
+`find_missing` failed shows `failed` with zero counts.
+
+Two costs come with this design. `not_ready` answers the whole select, so one pair you have not indexed sends every
+turn to word match until a sync gets it indexed. And a sync that hangs holds the one sync slot for up to three
+`sync_ms` (3 minutes by default), and every other sync is skipped meanwhile.
+
+`scripts/guidance_selector_server.py --sync-root DIR` is a reference selector for this protocol: it serves `/sync`,
+reads files only under its roots and answers `not_ready` until it has every offered pair. It still ranks by
+description, so it shows the protocol, not a better ranking.
+
+### What each identifier means
+
+- `content_hash` names the source: the SHA-256 of the whole `SKILL.md` (up to 1 MiB) when the plugin sent it,
+  otherwise the description as sent. No request, task, session or catalog ID goes into it, so an unchanged skill
+  keeps the same `{asset_id, content_hash}` in every request and every offer.
+- Your own feature recipe versions and input fingerprints decide when you may reuse what you derived from a
+  source. Keep them inside your selector; they are not part of this protocol.
+- `catalog_revision` names one offer: the exact list of one select.
+- `index_revision` in your answer names the retrieval generation you scored with.
+- "Searchable" and "every optional feature done" are different states. Answer `not_ready` while any offered pair
+  is unknown to you: the gateway syncs only after `not_ready`, so ranking a subset would leave the unknown pair
+  without a sync. Ranking before every optional feature is ready (progressive readiness), and keeping several
+  versions of one asset, are planned, not part of the contract yet.
+- The gateway does not cache your rankings. It asks you on every request, so identical requests may get a new
+  answer after you publish new features.
+- Rank with the description of the current select. The same file hash can come with a description shortened or
+  redacted differently than before. asset-router `b54416b` and later answer `not_ready` to such an offer and
+  report the pair in `find_missing`, so the gateway uploads the current record, which counts as progress. The
+  gateway remembers only the record you last accepted for each asset, so switching back to an earlier version or
+  description is progress too. A selector that keeps one version of each asset re-indexes on each such change.
+- A tool record's `input_schema` is the placeholder `{"type":"object"}` and its `schema_hash` is fixed, so it
+  does not tell you when a real tool's schema changed. Real MCP schemas need a separate contract extension.
+
+### Check against the real asset-router
+
+`python scripts/asset_router_interop.py --rev <router commit>` clones asset-router at that exact commit into
+`~/.cache/relaymind-interop`, runs `npm ci`, and runs `tests/test_guidance_router_interop.py` against the
+router's own server, with a deterministic embeddings double instead of a model. It covers a cold router through
+`not_ready`, sync and the router's own ranking, a mixed upload, a refused file sent again without content, an
+indexing failure retried, reuse across offers, a new feature recipe, a restart and a new description for the same
+file. It checks that two programs
+work together, not how well a real model ranks.
 
 ## Add MCP tools
 
@@ -263,6 +341,14 @@ python scripts/guidance_similar_benchmark.py --split holdout --arm third_party \
 python scripts/guidance_compare.py --baseline word=word.json --arm mine=mine.json --by-lane
 ```
 
+If your selector builds an index and answers `not_ready` to assets it has not indexed, add
+`--sync-url http://127.0.0.1:8940/sync`. The harness then syncs it before any case runs, the same way the gateway
+does, and measures only when the selector answers with its full ranking. If that takes longer than
+`--sync-wait-s` (600 s by default), it stops and measures nothing. These assets are JSON with no `SKILL.md`, so each
+upload carries only the record (`content: null`). The record's name and description are the whole asset, so the
+selector indexes it from that. The report's `sync` field shows how long the sync took. That time is not counted in
+any case's latency.
+
 | Metric | Meaning | Better |
 | --- | --- | --- |
 | First pick | The first pick is right | Higher |
@@ -308,5 +394,96 @@ real full turns through OpenClaw, the plugin, a gateway and an external model, w
 skills and `--tools` for MCP tools. Run the default arm twice: identical runs differ, and that difference is the
 noise any improvement must beat.
 
+Its third-party arms set `fallback = false`. So, against a selector that builds an index, give
+`--third-party-sync-url` (your selector's `/sync`), and `--third-party-name` and `--third-party-version` with the
+name and version it reports. Before the measured turns, the harness runs warm-up turns that it answers itself, so
+they cost nothing. In each one, the real plugin offers the host's skills with their files, and the gateway syncs the
+selector. The measured turns start once the selector answers with its full ranking. If that takes longer than
+`--sync-wait-s` (600 s by default), the arm stops with no turn measured. `sync.json` in the output folder records the
+warm-up, the gateway's sync counts, and how the selector answered the measured turns.
+
 Results so far are in [EVIDENCE.md](EVIDENCE.md#2026-11-05--per-prompt-guidance-development-runs-284). They are
 development diagnostics: the expected answers are developer-authored, and they do not satisfy AC25 to AC37.
+
+## Compare asset-router with the default
+
+This runs both benchmarks with asset-router as the third-party selector and the built-in default as the baseline
+(spec 0.73 section 7.7; RM47). Selection compares picks with the expected skills. Real turns check whether the model
+then loads the right skill, and at what input size. Everything except the host's model runs on your machine.
+
+**1. Local embeddings.** asset-router does not embed text itself. It calls an OpenAI-compatible
+`{embeddings.baseUrl}/v1/embeddings`. Run llama.cpp's server with a multilingual model on loopback, so the router
+reports `inference: local` and may read skill files:
+
+```bash
+# llama.cpp b12237, llama-b12237-bin-ubuntu-x64.tar.gz,
+#   sha256 ffd7ccfe4ca5f176f730988e049630ab0b943c5f1a1b005f1619a7048a745f68
+# ggml-org/bge-m3-Q8_0-GGUF at 9eba04c5d75ba5a1595e45de734d36bef4e5cb98, bge-m3-q8_0.gguf,
+#   sha256 aa473d51f451a22f0fcf39ba3330c14bed38a385712b1113440f69df4047a173
+llama-server -m bge-m3-q8_0.gguf --embeddings --pooling cls --host 127.0.0.1 --port 8950 \
+  -c 8192 -b 8192 -ub 8192 -t 6
+```
+
+BGE-M3 makes its dense vectors from the CLS token. The 8,192-token batch holds any text the router sends (at most
+4,000 characters) in one piece.
+
+**2. asset-router.** Use a checkout with `npm ci` done, such as the one `scripts/asset_router_interop.py` keeps in
+`~/.cache/relaymind-interop`. Run two instances, each from its own working folder with a fresh store. The router
+reads `config/local.json` from that folder:
+
+```json
+{
+  "skills": {"source": "relaymind"},
+  "store": {"filename": "/abs/router-select/store/index.db"},
+  "embeddings": {"baseUrl": "http://127.0.0.1:8950", "model": "bge-m3", "dimensions": 1024},
+  "server": {"host": "127.0.0.1", "port": 8940, "name": "asset-router", "version": "1"},
+  "sync": {"allowedRoots": []}
+}
+```
+
+```bash
+cd /abs/router-select && node --import <checkout>/node_modules/tsx/dist/loader.mjs \
+  <checkout>/src/apps/server/main.ts
+```
+
+The selection benchmark sends no files, so its instance needs no roots. For real turns, use port 8941, another
+store, and `"allowedRoots": ["/abs/turns/workspace/skills"]`, the folder where the turn harness installs skills under
+its `--output`. Create that folder before you start the router, because the router drops a root that does not exist.
+
+**3. Selection.** Run the default, asset-router and, as a reference, a model picker. Then compare:
+
+```bash
+python scripts/guidance_similar_benchmark.py --split holdout --arm word --output word.json
+python scripts/guidance_similar_benchmark.py --split holdout --arm third_party \
+  --selector-url http://127.0.0.1:8940/select --sync-url http://127.0.0.1:8940/sync \
+  --selector-name asset-router --output router.json
+RELAYMIND_EXTERNAL_API_KEY=... python scripts/guidance_similar_benchmark.py --split holdout \
+  --arm external_picker --model-base-url https://host/v1 --model some-model \
+  --request-option reasoning_effort=low --output picker.json
+python scripts/guidance_compare.py --baseline word=word.json --arm asset-router=router.json \
+  --arm picker=picker.json --by-lane
+```
+
+Without a background the offer is only the 70 holdout skills. To offer the catalog's skills and tools too, as the
+recorded runs do, build the source catalog ([SOURCE_BENCHMARK.md](SOURCE_BENCHMARK.md)) and add
+`--background-catalog <catalog folder>` to every arm. Its skills are the ones the turn harness installs as host
+skills. Check that the router report's `sync.outcome` is `ready` and that no row has `degraded: true`.
+
+**4. Real turns.** The default arm runs twice, because identical runs differ:
+
+```bash
+RELAYMIND_EXTERNAL_API_KEY=... python scripts/guidance_turn_benchmark.py --similar holdout --per-lane 20 \
+  --arms default,default_repeat,third_party --model-base-url https://host/v1 --model some-model \
+  --third-party-url http://127.0.0.1:8941/select --third-party-sync-url http://127.0.0.1:8941/sync \
+  --third-party-name asset-router --output /abs/turns
+```
+
+Run a short pilot first with `--per-lane 2`, and read the token counts in its `summary.json`. The output folder holds
+`summary.json` (right skill, input sizes and time per arm), `runs.jsonl` (one line per turn) and `sync.json` (the
+warm-up and how the router answered the measured turns). With `--similar`, the host offers the 70 holdout skills and
+its own bundled skills; the catalog is not installed.
+
+**Read the results with care.** Selection latency on one machine that also runs the embeddings server is not a
+speed result. These data and expected answers were written by a model, so the results are development diagnostics
+and do not satisfy AC25 to AC37. Results so far are in
+[EVIDENCE.md](EVIDENCE.md#2026-11-23--asset-router-against-the-default-rm47-ac42).

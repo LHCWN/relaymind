@@ -8,6 +8,65 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Specification 0.73 (RM47; AC42; section 7.7): a guidance selector may answer early, ranking a pair from the
+  features it has already indexed while the rest is still being indexed. It marks such an answer with a
+  `mechanism` and `score_kind` ending in `:early`. The gateway passes it on like any other ranked answer, with
+  `degraded` false and no sync; a pair whose indexing failed still gets `not_ready` and a sync.
+  `scripts/guidance_compare.py` counts early answers in their own column, since they are not the selector's full
+  ranking. The `interop` suite waits for the router's full ranking before checking indexing, and a new case checks
+  an early answer from asset-router `87b9e06`.
+- `scripts/guidance_similar_benchmark.py --sync-url` (spec 0.73; RM47; AC42; review of PR 291): a selector that
+  builds an index, such as asset-router, answered `not_ready` to every case, so the `third_party` arm measured word
+  match. The harness now syncs the selector before any case runs and measures only once it answers with its full
+  ranking; otherwise it stops with nothing measured (`--sync-wait-s`, 600 s by default). The assets are JSON with no
+  `SKILL.md`, so each upload is the record alone (`content: null`), and the selector indexes the asset from it.
+  A new `interop` case runs this against asset-router `e02157e`.
+- `scripts/guidance_turn_benchmark.py --third-party-sync-url` (spec 0.73; RM47; AC42): the same for real turns.
+  Its third-party arms set `fallback = false`, so a cold indexing selector gave those turns no hint. Before the
+  measured turns, the harness now runs warm-up turns that its own recorder answers, so no model call is paid. The
+  real plugin offers the host's skills with their files, the gateway syncs after each `not_ready`, and a loopback
+  proxy in front of the selector shows when it answers with its full ranking (`--sync-wait-s`, 600 s by default).
+  `sync.json` records the warm-up, the gateway's sync counts and the select outcomes of the measured turns.
+  The `Router interop` workflow now pins asset-router `c092bd1`, where all twelve cases pass.
+- `docs/guidance.md` and `docs/guidance.zh-CN.md`, "Compare asset-router with the default": a runbook for both
+  benchmarks with asset-router against the built-in default, with local `bge-m3` embeddings through llama.cpp
+  (pinned release and model, with SHA-256). `guidance_similar_benchmark.py --background-catalog` builds the
+  background from a source catalog, with the skills the turn harness installs and every tool. The first results
+  are in EVIDENCE.md. `docs/SOURCE_BENCHMARK.md` records that two Matrix archives pinned by the version 3 recipe
+  changed upstream, so version 3 can no longer be rebuilt exactly.
+  `--third-party-name` and `--third-party-version` name the selector, which the gateway checks; before, the arms
+  always named `example_intent`.
+- Specification 0.72 (#290; RM47; AC42; section 7.7): guidance can keep a third-party selector's index in step
+  with the host's skills.
+  - The plugin sends each skill's SHA-256, absolute path and size (files up to 1 MiB, at most 64 MiB read whole per
+    turn), so a skill's `content_hash` changes with its body. It reads only the frontmatter of a hidden skill,
+    stops at 20,000 assets, re-reads a file when its change time changes, and drops file fields before shortening
+    descriptions to stay under the body limit. If an older gateway refuses the file fields (HTTP 400), it retries
+    once without them and sends none for the rest of the process; upgrade the gateway to get sync.
+  - A selector answer `not_ready` falls back to word match. With `guidance.sync_url` set, the gateway then asks
+    which offered records the selector is missing (`find_missing`) and uploads only those, after the answer is
+    sent. A body reaches the selector only as a path it reads itself, never when it reports remote inference
+    unless `guidance.sync_allow_remote = true`.
+  - Each upload gets a result per asset. A skill rejected with its file is sent once more without it; a pair
+    rejected without a file is not sent again until its hash changes. The gateway remembers the last accepted
+    record of each asset: any other record (a new hash, a new description, or a return to an earlier version) is
+    progress, while the same record missing again, or only known rejections, wait like a failure (30 s, doubling
+    to 10 minutes). Each exchange has its own `guidance.sync_ms`.
+  - `GET /relay/v1/guidance/sync` reports the last sync's counts without asset names or paths; a failed
+    `find_missing` reports zero counts. New schemas: `AssetSyncRequestV1`, `AssetSyncResponseV1`,
+    `GuidanceSyncStatusV1`. Sections 4.6.2 and 12.6.4 say this sync is a separate protocol, not preparation.
+  - Section 7.7 says what each identifier names (`content_hash` the source, `catalog_revision` the offer,
+    `index_revision` the retrieval generation), that a selector answers `not_ready` while any offered pair is
+    unknown, that the gateway caches no ranking, that `deadline_ms` may have a fraction, and that a guidance
+    tool's `schema_hash` covers only its placeholder schema.
+  - `scripts/guidance_selector_server.py --sync-root DIR` is a reference selector for the sync protocol.
+    `scripts/asset_router_interop.py` and the `Router interop` workflow check the gateway against the real
+    asset-router at an exact commit; see [testing](docs/TESTING.md) and [evidence](docs/EVIDENCE.md).
+  - Recommendations are unchanged; their sync is a follow-up.
+- Parallel test runs no longer depend on load or on the shared plugin build: real-server fixtures allow 60 s
+  instead of 1 s, two recommendation timeout tests use a test clock, and tests that build the plugin do it in a
+  private copy of the package.
+
 - Specification 0.71 (RM45, RM46; AC41; sections 7.7 and 14.1): `relaymind openclaw guidance` sets up per-prompt
   guidance with the host's own commands. It installs the plugin, empties the listed skill catalog and, with
   `--tools-file`, writes the plugin's tool list from `openclaw mcp probe`. A partial list changes nothing, and

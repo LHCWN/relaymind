@@ -25,7 +25,14 @@ import pytest
 from api_helpers import RunningServer, token_of
 from gateway_helpers import text_turn, tool_turn
 from relaymind.openclaw_setup import DECLARED_RANGE as DECLARED
-from test_openclaw_host_transport import PACKAGE, REQUIRED, _missing, _node
+from test_openclaw_host_transport import (
+    PACKAGE,
+    REQUIRED,
+    _missing,
+    _node,
+    link_directory,
+    private_package,
+)
 from test_openclaw_plugin import client_gateway, drive_plugin
 from test_openclaw_round_trips import ECHO
 from workflow_helpers import github_expression
@@ -72,11 +79,11 @@ def node_dependencies():
         pytest.skip(reason)
 
 
-def pack_release(dest: Path) -> dict:
+def pack_release(dest: Path, package: Path) -> dict:
     env = {**os.environ, "PATH": f"{Path(_node()).parent}{os.pathsep}{os.environ['PATH']}"}
     completed = subprocess.run(
         [*_npm(), "run", "--silent", "pack:release", "--", str(dest)],
-        cwd=PACKAGE,
+        cwd=package,
         env=env,
         capture_output=True,
         text=True,
@@ -95,7 +102,9 @@ def releases(tmp_path_factory):
         pytest.skip(_missing())
     first = tmp_path_factory.mktemp("release-a")
     second = tmp_path_factory.mktemp("release-b")
-    return (first, pack_release(first)), (second, pack_release(second))
+    # The build deletes dist/ first; other workers import the shared one meanwhile.
+    package = private_package(tmp_path_factory.mktemp("release-package") / "openclaw")
+    return (first, pack_release(first, package)), (second, pack_release(second, package))
 
 
 # -- locked dependencies (no Node needed) ------------------------------------------------
@@ -222,14 +231,7 @@ def _install_from_artifact(tarball: Path, prefix: Path) -> Path:
     with tarfile.open(tarball) as archive:
         archive.extractall(prefix / "unpacked", filter="data")
     (prefix / "unpacked" / "package").rename(target)
-    peer = modules / "openclaw"
-    host = PACKAGE / "node_modules" / "openclaw"
-    if sys.platform == "win32":
-        import _winapi
-
-        _winapi.CreateJunction(str(host), str(peer))
-    else:
-        peer.symlink_to(host, target_is_directory=True)
+    link_directory(PACKAGE / "node_modules" / "openclaw", modules / "openclaw")
     return target / "dist" / "index.js"
 
 

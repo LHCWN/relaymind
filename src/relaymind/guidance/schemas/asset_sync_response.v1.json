@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://relaymind.local/schemas/asset_sync_response.v1.json",
+  "description": "AssetSyncResponseV1 (spec 0.72 section 7.7; RM47). find_missing answers missing pairs; upload answers one result per uploaded pair.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "operation", "inference", "missing", "results"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "operation": {"enum": ["find_missing", "upload"]},
+    "inference": {"enum": ["local", "remote"]},
+    "missing": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/pair"}}
+      ]
+    },
+    "results": {
+      "oneOf": [
+        {"type": "null"},
+        {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/result"}}
+      ]
+    }
+  },
+  "if": {"properties": {"operation": {"const": "upload"}}},
+  "then": {"properties": {"missing": {"type": "null"}, "results": {"type": "array"}}},
+  "else": {"properties": {"missing": {"type": "array"}, "results": {"type": "null"}}},
+  "$defs": {
+    "pair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset_id", "content_hash"],
+      "properties": {
+        "asset_id": {"type": "string", "minLength": 1},
+        "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}(?![\\s\\S])"}
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset_id", "content_hash", "status", "reason"],
+      "properties": {
+        "asset_id": {"type": "string", "minLength": 1},
+        "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}(?![\\s\\S])"},
+        "status": {"enum": ["accepted", "rejected"]},
+        "reason": {
+          "enum": [
+            null,
+            "hash_mismatch",
+            "size_mismatch",
+            "outside_roots",
+            "too_large",
+            "unreadable",
+            "invalid_record"
+          ]
+        }
+      },
+      "if": {"properties": {"status": {"const": "accepted"}}},
+      "then": {"properties": {"reason": {"type": "null"}}},
+      "else": {"properties": {"reason": {"type": "string"}}}
+    }
+  }
+}

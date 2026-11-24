@@ -16,9 +16,10 @@ from test_openclaw_host_transport import PACKAGE, REQUIRED, _missing, _node
 from test_openclaw_plugin import driver_env
 
 
-def drive_actions(app, driver: str, output, *, timeout: float, env=None) -> dict:
+def drive_actions(app, driver: str, output, *, timeout: float, env=None, package=PACKAGE) -> dict:
     """Run one recommendation-transport driver against the gateway with the action token.
 
+    `package` holds the dist/ the driver imports: the shared one, or a private build.
     Neither token may appear in the result or the driver's output.
     """
     with RunningServer(app) as running:
@@ -26,8 +27,8 @@ def drive_actions(app, driver: str, output, *, timeout: float, env=None) -> dict
         environment["RELAYMIND_ACTION_TOKEN"] = ACTION_TOKEN
         environment.update(env or {})
         process = subprocess.run(
-            [_node(), str(PACKAGE / "test/recommendation-transport" / driver), str(output)],
-            cwd=PACKAGE,
+            [_node(), str(package / "test/recommendation-transport" / driver), str(output)],
+            cwd=package,
             env=environment,
             capture_output=True,
             text=True,

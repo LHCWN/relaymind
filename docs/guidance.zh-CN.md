@@ -2,7 +2,7 @@
 
 [English](guidance.md)
 
-用户在 OpenClaw 中输入提示词后，RelayMind 只提议该提示词需要的少量技能和工具，让模型看到这几项，而不是一长串列表。如果你愿意，也可以把 OpenClaw 限制在这几项之内。需求 RM45 和 RM46，规范第 7.7 节。
+用户在 OpenClaw 中输入提示词后，RelayMind 只提议该提示词需要的少量技能和工具，让模型看到这几项，而不是一长串列表。如果你愿意，也可以把 OpenClaw 限制在这几项之内。需求 RM45 至 RM47，规范第 7.7 节。
 
 网关只做提议。它不会运行任何东西，也不会授予权限。如果它很慢或失败，本轮对话会在没有提示、也没有限制的情况下继续，OpenClaw 自己的搜索仍然可用。
 
@@ -123,7 +123,7 @@ total_ms = 12000
  "deadline_ms":7990,"candidate_limit":10,
  "catalog":[{"schema_version":1,"asset_id":"host:skill:pdf-merge","kind":"skill","source_id":"host",
    "source_locator":"host://skill/pdf-merge","source_version":null,"captured_at":"1970-01-01T00:00:00Z",
-   "content_hash":"<sha256 of the description>","description":"Merge pdf documents","language_tags":[],
+   "content_hash":"<sha256 of SKILL.md>","description":"Merge pdf documents","language_tags":[],
    "dependencies":[],"availability":"unknown","stale":false,
    "identity":{"package_id":"pdf-merge","package_version":null}}]}
 ```
@@ -144,7 +144,7 @@ total_ms = 12000
 - 用 HTTP 200 和 `application/json` 响应，最大 1 MiB。不能有重复的 JSON 键或非有限数字。
 - `mechanism` 是你自己的标签。不要使用 `lexical_overlap`、`gateway_lexical_fallback` 或内置选择器的名称，它们会被拒绝。
 - 没有合适项时，响应 `"outcome":"no_match","decision":"no_match","candidates":[]`。
-- 失败或无效的响应会退回到词匹配并标记 `degraded: true`，除非设置 `fallback = false`。
+- 失败、无效的响应或 `"outcome":"not_ready"` 会退回到词匹配并标记 `degraded: true`，除非设置 `fallback = false`。
 - 选择器只做提议。网关只接受所提供的准确记录，提议本身不会运行任何东西。
 
 主机资产超过 1,000 项时，你的选择器会收到词匹配最好的 1,000 项；内置步骤最多处理 20,000 项。托管服务前面需要一个小型本地进程，因为 URL 必须在环回地址上。
@@ -160,9 +160,40 @@ openclaw skills info <name> --json        # filePath 是该技能的 SKILL.md，
 
 请求中不包含技能正文，请从 `filePath` 读取。`source_locator` 只是标签 `host://skill/<name>`，不是路径。`skills list` 不输出路径，所以每个技能都要调用一次 `skills info`，每次需要几秒钟，请在后台运行。
 
-这只是预热。能选哪些由每个请求中的列表决定，它可能因智能体和会话而不同。用技能名 `identity.package_id` 匹配已索引的记录。`content_hash` 只覆盖发送的描述（经过截断和脱敏），技能正文变化时哈希可能不变，所以还要检查文件。
+这只是预热。能选哪些由每个请求中的列表决定，它可能因智能体和会话而不同。用技能名 `identity.package_id` 匹配已索引的记录。插件会发送每个技能的 SHA-256，所以技能的 `content_hash` 是其 `SKILL.md` 的哈希，正文变化时它也会变化。文件大于 1 MiB 的技能没有这个哈希，其 `content_hash` 只覆盖发送的描述（经过截断和脱敏）。
 
 对于 MCP 工具，请求中的 `input_schema` 是占位符 `{"type":"object"}`，因为 OpenClaw 的 `mcp probe` 只列出名称。需要真实 schema 的选择器要自己用 `tools/list` 询问服务器；`openclaw mcp show` 会显示如何连接它们。
+
+## 让选择器保持同步
+
+为技能正文建立索引的选择器可以让网关告诉它哪些内容变了（规范 0.72，RM47）。在上面的 `[guidance]` 表中加入
+`sync_url = "http://127.0.0.1:8940/sync"`。当你的选择器响应 `"outcome":"not_ready"` 时，网关在这一轮退回到词匹配，并在作答之后向该 URL 发送最多三个 POST：
+
+1. `{"schema_version":1,"operation":"find_missing","feeder_id":"guidance","assets":[{"asset_id","content_hash"}]}`，包含所有提供的记录。用 `{"schema_version":1,"operation":"find_missing","inference":"local","missing":[...],"results":null}` 响应，列出你尚未索引的配对。
+2. `{"schema_version":1,"operation":"upload","feeder_id":"guidance","assets":[{"record","content"}]}`，只包含这些配对。`record` 是选择请求中的原样记录。技能的 `content` 是 `{"kind":"file","path":"/abs/SKILL.md","size_bytes":812}`，工具或没有文件的技能为 `null`。用 `"missing":null` 响应，并为每个配对给出一个结果：接收并准备建立索引时为 `{"asset_id","content_hash","status":"accepted","reason":null}`，否则为 `"status":"rejected"`，`"reason"` 取 `hash_mismatch`、`size_mismatch`、`outside_roots`、`too_large`、`unreadable` 或 `invalid_record` 之一。
+
+由你自己读取文件，只有当文件的真实路径（解析所有符号链接之后）位于运维人员允许的目录下时才读取，并用 `size_bytes` 和 `content_hash` 核对大小和 SHA-256。按准确的 `asset_id` 和 `content_hash` 为每个资产建立索引；如果选择请求提供了你尚未索引的配对，就响应 `not_ready`。既没有建立索引、也没有正在建立索引的配对要报告为缺失，所以索引失败的配对会再次缺失。如果你的嵌入模型或标签模型不在本机，请返回 `"inference":"remote"`：此时网关不发送路径，除非运维人员设置 `sync_allow_remote = true`。网关从不读取或发送技能正文，同一时间最多运行一次同步。
+
+带文件时被你拒绝的技能会再发送一次，但不带文件，这样你可以只根据记录为它建立索引。不带文件时被你拒绝的配对在其哈希变化之前不会再次发送。同步失败后，下一次同步要等待 30 秒，此后每连续失败一次等待时间加倍，最多 10 分钟。如果一次同步只是再次发送你以前接收过的相同记录，它也同样等待，因为你接收了它们却没有建立索引；记录有变化（例如同一文件的新描述）则算作新的。如果缺失的配对都是你以前拒绝过的，这次同步也会等待。每次交换使用 `sync_ms`（默认 60 秒），与本轮自身的时间分开；同步失败不会改变任何响应。用应用令牌调用 `GET /relay/v1/guidance/sync` 可以查看上一次已结束的同步的计数和等待时间，其中不包含资产名称或路径。`find_missing` 失败的同步显示为 `failed`，计数为零。
+
+这种设计有两个代价。`not_ready` 针对整个选择请求，所以只要有一个配对尚未索引，每一轮都会退回到词匹配，直到同步让它建立索引。另外，挂起的同步最多会占用唯一的同步位置三个 `sync_ms`（默认 3 分钟），在此期间其他同步都会被跳过。
+
+`scripts/guidance_selector_server.py --sync-root DIR` 是这个协议的参考选择器：它提供 `/sync`，只读取其根目录下的文件，并在拥有所有提供的配对之前响应 `not_ready`。它仍然按描述排序，所以它展示的是协议，而不是更好的排序。
+
+### 各个标识的含义
+
+- `content_hash` 标识来源内容：插件发送了文件时是整个 `SKILL.md`（最多 1 MiB）的 SHA-256，否则是所发送描述的哈希。其中不包含请求、任务、会话或目录 ID，所以未改变的技能在每个请求和每次提供中都保持相同的 `{asset_id, content_hash}`。
+- 你自己的特征配方版本和输入指纹决定何时可以复用从来源派生的内容。它们留在你的选择器内部，不属于本协议。
+- `catalog_revision` 标识一次提供，即一次选择请求的准确列表。
+- 你响应中的 `index_revision` 标识你评分时使用的检索代次。
+- “可检索”和“所有可选特征都已完成”是不同的状态。只要有提供的配对你还不认识，就响应 `not_ready`：网关只在 `not_ready` 之后同步，所以只对一部分排序会让未知配对得不到同步。在所有可选特征完成之前就排序（渐进就绪），以及同时保存一个资产的多个版本，都是计划中的内容，尚不属于契约。
+- 网关不缓存你的排序。它在每个请求中都询问你，所以在你发布新特征之后，相同的请求可能得到新的响应。
+- 按当前选择请求中的描述排序。同一个文件哈希可能带着与之前不同的截短或脱敏描述。`b54416b` 及之后版本的 asset-router 对这样的提供响应 `not_ready`，并在 `find_missing` 中报告该配对，于是网关上传当前记录，这算作有进展。网关只记住你为每个资产最后接受的记录，所以切换回较早的版本或描述也算作有进展。只为每个资产保存一个版本的选择器会在每次这样的切换时重新建立索引。
+- 工具记录的 `input_schema` 是占位符 `{"type":"object"}`，其 `schema_hash` 固定不变，所以它不能告诉你真实工具的 schema 何时变化。真实的 MCP schema 需要单独的契约扩展。
+
+### 用真实的 asset-router 检查
+
+`python scripts/asset_router_interop.py --rev <router commit>` 会把该准确提交的 asset-router 克隆到 `~/.cache/relaymind-interop`，运行 `npm ci`，再用确定性的嵌入替身代替模型，针对路由器自己的服务器运行 `tests/test_guidance_router_interop.py`。它覆盖冷启动的路由器经过 `not_ready`、同步到路由器自己的排序，混合上传，被拒绝的文件不带内容重新发送，索引失败后重试，跨不同提供的复用，新的特征配方，重启，以及同一文件的新描述。它检查的是两个程序能否协同工作，而不是真实模型排序的好坏。
 
 ## 添加 MCP 工具
 
@@ -206,6 +237,12 @@ python scripts/guidance_similar_benchmark.py --split holdout --arm third_party \
 python scripts/guidance_compare.py --baseline word=word.json --arm mine=mine.json --by-lane
 ```
 
+如果你的选择器会建立索引，并对尚未索引的资产回答 `not_ready`，请加上 `--sync-url http://127.0.0.1:8940/sync`。
+这样，测试工具会在运行任何用例之前像网关一样同步选择器，并且只在选择器用完整排序作答后才开始测量。如果超过
+`--sync-wait-s`（默认 600 秒），它会停止，不测量任何内容。这些资产来自 JSON，没有 `SKILL.md`，所以每次上传只有记录
+（`content: null`）。记录中的名称和描述就是整个资产，选择器据此建立索引。报告中的 `sync` 字段记录同步用了多长时间，
+这段时间不计入任何用例的延迟。
+
 | 指标 | 含义 | 更好的方向 |
 | --- | --- | --- |
 | First pick | 第一个选择正确 | 越高越好 |
@@ -241,4 +278,75 @@ python scripts/guidance_compare.py --baseline builtin=builtin.json --arm mine=my
 
 模型之后是否加载了正确的技能，是另一个问题。`scripts/guidance_turn_benchmark.py` 会通过 OpenClaw、插件、网关和外部模型运行真实的完整对话轮次；用 `--similar holdout` 测试相似技能，用 `--tools` 测试 MCP 工具。请把默认实验组运行两次：相同的运行结果也会有差异，任何改进都必须超过这种噪声。
 
+它的第三方实验组设置了 `fallback = false`。因此，如果选择器会建立索引，请加上 `--third-party-sync-url`（选择器的
+`/sync`），并用 `--third-party-name` 和 `--third-party-version` 给出选择器报告的名称和版本。在测量的轮次之前，
+测试工具会先运行几轮预热轮次，由它自己回答，所以不产生费用。每一轮中，真实的插件会提供主机的技能及其文件，网关会同步
+选择器。选择器用完整排序作答后，测量的轮次才开始。如果超过 `--sync-wait-s`（默认 600 秒），该实验组会停止，不测量任何
+轮次。输出目录中的 `sync.json` 记录预热情况、网关的同步计数，以及选择器对测量轮次的回答。
+
 目前的结果见 [EVIDENCE.md](EVIDENCE.md#2026-11-05--per-prompt-guidance-development-runs-284)。它们只是开发诊断：期望答案由开发者编写，不满足 AC25 到 AC37。
+
+## 将 asset-router 与默认设置比较
+
+这里用 asset-router 作为第三方选择器、用内置默认设置作为基线，运行两个基准测试（规范 0.73 第 7.7 节；RM47）。选择测试把选出的资产与期望的技能比较；真实轮次检查模型之后是否加载了正确的技能，以及输入有多大。除了主机使用的模型，其余都在你的机器上运行。
+
+**1. 本地嵌入。** asset-router 自己不计算嵌入，它调用兼容 OpenAI 的 `{embeddings.baseUrl}/v1/embeddings`。在回环地址上用多语言模型运行 llama.cpp 的服务器，这样路由器会报告 `inference: local`，可以读取技能文件：
+
+```bash
+# llama.cpp b12237，llama-b12237-bin-ubuntu-x64.tar.gz，
+#   sha256 ffd7ccfe4ca5f176f730988e049630ab0b943c5f1a1b005f1619a7048a745f68
+# ggml-org/bge-m3-Q8_0-GGUF，版本 9eba04c5d75ba5a1595e45de734d36bef4e5cb98，bge-m3-q8_0.gguf，
+#   sha256 aa473d51f451a22f0fcf39ba3330c14bed38a385712b1113440f69df4047a173
+llama-server -m bge-m3-q8_0.gguf --embeddings --pooling cls --host 127.0.0.1 --port 8950 \
+  -c 8192 -b 8192 -ub 8192 -t 6
+```
+
+BGE-M3 用 CLS 词元生成稠密向量。8192 个词元的批次可以一次容纳路由器发送的任何文本（最多 4000 个字符）。
+
+**2. asset-router。** 使用已经执行过 `npm ci` 的检出，例如 `scripts/asset_router_interop.py` 保存在 `~/.cache/relaymind-interop` 中的那个。运行两个实例，每个实例都有自己的工作目录和全新的存储。路由器从该目录读取 `config/local.json`：
+
+```json
+{
+  "skills": {"source": "relaymind"},
+  "store": {"filename": "/abs/router-select/store/index.db"},
+  "embeddings": {"baseUrl": "http://127.0.0.1:8950", "model": "bge-m3", "dimensions": 1024},
+  "server": {"host": "127.0.0.1", "port": 8940, "name": "asset-router", "version": "1"},
+  "sync": {"allowedRoots": []}
+}
+```
+
+```bash
+cd /abs/router-select && node --import <checkout>/node_modules/tsx/dist/loader.mjs \
+  <checkout>/src/apps/server/main.ts
+```
+
+选择测试不发送文件，所以它的实例不需要根目录。真实轮次使用端口 8941、另一个存储，以及 `"allowedRoots": ["/abs/turns/workspace/skills"]`，即轮次测试工具在其 `--output` 下安装技能的目录。启动路由器之前先创建这个目录，因为路由器会丢弃不存在的根目录。
+
+**3. 选择。** 运行默认设置、asset-router，以及作为参考的模型选择器，然后比较：
+
+```bash
+python scripts/guidance_similar_benchmark.py --split holdout --arm word --output word.json
+python scripts/guidance_similar_benchmark.py --split holdout --arm third_party \
+  --selector-url http://127.0.0.1:8940/select --sync-url http://127.0.0.1:8940/sync \
+  --selector-name asset-router --output router.json
+RELAYMIND_EXTERNAL_API_KEY=... python scripts/guidance_similar_benchmark.py --split holdout \
+  --arm external_picker --model-base-url https://host/v1 --model some-model \
+  --request-option reasoning_effort=low --output picker.json
+python scripts/guidance_compare.py --baseline word=word.json --arm asset-router=router.json \
+  --arm picker=picker.json --by-lane
+```
+
+没有背景资产时，提供的只有 70 个 holdout 技能。若要像已记录的运行那样同时提供目录中的技能和工具，请构建源目录（[SOURCE_BENCHMARK.md](SOURCE_BENCHMARK.md)），并给每个实验组加上 `--background-catalog <目录>`。其中的技能就是轮次测试工具作为主机技能安装的那些。请确认路由器报告中的 `sync.outcome` 为 `ready`，并且没有任何一行是 `degraded: true`。
+
+**4. 真实轮次。** 默认实验组运行两次，因为相同的运行结果也会有差异：
+
+```bash
+RELAYMIND_EXTERNAL_API_KEY=... python scripts/guidance_turn_benchmark.py --similar holdout --per-lane 20 \
+  --arms default,default_repeat,third_party --model-base-url https://host/v1 --model some-model \
+  --third-party-url http://127.0.0.1:8941/select --third-party-sync-url http://127.0.0.1:8941/sync \
+  --third-party-name asset-router --output /abs/turns
+```
+
+先用 `--per-lane 2` 做一次短的试运行，并查看其 `summary.json` 中的词元数。输出目录包含 `summary.json`（每个实验组的正确技能、输入大小和时间）、`runs.jsonl`（每个轮次一行）和 `sync.json`（预热情况，以及路由器对测量轮次的回答）。使用 `--similar` 时，主机提供 70 个 holdout 技能和它自带的技能，不安装目录。
+
+**谨慎解读结果。** 在同时运行嵌入服务器的同一台机器上测得的选择延迟不是速度结果。这些数据和期望答案由模型编写，所以结果只是开发诊断，不满足 AC25 到 AC37。目前的结果见 [EVIDENCE.md](EVIDENCE.md#2026-11-23--asset-router-against-the-default-rm47-ac42)。

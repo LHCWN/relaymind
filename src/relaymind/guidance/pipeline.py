@@ -17,6 +17,7 @@ import uuid
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, fields
 from itertools import islice, zip_longest
+from pathlib import PurePosixPath, PureWindowsPath
 
 from relaymind.assets.catalog import MAX_OFFER_RECORDS
 from relaymind.canonical import canonical_digest
@@ -36,6 +37,7 @@ from relaymind.selection.http import validate_url
 MAX_GUIDANCE_BYTES = 32 * 1024 * 1024
 MAX_NAME_BYTES = 128
 MAX_DESCRIPTION_BYTES = 2048
+MAX_PATH_BYTES = 2048
 # Three times the most assets one request may hold; a digest key keeps no request text alive.
 _TOKEN_CACHE_LIMIT = 60_000
 _SHOWN_LEAD_CHARS = 100  # What an asset is about.
@@ -134,6 +136,10 @@ class GuidanceSettings:
     max_picks: int = 8
     unpicked_limit: int = 8
     max_choices: int = 6
+    # Selector sync (spec 0.72; RM47): off unless a loopback sync URL is set.
+    sync_url: str | None = None
+    sync_allow_remote: bool = False
+    sync_ms: int = 60000
 
 
 GUIDANCE_FIELDS = frozenset(f.name for f in fields(GuidanceSettings))
@@ -145,7 +151,7 @@ def parse_guidance_settings(value: Mapping) -> GuidanceSettings:
     if unknown:
         raise ValueError(f"guidance has unknown keys: {', '.join(sorted(unknown))}")
     raw = {**vars(GuidanceSettings()), **value}
-    for key in ("enabled", "fallback"):
+    for key in ("enabled", "fallback", "sync_allow_remote"):
         if type(raw[key]) is not bool:
             raise ValueError(f"guidance {key} must be boolean")
     choices = dict(
@@ -162,6 +168,7 @@ def parse_guidance_settings(value: Mapping) -> GuidanceSettings:
         max_picks=(1, 20),
         unpicked_limit=(1, 20),
         max_choices=(1, 20),
+        sync_ms=(1, 600000),
     )
     for key, (low, high) in limits.items():
         item = raw[key]
@@ -172,6 +179,10 @@ def parse_guidance_settings(value: Mapping) -> GuidanceSettings:
             if type(raw[key]) is not str or not raw[key].strip():
                 raise ValueError("guidance http requires name, version and url as text")
         validate_url(raw["url"])
+    if raw["sync_url"] is not None:
+        if raw["primary"] != "http" or type(raw["sync_url"]) is not str:
+            raise ValueError("guidance sync_url needs primary http and must be text")
+        validate_url(raw["sync_url"])
     return GuidanceSettings(**raw)
 
 
@@ -190,10 +201,30 @@ def parse_guidance_request(value: object) -> dict:
             key in seen
             or len(item["name"].encode("utf-8")) > MAX_NAME_BYTES
             or len(item["description"].encode("utf-8")) > MAX_DESCRIPTION_BYTES
+            or not _file_fields_ok(item)
         ):
             raise GuidanceError("invalid_request")
         seen.add(key)
     return value
+
+
+def _file_fields_ok(item: Mapping) -> bool:
+    """The schema keeps the three file fields together and on a skill; this checks the path.
+
+    An absolute POSIX or Windows path to a `SKILL.md`, with no `..` step and no NUL (spec 0.72).
+    The selector still decides which roots it reads from; this only refuses what is never a skill.
+    """
+    path = item.get("path")
+    if path is None:
+        return True
+    if "\0" in path or len(path.encode("utf-8")) > MAX_PATH_BYTES:
+        return False
+    # A path is read the way of the one flavour it is absolute in: "/..." is never a Windows drive
+    # path, and a POSIX-absolute "//server/share/..." is judged as POSIX on the host that sent it.
+    parsed = next(
+        (p for p in (PurePosixPath(path), PureWindowsPath(path)) if p.is_absolute()), None
+    )
+    return parsed is not None and parsed.name == "SKILL.md" and ".." not in parsed.parts
 
 
 def validate_guidance_result(value: object) -> dict:
@@ -624,7 +655,9 @@ def _record(item: Mapping, redact: Callable[[str], str]) -> dict:
         source_locator=f"host://{item['kind']}/{item['name']}",
         source_version=None,
         captured_at="1970-01-01T00:00:00Z",
-        content_hash=hashlib.sha256(description.encode("utf-8")).hexdigest(),
+        # The plugin's hash of the whole SKILL.md changes with the body; the description's does not.
+        content_hash=item.get("content_hash")
+        or hashlib.sha256(description.encode("utf-8")).hexdigest(),
         description=description,
         language_tags=[],
         dependencies=[],
@@ -634,7 +667,13 @@ def _record(item: Mapping, redact: Callable[[str], str]) -> dict:
     )
 
 
-async def _third_party(run, request, settings, selector, text, recent, search) -> dict | None:
+class _NotReady(Exception):
+    """The selector has not indexed what it was offered (spec 0.72): a selector failure."""
+
+
+async def _third_party(
+    run, request, settings, selector, text, recent, search, on_not_ready=None
+) -> dict | None:
     """The selector's admitted result, or None after recording why not."""
     started = run.clock()
     offered: dict[str, Mapping] = {}
@@ -691,6 +730,16 @@ async def _third_party(run, request, settings, selector, text, recent, search) -
         validate_against_offer(
             parsed, v2, SelectorIdentity(settings.name, settings.version), http=True
         )
+        if parsed.data["outcome"] == "not_ready":
+            if on_not_ready is not None:
+                # Only what a sync sends: the offered records, and each skill file's path and size.
+                files = {
+                    asset_id: dict(path=item["path"], size_bytes=item["size_bytes"])
+                    for asset_id, item in offered.items()
+                    if "path" in item
+                }
+                on_not_ready(v2.data["catalog"], files)
+            raise _NotReady
         return parsed
 
     ok, parsed = await run.bounded("third_party", call, reserve=reserve)
@@ -711,8 +760,13 @@ async def run_guidance(
     selector: object | None = None,
     redact: Callable[[str], str] = lambda text: text,
     clock: Callable[[], float] = time.monotonic,
+    on_not_ready: Callable[[Sequence[Mapping], dict], None] | None = None,
 ) -> dict:
-    """The stages of section 7.7, or the third-party selector with word match as its fallback."""
+    """The stages of section 7.7, or the third-party selector with word match as its fallback.
+
+    `on_not_ready(catalog, files)` hears a valid `not_ready` answer, with the offered records and
+    the skill files by asset ID, so the caller can sync after it answers (RM47).
+    """
     run = _Run(settings, clock, redact)
     assets = request["assets"]
     limit = request.get("max_picks", settings.max_picks)
@@ -727,7 +781,7 @@ async def run_guidance(
 
     if settings.primary == "http" and selector is not None:
         answer = await _third_party(
-            run, request, settings, selector, clean, recent_clean, with_recent
+            run, request, settings, selector, clean, recent_clean, with_recent, on_not_ready
         )
         if answer is not None:
             return _result(

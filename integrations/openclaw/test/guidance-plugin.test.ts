@@ -2,6 +2,7 @@
 //
 // A host double supplies the session's real skill snapshot and a gateway double
 // answers. The real host and real model runs are in scripts/guidance_turn_benchmark.py.
+import { createHash } from "node:crypto";
 import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, sep } from "node:path";
@@ -18,6 +19,12 @@ const logger = {
   error: (m: string) => logs.push(`error ${m}`),
   debug: (m: string) => logs.push(`debug ${m}`),
 };
+
+/** What the plugin reports for a skill file (spec 0.72): SHA-256 of its bytes, its path and size. */
+function fileOf(path: string) {
+  const bytes = readFileSync(path);
+  return { content_hash: createHash("sha256").update(bytes).digest("hex"), path, size_bytes: bytes.length };
+}
 
 function skill(name: string, description: string, extra = ""): string {
   const folder = join(dir, name);
@@ -109,9 +116,26 @@ describe("the guidance hook", () => {
     expect(JSON.parse(String(init.body))).toEqual({
       schema_version: 1,
       task_text: "merge two pdf files",
-      assets: [{ name: "pdf-merge", kind: "skill", description: "Merge pdf documents" }],
+      assets: [{ name: "pdf-merge", kind: "skill", description: "Merge pdf documents", ...fileOf(path) }],
     });
+    // Spec 0.72: the file's hash, path and size go to the gateway, never its body.
     expect(String(init.body)).not.toContain("BODY-TEXT");
+  });
+
+  // RM47, AC42: file metadata is optional and must use a path the gateway accepts.
+  it.each(["Skill.md", "instructions.md"])("offers %s by description without file metadata", async (filename) => {
+    const path = join(dir, filename);
+    writeFileSync(path, "---\nname: alternate\ndescription: Alternate instructions\n---\n");
+    const standard = skill("pdf-merge", "Merge pdf documents");
+    const fetcher = gateway(picks(["pdf-merge"]));
+    vi.stubGlobal("fetch", fetcher);
+    const { handlers } = load({}, [entry("alternate", path), entry("pdf-merge", standard)]);
+    await handlers.before_prompt_build(EVENT, CTX);
+    const body = JSON.parse(String(fetcher.mock.calls[0]![1].body));
+    expect(body.assets).toEqual([
+      { name: "alternate", kind: "skill", description: "Alternate instructions" },
+      { name: "pdf-merge", kind: "skill", description: "Merge pdf documents", ...fileOf(standard) },
+    ]);
   });
 
   it("never offers a skill hidden from the model", async () => {
@@ -237,6 +261,104 @@ describe("the guidance hook", () => {
   });
 });
 
+// RM47, AC42 (review of PR 291): a 0.72 plugin in front of an older gateway keeps its hint.
+describe("a gateway that refuses the file fields", () => {
+  const FILE_FIELDS = ["content_hash", "path", "size_bytes"];
+  /** A 0.71 gateway: its closed request schema refuses the file fields with HTTP 400. */
+  function olderGateway() {
+    return vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      const refused = body.assets.some((a: object) => FILE_FIELDS.some((k) => k in a));
+      return refused
+        ? new Response(JSON.stringify({ error: { code: "invalid_request" } }), { status: 400 })
+        : new Response(JSON.stringify(picks(["pdf-merge"])), { status: 200 });
+    });
+  }
+  const sent = (fetcher: ReturnType<typeof vi.fn>, call: number) => JSON.parse(String(fetcher.mock.calls[call]![1].body));
+
+  it("sends the request once more without them and keeps the hint", async () => {
+    const path = skill("pdf-merge", "Merge pdf documents");
+    const fetcher = olderGateway();
+    vi.stubGlobal("fetch", fetcher);
+    const { handlers } = load({}, [entry("pdf-merge", path)]);
+    const result = await handlers.before_prompt_build(EVENT, CTX);
+    expect(result.prependContext).toContain("pdf-merge");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(sent(fetcher, 0).assets[0]).toEqual({ name: "pdf-merge", kind: "skill", description: "Merge pdf documents", ...fileOf(path) });
+    expect(sent(fetcher, 1).assets[0]).toEqual({ name: "pdf-merge", kind: "skill", description: "Merge pdf documents" });
+    expect(logs.some((m) => m.startsWith("info ") && m.includes("file fields"))).toBe(true);
+  });
+
+  it("sends no file fields for the rest of the process once that worked", async () => {
+    const path = skill("pdf-merge", "Merge pdf documents");
+    const fetcher = olderGateway();
+    vi.stubGlobal("fetch", fetcher);
+    const { handlers } = load({}, [entry("pdf-merge", path)]);
+    await handlers.before_prompt_build(EVENT, CTX);
+    const result = await handlers.before_prompt_build(EVENT, CTX);
+    expect(result.prependContext).toContain("pdf-merge");
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(sent(fetcher, 2).assets[0].content_hash).toBeUndefined();
+  });
+
+  it("releases the refused response before it sends again", async () => {
+    const path = skill("pdf-merge", "Merge pdf documents");
+    let released = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        const body = JSON.parse(String(init.body));
+        if (!body.assets.some((a: object) => FILE_FIELDS.some((k) => k in a))) {
+          return new Response(JSON.stringify(picks(["pdf-merge"])), { status: 200 });
+        }
+        const stream = new ReadableStream({ cancel: () => void (released = true) });
+        return new Response(stream, { status: 400 });
+      }),
+    );
+    const { handlers } = load({}, [entry("pdf-merge", path)]);
+    const result = await handlers.before_prompt_build(EVENT, CTX);
+    expect(result.prependContext).toContain("pdf-merge");
+    expect(released).toBe(true);
+  });
+
+  it("keeps sending them when the request without them is refused too", async () => {
+    const path = skill("pdf-merge", "Merge pdf documents");
+    const fetcher = gateway({ error: { code: "invalid_request" } }, 400);
+    vi.stubGlobal("fetch", fetcher);
+    const { handlers } = load({}, [entry("pdf-merge", path)]);
+    await expect(handlers.before_prompt_build(EVENT, CTX)).resolves.toEqual({});
+    await handlers.before_prompt_build(EVENT, CTX);
+    expect(fetcher).toHaveBeenCalledTimes(4);
+    expect(sent(fetcher, 2).assets[0].content_hash).toBe(fileOf(path).content_hash);
+  });
+
+  it("does not send again on a 400 to a request that had no file fields", async () => {
+    const toolsFile = join(dir, "tools.json");
+    writeFileSync(toolsFile, JSON.stringify([{ name: "weather", description: "Current weather" }]));
+    const fetcher = gateway({ error: { code: "invalid_request" } }, 400);
+    vi.stubGlobal("fetch", fetcher);
+    const { handlers } = load({ toolsFile }, []);
+    await expect(handlers.before_prompt_build(EVENT, CTX)).resolves.toEqual({});
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps both requests inside the one configured time", async () => {
+    const path = skill("pdf-merge", "Merge pdf documents");
+    const signals: AbortSignal[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        signals.push(init.signal!);
+        return new Response("{}", { status: 400 });
+      }),
+    );
+    const { handlers } = load({ timeoutMs: 5000 }, [entry("pdf-merge", path)]);
+    await handlers.before_prompt_build(EVENT, CTX);
+    expect(signals).toHaveLength(2);
+    expect(signals[1]).toBe(signals[0]);
+  });
+});
+
 describe("registration", () => {
   it("reports when the host still lists every skill, and still works", () => {
     const { api } = load({}, []);
@@ -333,7 +455,7 @@ describe("reading SKILL.md", () => {
   it("reads a local skill when the host leaves its file host unset", () => {
     // Without remote skill access the pinned host records no file host, and the file is on this machine.
     const path = skill("local", "Local text");
-    expect(readSkillInfo({ name: "local", source: { filePath: path }, skillKey: "local" })).toEqual({ description: "Local text", hidden: false });
+    expect(readSkillInfo({ name: "local", source: { filePath: path }, skillKey: "local" })).toEqual({ description: "Local text", hidden: false, file: fileOf(path) });
   });
 
   it("decodes YAML escapes in a double-quoted value", () => {
@@ -367,6 +489,51 @@ describe("reading SKILL.md", () => {
     utimesSync(path, later, later);
     expect(readSkillInfo(skillEntry).description).toBe("New text");
     expect(readSkillInfo(entry("b", join(dir, "missing.md"))).hidden).toBe(true);
+  });
+
+  // RM47 (review of PR 291): an edit that keeps the size and the modification time still changes ctime.
+  it("re-reads a file whose size and modification time stayed the same", () => {
+    const path = skill("same", "Old1");
+    const skillEntry = entry("same", path);
+    // A whole second, so setting it back restores the exact modification time.
+    const fixed = new Date(1_700_000_000_000);
+    utimesSync(path, fixed, fixed);
+    const before = statSync(path);
+    expect(readSkillInfo(skillEntry).description).toBe("Old1");
+    // The kernel's file clock can be a few milliseconds coarse; let it move on before the edit.
+    const until = Date.now() + 30;
+    while (Date.now() < until);
+    writeFileSync(path, readFileSync(path, "utf8").replace("Old1", "New1"));
+    utimesSync(path, fixed, fixed);
+    expect(statSync(path).size).toBe(before.size);
+    expect(statSync(path).mtimeMs).toBe(before.mtimeMs);
+    expect(readSkillInfo(skillEntry).description).toBe("New1");
+    expect(readSkillInfo(skillEntry).file).toEqual(fileOf(path));
+  });
+
+  // RM47 (router integration review): content_hash names the whole SKILL.md, not a prefix. A
+  // router may embed only its first 4,000 characters, but an edit past them is still a new source.
+  it("changes the content hash when only text past character 4,000 changes", () => {
+    const path = skill("deep", "Deep edit");
+    const head = readFileSync(path, "utf8");
+    writeFileSync(path, head + "a".repeat(6000) + " old ending\n");
+    const skillEntry = entry("deep", path);
+    const before = readSkillInfo(skillEntry).file;
+    const text = readFileSync(path, "utf8");
+    writeFileSync(path, text.replace("old ending", "new ending"));
+    const later = new Date(statSync(path).mtimeMs + 5000);
+    utimesSync(path, later, later);
+    const after = readSkillInfo(skillEntry).file;
+    expect(text.indexOf("old ending")).toBeGreaterThan(4000);
+    expect(after.size_bytes).toBe(before.size_bytes);
+    expect(after.content_hash).not.toBe(before.content_hash);
+    expect(after).toEqual(fileOf(path));
+  });
+
+  it("sends no file fields for a SKILL.md over 1 MiB, so its description hash identifies it", () => {
+    const path = skill("huge", "Huge skill");
+    writeFileSync(path, readFileSync(path, "utf8") + "x".repeat(1024 * 1024));
+    expect(readSkillInfo(entry("huge", path))).toEqual({ description: "Huge skill", hidden: false, file: null });
   });
 });
 
@@ -535,6 +702,14 @@ describe("the plugin's own maxPicks", () => {
 });
 
 describe("reading a skill file (review of PR 285)", () => {
+  it.skipIf(process.platform === "win32")("does not read a SKILL.md that is not a regular file (review of PR 291)", () => {
+    // /dev/zero reports size 0 and never ends: a whole-file read would not stop.
+    const path = join(dir, "device", "SKILL.md");
+    mkdirSync(dirname(path), { recursive: true });
+    symlinkSync("/dev/zero", path);
+    expect(readSkillInfo(entry("device", path))).toEqual({ description: "", hidden: true });
+  });
+
   it("reads only the head of a large file and still finds its frontmatter", () => {
     const path = skill("big", "Big skill", "") ;
     writeFileSync(path, "---\nname: big\ndescription: Big skill\n---\n" + "x".repeat(5_000_000));
@@ -556,6 +731,37 @@ describe("the request size (review of PR 285)", () => {
     const body = JSON.parse(json);
     expect(body.assets).toHaveLength(50);
     expect(body.assets[0].description.length).toBeGreaterThan(0);
+  });
+
+  it("drops the skill file fields when they alone keep the request too large (spec 0.72)", () => {
+    const file = { content_hash: "a".repeat(64), path: `/${"p".repeat(1500)}/SKILL.md`, size_bytes: 10 };
+    const assets = Array.from({ length: 30 }, (_, i) => ({ name: `s${i}`, kind: "skill", description: "d", ...file }));
+    const json = fitBody({ schema_version: 1, task_text: "x", assets }, 40_000);
+    expect(Buffer.byteLength(json)).toBeLessThanOrEqual(40_000);
+    const body = JSON.parse(json);
+    expect(body.assets).toHaveLength(30);
+    expect(body.assets[0]).toEqual({ name: "s0", kind: "skill", description: "d" });
+  });
+
+  // RM47, AC42 (review of PR 291): a hint needs the descriptions, not the file fields.
+  it("drops the file fields before it shortens any description", () => {
+    const file = { content_hash: "a".repeat(64), path: `/${"p".repeat(1500)}/SKILL.md`, size_bytes: 10 };
+    const description = "d".repeat(200);
+    const assets = Array.from({ length: 100 }, (_, i) => ({ name: `s${i}`, kind: "skill", description, ...file }));
+    const json = fitBody({ schema_version: 1, task_text: "x", assets }, 40_000);
+    expect(Buffer.byteLength(json)).toBeLessThanOrEqual(40_000);
+    const body = JSON.parse(json);
+    expect(body.assets).toHaveLength(100);
+    expect(body.assets[0]).toEqual({ name: "s0", kind: "skill", description });
+  });
+
+  it("shortens descriptions after the file fields are gone when it still does not fit", () => {
+    const file = { content_hash: "a".repeat(64), path: `/${"p".repeat(1500)}/SKILL.md`, size_bytes: 10 };
+    const assets = Array.from({ length: 100 }, (_, i) => ({ name: `s${i}`, kind: "skill", description: "d".repeat(2000), ...file }));
+    const body = JSON.parse(fitBody({ schema_version: 1, task_text: "x", assets }, 40_000));
+    expect(body.assets[0].content_hash).toBeUndefined();
+    expect(body.assets[0].description.length).toBeLessThan(2000);
+    expect(body.assets[0].description.length).toBeGreaterThan(16);
   });
 
   it("leaves a request that already fits alone", () => {

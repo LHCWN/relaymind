@@ -2782,12 +2782,58 @@ Deterministic, with model doubles: `tests/test_guidance.py`, `tests/test_guidanc
 `tests/test_guidance_turn_benchmark.py`, `tests/test_matrix_benchmark_v3.py`, and in
 `integrations/openclaw`, `test/guidance-plugin.test.ts`.
 
+Selector sync (spec 0.72; RM47, AC42): `tests/test_guidance_sync.py` drives the guidance endpoint against a fake
+router that answers select and sync, and once against a real loopback server through the launched gateway.
+`tests/test_guidance_similar_benchmark.py` runs the benchmark's `--sync-url` warm-up against the reference selector
+(`scripts/guidance_selector_server.py --sync-root`): without it every case falls back to word match, and with it
+every upload is the record alone and every case is the selector's own answer. It also checks that
+`--background-catalog` offers the skills the turn harness installs and every tool, without a skill named like one
+of the data's own.
+`tests/test_guidance_turn_benchmark.py` checks the turn harness's warm-up: the recorder answers a warm-up turn
+itself and records nothing, the proxy in front of the selector passes `/select` and `/sync` on and sees the full
+ranking, and an arm whose selector never gets ready is skipped before any measured turn while the other arms
+still run. A warm-up turn whose host exits non-zero stops the run at once, because the plugin never ran.
+
+Interop with asset-router (RM47, AC42). This checks that the guidance gateway and the real asset-router work
+together. Inference is a deterministic double, so a pass says nothing about ranking quality.
+
+```bash
+python scripts/asset_router_interop.py --rev <40-hex commit> [--repo <URL or local clone>] [--result out.json]
+```
+
+- The runner checks out that exact commit (never a branch) into a cache, runs `npm ci` and then
+  `pytest -m interop tests/test_guidance_router_interop.py`. `--repo` defaults to the SSH URL of the private
+  repository.
+- A run passes only when every interop test ran and passed. A skip or an empty run is `not_validated` and fails.
+- A router may answer early (spec 0.73): `ranked`, with a `mechanism` ending in `:early`, while an embedding is
+  still pending. With the fast embedding double this rarely happens by chance, so the cases that check indexing
+  wait for the full ranking, and one case slows the double to get an early answer on purpose. That case needs the
+  router's default `server.earlyResults: "rank"`.
+- One case runs `scripts/guidance_similar_benchmark.py --sync-url` against the router: its JSON assets have no
+  `SKILL.md`, so every upload has `content: null`, and the router must index each one from its record and then
+  answer every measured case itself.
+- `--result` writes the outcome, the counts and both commits (RelayMind's, with whether it was clean) as JSON.
+- Without the runner, `RELAYMIND_ASSET_ROUTER_DIR=<checkout with node_modules> pytest -m interop` runs the same
+  tests; they skip when the variable is unset. `tests/test_router_interop_harness.py` checks the harness itself in
+  the default run.
+
+In CI, `.github/workflows/router-interop.yml` runs the runner at its `ROUTER_REV` when guidance sync or the harness
+changes, and on demand at another exact commit. Move `ROUTER_REV` only to a commit that passed.
+
+- Access: LHCWN does not allow deploy keys, so the organization's `relaymind-interop` GitHub App (Contents:
+  read-only, installed only on asset-router) issues a one-hour token. Its secrets are `ROUTER_APP_ID` and
+  `ROUTER_APP_PRIVATE_KEY`. Only the step that fetches the router commit sees the token.
+- Without the secrets the job fails as not validated: it is never green without a run.
+- To revoke access, uninstall the app from asset-router.
+
 Live and separate, because they spend on a real model:
 `scripts/guidance_similar_benchmark.py` runs the stages or a third-party selector over families of similar
 skills, and `scripts/guidance_turn_benchmark.py` runs real full turns, with `--similar` for similar skills,
 `--tools` for MCP tools over a fake server, and strict arms. Develop on `--split development`, report on
 `--split holdout`. Run from one frozen commit and run the default arm twice, since identical runs differ.
 The turn harness refuses a setup that did not apply, and refuses an arm with a missing input before it spends.
+With `--third-party-sync-url` it also refuses to measure a third-party arm until the selector answers the host's
+real offer with its full ranking.
 
 A test double of the host cannot show what the host really sends. Real runs found faults the unit tests had
 passed: no descriptions sent on `agent exec`, a relative `read` past the strict limit because the tool hook

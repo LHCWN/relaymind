@@ -39,6 +39,18 @@ _STARTUP_SETTINGS = RecommendationSettings(
 )
 
 
+async def real_sample(client, body, *, category, ordinal):
+    """request_sample against a real in-process gateway, as evidence for the grader.
+
+    Its own deadline is wall time; here it only stops a hang, so a loaded runner can
+    never turn a valid request into a timeout (2 of 120 did at 1 s on Windows).
+    """
+    deadline_at = time.monotonic() + 60.0
+    return await request_sample(
+        client, body, category=category, ordinal=ordinal, deadline_at=deadline_at
+    )
+
+
 def _synthetic_timing(record, start, *, elapsed=0.05, observed_ms=50.0):
     """Real view and events with synthetic times, so host speed never decides a test.
 
@@ -76,9 +88,13 @@ def validated_request_cohort(tmp_path_factory):
         try:
             async with await client_for(app) as client:
                 records = [
-                    await request_sample(client, BODY, category="scheduled", ordinal=i)
+                    await real_sample(client, BODY, category="scheduled", ordinal=i)
                     for i in range(120)
                 ]
+            # Every test here starts from 120 useful records; say so where it breaks.
+            assert [r.outcome for r in records] == ["useful"] * 120, [
+                (r.ordinal, r.outcome, r.error) for r in records if r.outcome != "useful"
+            ]
             return [
                 replace(_synthetic_timing(record, i / 2), scheduled_at=i / 2)
                 for i, record in enumerate(records)
@@ -631,8 +647,9 @@ def test_production_observations_require_nonempty_lexical_and_new_keys(tmp_path)
         await service.start()
         try:
             async with await client_for(app) as client:
-                first = await request_sample(client, BODY, category="startup", ordinal=0)
-                second = await request_sample(client, BODY, category="startup", ordinal=1)
+                first, second = [
+                    await real_sample(client, BODY, category="startup", ordinal=i) for i in range(2)
+                ]
             assert first.outcome == second.outcome == "useful"
             assert first.view["recommendation_id"] != second.view["recommendation_id"]
             assert first.finished_at >= first.started_at
@@ -654,7 +671,7 @@ def test_invalid_or_empty_result_is_not_useful(tmp_path):
         await service.start()
         try:
             async with await client_for(app) as client:
-                sample = await request_sample(client, BODY, category="startup", ordinal=0)
+                sample = await real_sample(client, BODY, category="startup", ordinal=0)
             assert sample.outcome != "useful"
             assert sample.error is not None
         finally:
@@ -1251,7 +1268,7 @@ def production_batch_samples(tmp_path_factory):
                         group = tuple(identities[f"Skill{i}"] for i in range(first, last))
                         expected.extend(group)
                         probes.append(
-                            await request_sample(
+                            await real_sample(
                                 client,
                                 BODY
                                 | {

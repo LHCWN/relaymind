@@ -1,0 +1,146 @@
+name: Router interop
+
+# The guidance gateway against the real asset-router at one exact commit (RM47, AC42).
+# Setup, access (the relaymind-interop GitHub App) and rules: docs/TESTING.md, "Interop with
+# asset-router". The job fails, never passes, when the app's secrets are missing.
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/router-interop.yml
+      - src/relaymind/guidance/**
+      - src/relaymind/api/guidance.py
+      - src/relaymind/launcher.py
+      - src/relaymind/evaluation/checkpoint.py
+      - src/relaymind/selection/asset_http.py
+      - src/relaymind/selection/asset_contract.py
+      - tests/router_interop.py
+      - tests/test_guidance_router_interop.py
+      - scripts/asset_router_interop.py
+      - scripts/guidance_similar_benchmark.py
+      - evaluation/assets/guidance-similar/similar.v1.json
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/router-interop.yml
+      - src/relaymind/guidance/**
+      - src/relaymind/api/guidance.py
+      - src/relaymind/launcher.py
+      - src/relaymind/evaluation/checkpoint.py
+      - src/relaymind/selection/asset_http.py
+      - src/relaymind/selection/asset_contract.py
+      - tests/router_interop.py
+      - tests/test_guidance_router_interop.py
+      - scripts/asset_router_interop.py
+      - scripts/guidance_similar_benchmark.py
+      - evaluation/assets/guidance-similar/similar.v1.json
+  workflow_dispatch:
+    inputs:
+      rev:
+        description: Exact 40-hex asset-router commit (empty for the pinned one)
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: router-interop-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # The asset-router commit this RelayMind revision is checked against. Move it only to a
+  # commit that passed here; the runner refuses anything but a full commit.
+  ROUTER_REV: c092bd190b964cd32c47946aab5dbded8c632d64
+
+jobs:
+  interop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Credentials and commit
+        env:
+          APP_ID: ${{ secrets.ROUTER_APP_ID }}
+          APP_KEY: ${{ secrets.ROUTER_APP_PRIVATE_KEY }}
+          INPUT_REV: ${{ inputs.rev }}
+        run: |
+          if [ -z "$APP_ID" ] || [ -z "$APP_KEY" ]; then
+            message="ROUTER_APP_ID or ROUTER_APP_PRIVATE_KEY is not set: asset-router interop was NOT validated for this commit."
+            echo "::error::$message"
+            {
+              echo "## Router interop: not validated"
+              echo
+              echo "$message No interop test ran. See docs/TESTING.md to set up the GitHub App."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          rev="${INPUT_REV:-$ROUTER_REV}"
+          [[ $rev =~ ^[0-9a-f]{40}$ ]] || { echo "::error::not a full commit: $rev"; exit 2; }
+          echo "REV=$rev" >> "$GITHUB_ENV"
+
+      - uses: actions/create-github-app-token@v1
+        id: token
+        with:
+          app-id: ${{ secrets.ROUTER_APP_ID }}
+          private-key: ${{ secrets.ROUTER_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: asset-router
+
+      - name: Fetch the router commit
+        env:
+          TOKEN: ${{ steps.token.outputs.token }}
+        run: |
+          header=$(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)
+          echo "::add-mask::$header"
+          # One commit under a branch name, so the runner can clone it from this folder.
+          src="$RUNNER_TEMP/asset-router-src"
+          git init -q "$src"
+          git -C "$src" remote add origin "https://github.com/${{ github.repository_owner }}/asset-router.git"
+          git -C "$src" -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $header" \
+            fetch -q --depth 1 origin "$REV:refs/heads/pinned"
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.1'
+
+      # The router's lockfile is fixed by its commit, so its npm downloads are cached by commit.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: asset-router-npm-${{ env.REV }}
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Interop at the router commit
+        run: |
+          python scripts/asset_router_interop.py --rev "$REV" \
+            --repo "$RUNNER_TEMP/asset-router-src" \
+            --cache "$RUNNER_TEMP/relaymind-interop" \
+            --result ci-evidence/router-interop.json
+
+      - name: Summary
+        if: always() && env.REV != ''
+        run: |
+          {
+            echo "## Router interop"
+            echo
+            echo '```json'
+            cat ci-evidence/router-interop.json 2>/dev/null || echo '{"outcome": "not_validated"}'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always() && env.REV != ''
+        with:
+          name: router-interop
+          path: ci-evidence/router-interop.json
+          if-no-files-found: warn
+          retention-days: 30

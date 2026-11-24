@@ -4010,3 +4010,271 @@ history. Tools reach the plugin only through `toolsFile`, because the host keeps
 third-party plugins. The word match ranking found only 22 of 39 English cases in its top 40 at 100,000
 assets on synthetic data, and the request limit is 20,000. A third party gets the best 1,000 by word
 match.
+
+## 2026-11-22 — Guidance gateway against asset-router (RM47, AC42)
+
+Deterministic interoperability, not a quality measurement: inference is a bag-of-words embeddings double on
+loopback, and no real model, host or ranking quality is involved.
+
+- Machine: Ubuntu 26.04.1 LTS, kernel 7.0.0-43-generic, Intel Xeon (Skylake, IBRS) VM, 11 GiB RAM; Node 24.22.1,
+  Python 3.14.4.
+- RelayMind: PR #291 branch on top of `3bd4f73`, with the interop harness (`tests/test_guidance_router_interop.py`,
+  `scripts/asset_router_interop.py`).
+- asset-router: clean checkouts at exact commits of LHCWN/asset-router#1, `npm ci`, started through the router's
+  own `src/apps/server/main.ts` in fed mode with its own SQLite store.
+- Command: `python scripts/asset_router_interop.py --rev <commit> --repo <local clone of asset-router>`.
+
+### RelayMind `4de28ad` at asset-router `c092bd1`: 12 of 12 passed, three runs, none skipped
+
+On 2026-11-23, RelayMind `4de28adcbe7c66b27c3974a3a2471c7e4d154927` (clean tree) against asset-router
+`c092bd190b964cd32c47946aab5dbded8c632d64`, the head of LHCWN/asset-router#1 after `3a6c949` (drops the strict JSON
+parser, renames `featureKey`) and `c092bd1` (query features computed on demand instead of a prepare stage). Result:
+[`2026-11-23-guidance-router-interop-4de28ad-c092bd1.json`](evidence/2026-11-23-guidance-router-interop-4de28ad-c092bd1.json).
+The `Router interop` workflow now pins `c092bd1`.
+
+### Turn benchmark warm-up through the real host: ready after two free turns, at `e02157e` and `c092bd1`
+
+Not a measured turn and not a quality result: this checks only that `scripts/guidance_turn_benchmark.py
+--third-party-sync-url` gets an indexing selector ready through the real host before it measures.
+
+- Setup: RelayMind `4de28ad`, the pinned OpenClaw from `integrations/openclaw`, the real `relaymind-guidance`
+  plugin and a launched gateway, against asset-router `e02157e` and then `c092bd1` with the embeddings double and
+  its allowed root set to the run's workspace `skills` folder. `--similar development --arms third_party
+  --per-lane 1 --third-party-name asset-router`.
+- No paid model call: `RELAYMIND_EXTERNAL_API_KEY` was a dummy value and `--model-base-url` a closed loopback
+  port. The recorder answered both warm-up turns itself (host exit 0 each), and the first measured turn then
+  stopped the run with "the model's own API failed", as the harness requires.
+- Result, the same at both commits: the selector answered with its full ranking after 2 warm-up turns (53.6 s and
+  54.1 s). The gateway's sync counts: 54 missing, 54 sent with their files, 54 accepted, 0 rejected. The host offered
+  the 32 installed skills and its 22 bundled ones. The router's store holds 32 skills indexed from their files and
+  22 from their records: the bundled skills' files are outside the router's root, so it refused them, and the
+  gateway's retry without a file was accepted. The one measured turn's selects were all `no_match` (7 and 8 selects,
+  as the host retried the failed model call), with no `not_ready`.
+
+### RelayMind `08a0d76` at asset-router `e02157e`: 12 of 12 passed, three runs, none skipped
+
+On 2026-11-23, RelayMind `08a0d76048a323215295d7911c23c536e6dfad89` (clean tree) against the same asset-router
+`e02157e8e0012ee42dfc65a615da6370cc2b24cf`. The twelfth case answers a PR #291 review question: the similar-assets
+benchmark declares its assets in JSON, with no `SKILL.md`. `guidance_similar_benchmark.py --sync-url` uploads all
+32 development assets with `content: null`. The router accepts each one and indexes it from its record
+(`src/apps/server/sync.ts`, `admit()` returns no body for a null `content`), and then answers every measured case
+itself (`ranked` or `no_match`, never `:early`). Before `--sync-url` existed, the same arm got `not_ready` on every
+case and measured word match. Result:
+[`2026-11-23-guidance-router-interop-08a0d76-e02157e.json`](evidence/2026-11-23-guidance-router-interop-08a0d76-e02157e.json).
+
+### RelayMind `2e64195` at asset-router `e02157e`: 11 of 11 passed, three runs, none skipped
+
+On 2026-11-23, RelayMind `2e64195609b46bcdaf69875662f6b39a53d5ca32` (clean tree) against asset-router
+`e02157e8e0012ee42dfc65a615da6370cc2b24cf`, the head of LHCWN/asset-router#1. Its one change after `87b9e06`: a
+lone early candidate answers `decision: choice_required` instead of `confident`, because early scores are not
+comparable with the full ranking. The schemas are unchanged, section 4.6.2 allows either decision for a ranked
+answer, and guidance does not read `decision`. Result:
+[`2026-11-23-guidance-router-interop-2e64195-e02157e.json`](evidence/2026-11-23-guidance-router-interop-2e64195-e02157e.json).
+The `Router interop` workflow now pins `e02157e`.
+
+### RelayMind `d01f682` at asset-router `87b9e06`: 11 of 11 passed, three runs, none skipped
+
+On 2026-11-23, RelayMind `d01f682848c96c2e51c661dc44dab28f95fbc4da` (clean tree) against asset-router
+`87b9e069bbc2c57bf73933f3a4e82ee6b2ee1078`, the head of LHCWN/asset-router#1 after `63634f0`, `6cf1d16`, `6eb0943`
+and `87b9e06`. The pinned schemas are unchanged. Result:
+[`2026-11-23-guidance-router-interop-d01f682-87b9e06.json`](evidence/2026-11-23-guidance-router-interop-d01f682-87b9e06.json).
+The `Router interop` workflow pinned `87b9e06` until `e02157e` above.
+
+`87b9e06` answers early: while an accepted pair's embedding is pending, `/select` ranks with BM25 alone, with
+`mechanism` and every `score_kind` set to `router.hybrid-bm25:early` and raw, unbounded BM25 scores. Spec 0.73
+allows this (section 7.7). How it was found, against RelayMind `bd804d2`, with only test-side changes kept outside
+the repository:
+
+- The ten cases passed three times with the router's default `server.earlyResults: "rank"`, and once with
+  `"not_ready"`. A recorder of every `/select` answer showed that none of those runs got an early answer, because
+  the embeddings double answers at once. So those passes said nothing about early answers.
+- With the double slowed by 0.4 s a call, early answers came in every lifecycle case, and two cases failed. Both
+  took the first ranked answer to mean "indexed". The recipe-change case got `ranked`, `confident`, one candidate
+  scoring 2.599, where the description-only full ranking says `no_match`. The restart case counted three embedding
+  calls after the restart: `resume()` finishing the embeddings the restart cut off, with nothing sent again.
+- With `"not_ready"` and the slowed double, the ten cases passed, with 64 `find_missing` calls against 18 for
+  `"rank"` and the same 19 uploads.
+- The router's code and these runs agree that early answers never starve sync: a pair whose indexing failed, or one
+  held incomplete with nothing queued, still answers `not_ready` and is reported missing. Early scores ranged from
+  0.396 to 3.678; full-ranking scores stayed below 1.
+
+The harness now waits for the full ranking before it checks indexing, and an eleventh case slows the double to get
+an early answer on purpose. That case checks that the gateway passes the answer on as the router's ranking, with
+its `mechanism`, and starts no sync. It needs the router's default `"rank"`.
+
+### RelayMind `8509cc2` at asset-router `621b879`: 10 of 10 passed, three runs, none skipped
+
+RelayMind `8509cc27e2d9f17d88bcf1dff7b4231d3e28f6a9` (clean tree) against asset-router
+`621b879b2ee8a233d9c5ff2cdfd31931b83b0226`, the head of LHCWN/asset-router#1 after `42b18ac` (the four schemas
+copied from RelayMind `5e0b04f`) and `621b879` (a backup before a schema-1 store upgrade; a pair still indexing is
+ready once the router holds exactly that version with its required features). Result:
+[`2026-11-22-guidance-router-interop-8509cc2-621b879.json`](evidence/2026-11-22-guidance-router-interop-8509cc2-621b879.json).
+All ten cases pass, the same as at `1e6d4e5` below; the `Router interop` workflow now pins `621b879`.
+
+The first CI run of that workflow with read access (RelayMind `4ad500e`, through the organization's
+`relaymind-interop` GitHub App) passed all ten cases at the earlier pin `1e6d4e5`, on GitHub's merge of `4ad500e`
+into master `0b68534` (`c23c40e`).
+
+### RelayMind `c79b53d` at asset-router `1e6d4e5`: 10 of 10 passed, three runs, none skipped
+
+RelayMind `c79b53d4f8278885f97f2d625b00638d49d2aa2f` (clean tree) against asset-router
+`1e6d4e56c527702d96e31abf4ff1836086739c81`, the head of LHCWN/asset-router#1, through
+`python scripts/asset_router_interop.py --rev <commit> --result <file>`. Result:
+[`2026-11-22-guidance-router-interop-c79b53d-1e6d4e5.json`](evidence/2026-11-22-guidance-router-interop-c79b53d-1e6d4e5.json)
+(`outcome: passed`, 10 passed, 0 failed, 0 skipped; three identical runs).
+
+The nine cases below pass, and a tenth: one skill switched through file versions A, B, A, B, with the clock never
+moved. Each version is synced and then ranked by the router, and no sync starts the wait. The same case run against
+the gateway before this change (per-pair memory of every accepted record) fails on the return to A: the router
+reports that pair missing again, because it keeps one version of each asset, and the gateway counted the upload as
+no progress (`consecutive_failures: 1`, `retry_after_ms: 29995`).
+
+The `Router interop` CI workflow could not produce this result: the asset-router deploy key is not set up in this
+repository, so the job now fails as not validated instead of passing with nothing run.
+
+### At `1e6d4e56c527702d96e31abf4ff1836086739c81`: 9 of 9 passed
+
+The head of LHCWN/asset-router#1 after `de80945` (selection deadlines, index publication, inference boundaries),
+`a90c156`, `3f35068` and `1e6d4e5`, against RelayMind `6e12b64` plus the test-reliability changes of the same
+PR. Same nine cases and results as at `b54416b` below. The `Router interop` workflow now pins this commit.
+
+### At `853dada92e6f6d557d138c23b6e3b08204cccd4d`: 9 of 9 passed, three runs
+
+The head of LHCWN/asset-router#1 after its review fixes (`6bd7896`, `853dada`), against RelayMind `2cb0907`.
+Same nine cases and results as at `b54416b` below. A new description for a ready pair still gets `not_ready`
+and one re-sync; the router now compares only the record fields its active features read.
+
+### At `b54416b4b80c395176c0777c2db62ab873afc2c6`: 9 of 9 passed, three runs
+
+| Case | Result |
+| --- | --- |
+| sync wire format: `find_missing` and `upload` answers satisfy AssetSyncResponseV1 | passed |
+| fractional `deadline_ms` from the real request construction | passed |
+| cold router: `not_ready`, degraded word match, `find_missing`, upload, then the router's own ranking | passed |
+| mixed upload: valid file accepted, file outside the roots `rejected`/`outside_roots`, tool accepted; the refused skill sent again with `content:null` and accepted | passed |
+| indexing failure after acceptance: missing again, re-sent, the gateway waits, then indexed and ranked | passed |
+| unchanged source reused: a subset needs no sync; a new skill is the only upload | passed |
+| feature recipe published (description to full-body embeddings, same store): identical requests go from the router's `no_match` to its ranking, with a new `index_revision`; the router derived the new feature from stored inputs, and nothing was re-sent | passed |
+| restart on the same store: ranked on the first request, no sync, no body embedded again | passed |
+| new description for the same file: ranked as offered after one re-sync | passed |
+
+In every ranked case the test checks that the gateway's picks are the router's candidates in order, with
+`chosen_by: third_party` and `degraded: false`.
+
+### At `c3cc8357ef086fa70b024b251fc4b32f282fa6db`: 0 of 9 passed
+
+All cases failed on two router issues before any later step could run: `/select` answered 400
+`schema_violation` at `/deadline_ms` for a fractional value such as `6999.649438002962`, and the `find_missing`
+answer had no `results`, which AssetSyncResponseV1 requires. A direct check, offering the same ready pairs with
+their descriptions swapped, showed that this revision ranked with the descriptions it stored at upload.
+
+To check the harness before the router fixes existed, it was also run against a throwaway local copy of
+`c3cc835` patched only for those two issues; the eight cases it had then passed three runs in a row. That copy
+was never pushed and is not compatibility evidence.
+
+## 2026-11-23 — asset-router against the default (RM47, AC42)
+
+Development diagnostics. A model wrote the similar-skill data and its expected answers (see the 2026-11-05 entry),
+so these are not independent labels, loading a skill is not task success, and none of this satisfies AC25 to AC37.
+Metrics are in [`evidence/2026-11-23-asset-router-vs-default/`](evidence/2026-11-23-asset-router-vs-default/README.md).
+The runbook is in [guidance.md](guidance.md#compare-asset-router-with-the-default).
+
+- Machine: Ubuntu 26.04.1 LTS, kernel 7.0.0-43-generic, Intel Xeon (Skylake, IBRS) VM, 8 vCPU, 11 GiB RAM, no GPU;
+  Python 3.14.4, Node 24.22.1, OpenClaw 2026.10.7 (`157d8c2`).
+- RelayMind `a2bbcd3`, clean tree. asset-router `c092bd190b964cd32c47946aab5dbded8c632d64` with its default ranking
+  (`router.hybrid-bm25`), fed mode, a fresh store.
+- Embeddings: llama.cpp `b12237` (`llama-b12237-bin-ubuntu-x64.tar.gz`, SHA-256 `ffd7ccfe…5f68`) serving
+  `ggml-org/bge-m3-Q8_0-GGUF` at `9eba04c` (`bge-m3-q8_0.gguf`, SHA-256 `aa473d51…a173`) on loopback, with
+  `--embeddings --pooling cls -c 8192 -b 8192 -ub 8192 -t 6`. So the router reports `inference: local`.
+- Model picker, as a reference arm: `glm-5.3-flash` at `https://api.z.ai/api/paas/v4`, `reasoning_effort` low.
+  GLM-5.4 was not available to the pay-as-you-go key (HTTP 403, "You do not have permission to access glm-5.4");
+  Z.AI's page says it is for the GLM Coding Plan until its Model API opens.
+- Background: the version 3 source catalog cannot be rebuilt exactly (two Matrix archives changed upstream; see
+  [SOURCE_BENCHMARK.md](SOURCE_BENCHMARK.md)). A private copy of the recipe without those two skills gave 411
+  assets. The background is what `--background-catalog` builds from it: 278 skills and 131 tools, so 479 assets were
+  on offer for the holdout, against 480 in the 2026-11-05 runs.
+
+**Selection.** Holdout, 284 prompts, `scripts/guidance_similar_benchmark.py`, then `scripts/guidance_compare.py`.
+
+| Arm | First pick | MRR | P@3 | R@3 | F1@3 | R@8 | Picks | False picks | Asked | Set found | All found | Set exact | Failed | Against the default: won/lost (p) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| Default (word match) | 26% | 0.32 | 17% | 38% | 0.24 | 46% | 5.63 | 12% | 0% | 59% | 36% | 38% | 0 | |
+| asset-router, bge-m3 | 50% | 0.55 | 44% | 58% | 0.50 | 62% | 2.58 | 0% | 0% | 66% | 28% | 68% | 0 | 64/13 (3.0e-09) |
+| GLM picker, glm-5.3-flash | 91% | 0.92 | 87% | 94% | 0.90 | 94% | 1.27 | 6% | 97% | 96% | 83% | 97% | 2 | 150/4 (2.0e-39) |
+
+Against asset-router, the GLM picker won 111 prompts and lost 3 (p 2.4e-29). The default arm matches the
+2026-11-05 run (first pick 26%, set found 59%), so the one missing background asset changes little.
+
+By lane, first pick for one-skill prompts and set found for complex requests:
+
+| Lane | Default | asset-router | GLM picker |
+| --- | ---: | ---: | ---: |
+| English, one skill (70) | 49% | 76% | 93% |
+| Chinese, one skill (70) | 7% | 30% | 89% |
+| English follow-ups (16) | 31% | 50% | 88% |
+| Chinese follow-ups (16) | 0% | 25% | 94% |
+| English complex, set found (32) | 92% | 86% (2/8 against the default, p 0.11) | 95% |
+| Chinese complex, set found (32) | 27% | 46% | 97% |
+
+On unrelated prompts (8 English, 8 Chinese) asset-router made no false pick; the default made one in each language.
+Only the GLM picker asks the user on prompts that fit a whole family (97%), because selection v2 has no `choose`.
+On Chinese one-skill prompts asset-router made 0.76 picks per prompt: it often answers `no_match`.
+
+asset-router answered every case itself (`router.hybrid-bm25`, no early answer, no fallback). Its sync before the
+cases took 135 s for 479 assets and is not in any case's time. The GLM picker used 837,901 input and 21,843 output
+tokens (439 calls), about $0.14 at Z.AI's listed prices. Latency is not compared: everything ran on one 8-vCPU
+machine with four cases at a time, next to the embeddings server (p50 172 ms for word match, against 9 ms on
+2026-11-05; 2,412 ms for asset-router; 2,970 ms for the GLM picker).
+
+**Real turns.** `scripts/guidance_turn_benchmark.py --similar holdout --per-lane 20`: 40 one-skill prompts (20
+English, 20 Chinese), the same 40 in every arm (seed 20261105). Real OpenClaw 2026.10.7, the real plugin and a
+launched gateway; the host's model is `glm-5.3-flash` with `reasoning_effort` low. The host offers the 70 holdout
+skills and its 22 bundled skills (92 in all); the catalog is not installed, unlike the 349 skills of 2026-11-05, so
+these numbers do not compare with that run. The guided arms empty the host's listed catalog. asset-router ran as a
+second instance with its own store and the turn workspace as its only root. The turn harness, plugin and gateway are
+the same at `a2bbcd3` and `88bc83f`; the GLM picker arm ran after the other three, on its own.
+
+| Arm | Right skill | English | Chinese | Against the default: won/lost (p) | Hint shown / right | Searched | Median first input | Median total input |
+| --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: |
+| Default | 33 of 40 | 16 | 17 | | | 16 | 7,285 | 14,698 |
+| Default, repeat | 30 of 40 | 14 | 16 | 2/5 (0.45) | | 12 | 7,286 | 14,672 |
+| asset-router, bge-m3 | 29 of 40 | 19 | 10 | 5/9 (0.42) | 32 / 30 | 3 | 2,544 | 5,278 |
+| GLM picker, glm-5.3-flash | 37 of 40 | 18 | 19 | 7/3 (0.34) | 40 / 38 | 1 | 2,472 | 5,041 |
+
+Against asset-router, the GLM picker won 10 prompts and lost 2 (p 0.039), the only difference here outside the
+noise: the two identical default arms differ on 7 prompts. No run failed and no model call failed. The sizes count
+only the host's own model calls. The GLM picker's own call adds about 2,950 input tokens per prompt (from the
+selection run), so its turn costs about 8,000 input tokens, against 5,278 for asset-router and 14,698 for the
+default. Median time per turn: 42.3 s, 43.8 s, 42.6 s and 46.3 s.
+
+asset-router's eight `no_match` answers were all on Chinese prompts. The guided arms set `fallback = false` and
+empty the listed catalog, so those turns had no hint and no list, and seven of the eight missed the skill (the
+default got six of those seven right). This is the same weakness as in selection: asset-router finds too little on
+Chinese prompts. It got 19 of 20 English prompts right. Before the measured turns, asset-router answered with its
+full ranking after one warm-up turn, because the pilot had already indexed the same skill files; no measured turn
+got `not_ready` (32 `ranked`, 8 `no_match`).
+
+**Chinese prompts.** Of the 70 Chinese one-skill prompts, 24 contain English words and 46 do not. asset-router
+picked first right on 20 of the 24 mixed ones (83%; `no_match` 4%) and on 1 of the 46 pure Chinese ones
+(`no_match` 93%). Its BM25 tokenizer keeps only `[a-z0-9]` in each token, so a pure Chinese prompt has no
+token; only BM25 hits become candidates (`recallUnmatched` false); and with no BM25 score a candidate needs a
+cosine of at least 0.66 to pass `minScore` 0.55. The right skill's `bge-m3` cosine on the pure Chinese prompts was
+0.481 to 0.656 (median 0.573), while by embedding alone it ranked first among the 70 holdout skills on 52% of them
+and in the top 3 on 76%.
+
+Two router config changes on the same holdout and offer (no code change), with RelayMind `88bc83f`'s (unchanged in `d0f8ffd`)
+`--background-catalog` building the same 409 background assets and a fresh router store:
+
+| asset-router config | First pick | MRR | P@3 | R@3 | F1@3 | R@8 | Picks | False picks | Pure Chinese, first pick right |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Default | 50% | 0.55 | 44% | 58% | 0.50 | 62% | 2.58 | 0% | 1 of 46 |
+| `recallUnmatched` true, `recallLimit` 1000 | 51% | 0.55 | 44% | 58% | 0.50 | 63% | 2.61 | 0% | 1 of 46 |
+| The same and `minScore` 0.40 | 60% | 0.70 | 25% | 76% | 0.38 | 91% | 7.96 | 38% | 14 of 46 |
+
+Recall through embeddings alone changes little, because the threshold still drops those candidates. A lower
+threshold recovers much of pure Chinese but returns nearly the full 8 picks, so precision falls and unrelated
+prompts get picks. Metrics: `select_router_experiments.json`.
+
+Cost: about 2.8 million input and 0.1 million output tokens of `glm-5.3-flash` for every run in this entry,
+pilots and probes included, so about $0.5 at Z.AI's listed prices. Turn rows (no prompt text or model answer) are in
+`turn_runs.jsonl`.

@@ -70,6 +70,15 @@ Version 3 (5 November 2026, #284) re-pins 96 Matrix archives that upstream rebui
 skill texts keep their exact hash, one changed. The version 2 measurements were made on
 the version 2 bytes.
 
+On 23 November 2026, three version 3 Matrix archives no longer matched their pins:
+`acquire` reports `source_digest_mismatch` for `ohos-design-test-coordinator` 2.0.0,
+`hmos-memory-anti-regression` 1.0.0 and `hmos-one-sdk-skill` 1.0.0, and `build` stops with
+`missing_file`. A verified copy of `hmos-memory-anti-regression` was found in an earlier
+private capture, and `build` checks its hash, so it was reused. The other two cannot be
+acquired, so version 3 cannot be rebuilt exactly. A new recipe version must re-pin them.
+The 2026-11-23 guidance comparison in EVIDENCE.md used a private copy of the recipe without
+those two skills (411 assets, 60 exclusions), labeled as such in its `dataset_id`.
+
 `acquire` fetches exact HTTPS URLs and checks declared lengths and SHA-256. Each
 job is bounded to 60 seconds and 100 MiB, including at most ten seconds per
 exchange. Large initial collections may need several invocations: verified cache
