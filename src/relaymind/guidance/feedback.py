@@ -27,7 +27,9 @@ TTL_S = 3600.0
 # Distinct offers kept once each, at most one per remembered select: above the offer limit every
 # select is its own offer. An ID whose offer was dropped is forgotten too.
 MAX_OFFERS = MAX_IDS
-# The shared table of offered pairs is rebuilt from the kept offers when it grows past this.
+# The shared table of offered pairs is rebuilt from the kept offers when it grows past this, or
+# past twice what the last rebuild kept, so kept offers that alone pass it never cause a rebuild
+# on every new offer.
 MAX_PAIRS = 100_000
 # A remembered remote inference is asked again after this long, so a selector restarted with
 # local inference gets feedback again even if it never answers not_ready (spec 0.75).
@@ -81,6 +83,7 @@ class GuidanceFeedback:
         # `_pairs`, so many large offers that differ a little cost little (spec 0.75).
         self._offers: OrderedDict[int, tuple[tuple[str, str], ...]] = OrderedDict()
         self._pairs: dict[tuple[str, str], tuple[str, str]] = {}
+        self._rebuild_above = MAX_PAIRS
         # Per remembered select: its offer and when it is forgotten.
         self._ids: OrderedDict[str, tuple[int, float]] = OrderedDict()
         self._lock = asyncio.Lock()
@@ -99,8 +102,10 @@ class GuidanceFeedback:
         if revision in self._offers:
             self._offers.move_to_end(revision)
         else:
-            if len(self._pairs) > MAX_PAIRS:  # Keep only the pairs of offers still kept.
+            if len(self._pairs) > max(MAX_PAIRS, self._rebuild_above):
+                # Keep only the pairs of offers still kept.
                 self._pairs = {pair: pair for offer in self._offers.values() for pair in offer}
+                self._rebuild_above = 2 * len(self._pairs)
             self._offers[revision] = tuple(
                 self._pairs.setdefault(pair, pair)
                 for pair in ((r["asset_id"], r["content_hash"]) for r in catalog)

@@ -619,3 +619,21 @@ def test_a_feedback_arriving_as_the_lock_passes_on_still_finds_the_queue_full():
     MAX = feedback_module.MAX_WAITING
     counts = asyncio.run(scenario())
     assert counts["feedback_skipped"] == 1 and counts["feedback_sent"] == MAX + 1
+
+
+def test_the_shared_pair_table_is_not_rebuilt_on_every_offer_once_the_kept_ones_exceed_it(
+    monkeypatch,
+):
+    """Review of PR 306: once the kept offers alone hold more than MAX_PAIRS pairs, a rebuild
+    cannot get below it, so the next rebuild waits until the table doubles."""
+    monkeypatch.setattr(feedback_module, "MAX_PAIRS", 2)
+    feedback = GuidanceFeedback(FEEDING, GuidanceSync(FEEDING))
+    rebuilds = 0
+    for i in range(64):
+        before = feedback._pairs
+        catalog = [dict(asset_id=f"host:skill:{i}-{j}", content_hash=SKILL_HASH) for j in range(3)]
+        feedback.remember(f"id-{i}", i, catalog)
+        rebuilds += feedback._pairs is not before
+    # Each rebuild waits for the table to double, so 64 offers rebuild a handful of times, not 63.
+    assert 1 <= rebuilds <= 7
+    assert len(feedback._pairs) == 64 * 3

@@ -193,7 +193,7 @@ _GENERATOR_ANCHORS = {
         {
             # 0.75 selector feedback and partial answers (RM47, RM48, AC42, AC43; #301); subject to
             # the owner's review.
-            ("a15d3da43e80451c3e4e412ccb193f10341a4771f7b45f3950068df9e62056cd", 689057),
+            ("baaca7689221d16871e084d12e2d1436cfed078e6a09fe0fb7ad8165a785d69a", 689198),
             # 0.74 macro precision and recall for comparing selectors (RM45, RM47); subject to the
             # owner's review.
             ("26a303034e3274df0a6c6c5739e54b7d19c49c4ac2672105bec779186f11fc0f", 678907),
