@@ -1117,3 +1117,163 @@ def test_run_clocks_change_only_under_the_store_lock(store, monkeypatch):
     store.clock.advance(store.retention.total_seconds() + 1)
     assert store.purge_expired() == [other]
     assert seen == [True, True]
+
+
+# --- #294: O(n) event appends, indexed latest queries, single validation ----------
+
+
+def test_latest_event_returns_highest_seq_using_type_index(store):
+    """RM22, #294: latest_event uses the (run_id, event_type, seq) index with LIMIT 1."""
+    run_id = store.create_run("accepted").run_id
+    accept(store, run_id)
+    assert store.latest_event(run_id, EventType.ANSWER_DELTA) is None
+
+    first = store.append_event(run_id, EventType.ANSWER_DELTA, "local", {"text": "a"})
+    second = store.append_event(run_id, EventType.ANSWER_DELTA, "local", {"text": "b"})
+    assert store.latest_event(run_id, EventType.ANSWER_DELTA) == second
+    assert store.latest_event(run_id, EventType.RUN_ACCEPTED).seq == 1
+    assert first.seq < second.seq
+
+    plan = [
+        row["detail"]
+        for row in store._conn.execute(
+            "EXPLAIN QUERY PLAN SELECT * FROM events WHERE run_id = ? AND event_type = ?"
+            " ORDER BY seq DESC LIMIT 1",
+            (run_id, EventType.ANSWER_DELTA.value),
+        ).fetchall()
+    ]
+    assert any("events_run_type_seq" in step for step in plan), plan
+
+
+def test_appending_many_deltas_uses_bounded_queries_and_near_linear_time(store, clock):
+    """RM22, RM25, #294: appending N deltas avoids per-append full-trace scans."""
+    import time
+
+    run_id = store.create_run("accepted").run_id
+    accept(store, run_id)
+
+    queries: list[str] = []
+    store._conn.set_trace_callback(queries.append)
+    started = time.perf_counter()
+    try:
+        for i in range(100):
+            clock.mono += 0.001
+            store.append_event(run_id, EventType.ANSWER_DELTA, "local", {"text": f"p{i}"})
+    finally:
+        store._conn.set_trace_callback(None)
+    elapsed_s = time.perf_counter() - started
+
+    # No UNION ALL / full-table elapsed_ms scan per append.
+    assert not any("UNION ALL" in q for q in queries)
+    assert len(queries) <= 500, f"expected <=5 queries per append, got {len(queries)}"
+    assert elapsed_s < 1.0, f"expected bounded append time, got {elapsed_s:.3f}s"
+
+    # Batch append uses a constant number of non-INSERT SQLite statements regardless of batch size.
+    batch_queries: list[str] = []
+    store._conn.set_trace_callback(batch_queries.append)
+    try:
+        drafts = [(EventType.ANSWER_DELTA, "local", {"text": f"b{i}"}) for i in range(200)]
+        batch = store.append_events(run_id, drafts)
+    finally:
+        store._conn.set_trace_callback(None)
+
+    assert len(batch) == 200
+    non_insert = [q for q in batch_queries if not q.lstrip().startswith("INSERT")]
+    assert len(non_insert) <= 5, f"expected <=5 non-INSERT statements, got {non_insert}"
+
+    # Verify the elapsed_ms index exists and is chosen by SQLite.
+    plan = [
+        row["detail"]
+        for row in store._conn.execute(
+            "EXPLAIN QUERY PLAN SELECT MAX(elapsed_ms) FROM events WHERE run_id = ?",
+            (run_id,),
+        ).fetchall()
+    ]
+    assert any("events_run_elapsed" in step for step in plan), plan
+
+
+def test_run_view_and_idempotency_use_latest_event_helper(tmp_path, monkeypatch):
+    """RM21, #294: run_view and idempotent replay use indexed latest_event lookups."""
+    import asyncio
+
+    from gateway_helpers import STAGING_OK, build_gateway, health_tail, route_turn
+    from relaymind.api.idempotency import stored_chat_result
+    from relaymind.api.native import run_view
+
+    gateway = build_gateway(tmp_path, [route_turn("check-service-health"), *health_tail()])
+    outcome = asyncio.run(gateway.orchestrator.run_text("Check staging-api health."))
+
+    latest_types: list[EventType] = []
+    real_latest = gateway.store.latest_event
+
+    def tracked_latest(run_id: str, event_type: EventType):
+        latest_types.append(event_type)
+        return real_latest(run_id, event_type)
+
+    monkeypatch.setattr(gateway.store, "latest_event", tracked_latest)
+    view = run_view(gateway.orchestrator, outcome.run_id)
+    assert view["state"] == "completed"
+    assert EventType.RUN_ACCEPTED in latest_types
+    assert EventType.RUN_COMPLETED in latest_types
+
+    latest_types.clear()
+    result, _ = stored_chat_result(gateway.store, outcome.run_id, stream=False)
+    assert result.content == STAGING_OK
+    assert EventType.RUN_COMPLETED in latest_types
+
+
+def test_native_get_run_offloads_store_reads_off_event_loop_thread(tmp_path, monkeypatch):
+    """RM21, #294: async handlers offload blocking SQLite reads via run_in_threadpool."""
+    import asyncio
+    import threading
+
+    import httpx
+
+    from gateway_helpers import build_gateway, health_tail, route_turn
+    from relaymind.api.app import create_app
+
+    gateway = build_gateway(tmp_path, [route_turn("check-service-health"), *health_tail()])
+    outcome = asyncio.run(gateway.orchestrator.run_text("Check staging-api health."))
+    app = create_app(orchestrator=gateway.orchestrator)
+
+    threads: list[int] = []
+    real_get_run = gateway.store.get_run
+
+    def tracked_get_run(run_id: str):
+        threads.append(threading.get_ident())
+        return real_get_run(run_id)
+
+    monkeypatch.setattr(gateway.store, "get_run", tracked_get_run)
+
+    async def exercise():
+        loop_thread = threading.get_ident()
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get(
+                f"/relay/v1/runs/{outcome.run_id}",
+                headers={"Authorization": f"Bearer {app.state.application_token}"},
+            )
+        assert response.status_code == 200
+        assert threads and all(tid != loop_thread for tid in threads)
+
+    asyncio.run(exercise())
+
+
+def test_append_event_validates_normal_events_once(store, monkeypatch):
+    """RM22, #294: normal events are validated once, not twice."""
+    from relaymind.store import run_store as mod
+
+    run_id = store.create_run("accepted").run_id
+    accept(store, run_id)
+
+    calls = 0
+    real_validate = mod.validate_trace_event
+
+    def counted(raw):
+        nonlocal calls
+        calls += 1
+        return real_validate(raw)
+
+    monkeypatch.setattr(mod, "validate_trace_event", counted)
+    store.append_event(run_id, EventType.ANSWER_DELTA, "local", {"text": "hi"})
+    assert calls == 1

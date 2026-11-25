@@ -441,6 +441,12 @@ MIGRATIONS: tuple[str, ...] = (
         config_digest TEXT NOT NULL
     );
     """,
+    # #294: indexed elapsed_ms lookups and typed event queries (RM22, RM25).
+    """
+    CREATE INDEX events_run_elapsed ON events(run_id, elapsed_ms);
+    CREATE INDEX events_run_type_seq ON events(run_id, event_type, seq);
+    CREATE INDEX state_intervals_run_elapsed ON state_intervals(run_id, elapsed_ms);
+    """,
 )
 
 
@@ -751,6 +757,8 @@ class RunStore:
         # Per run this store writes events for: the monotonic reading at
         # its start here, and the run's elapsed_ms at that moment (RM25).
         self._run_started: dict[str, tuple[float, int]] = {}
+        # Highest elapsed_ms written by this store per run; rolled back on abort.
+        self._run_last_elapsed: dict[str, int] = {}
         # Process-local onset evidence; restored with the owning transaction.
         self._slot_started: tuple[str, int, float] | None = None
         self._probe_started: tuple[str, float] | None = None
@@ -767,6 +775,7 @@ class RunStore:
         # Runs whose baseline the open write transaction started. A rollback
         # drops them, so a refused run leaves nothing behind in this process.
         self._transaction_clocks: set[str] = set()
+        self._transaction_elapsed: dict[str, int | None] = {}
         self._path = str(path)
         self._in_memory = self._path in (":memory:", "")
         self._closed = False
@@ -906,6 +915,11 @@ class RunStore:
                 self._slot_started, self._probe_started = slot_started, probe_started
                 for run_id in self._transaction_clocks:
                     self._run_started.pop(run_id, None)
+                for run_id, previous in self._transaction_elapsed.items():
+                    if previous is None:
+                        self._run_last_elapsed.pop(run_id, None)
+                    else:
+                        self._run_last_elapsed[run_id] = previous
                 if isinstance(exc, SlotUnavailableError) and exc.probe:
                     # The admission transaction (including an approval) rolled back.
                     # Persist cancellation separately, while holding the connection lock.
@@ -922,6 +936,7 @@ class RunStore:
             finally:
                 self._depth = 0
                 self._transaction_clocks.clear()
+                self._transaction_elapsed.clear()
 
     def foreground_window(
         self, *, monotonic: Callable[[], float] | None = None
@@ -1161,6 +1176,26 @@ class RunStore:
             return None
         return IdempotencyRecord(row["request_hash"], row["run_id"])
 
+    _MAX_ELAPSED_SQL = (
+        "MAX("
+        " COALESCE((SELECT MAX(elapsed_ms) FROM events WHERE run_id = ?), 0),"
+        " COALESCE((SELECT MAX(elapsed_ms) FROM state_intervals WHERE run_id = ?), 0)"
+        ")"
+    )
+
+    def _persisted_max_elapsed(self, run_id: str) -> int:
+        """Highest persisted elapsed_ms across events and state_intervals via covering indexes."""
+        (last,) = self._conn.execute(
+            f"SELECT {self._MAX_ELAPSED_SQL}",
+            (run_id, run_id),
+        ).fetchone()
+        return int(last)
+
+    def _remember_elapsed(self, run_id: str, elapsed_ms: int) -> None:
+        if self._depth and run_id not in self._transaction_elapsed:
+            self._transaction_elapsed[run_id] = self._run_last_elapsed.get(run_id)
+        self._run_last_elapsed[run_id] = max(self._run_last_elapsed.get(run_id, 0), elapsed_ms)
+
     def start_run_clock(self, run_id: str) -> None:
         """Start measuring a run's elapsed_ms with this store's monotonic clock (RM25).
 
@@ -1175,14 +1210,9 @@ class RunStore:
             if run_id in self._run_started:
                 return
             self._check_open()
-            (offset,) = self._conn.execute(
-                "SELECT MAX(elapsed_ms) FROM ("
-                " SELECT COALESCE(MAX(elapsed_ms), 0) AS elapsed_ms FROM events WHERE run_id = ?"
-                " UNION ALL SELECT COALESCE(MAX(elapsed_ms), 0) FROM state_intervals"
-                " WHERE run_id = ?)",
-                (run_id, run_id),
-            ).fetchone()
+            offset = self._persisted_max_elapsed(run_id)
             self._run_started[run_id] = (self.clock.monotonic(), offset)
+            self._remember_elapsed(run_id, offset)
             if self._depth:
                 self._transaction_clocks.add(run_id)
 
@@ -1194,14 +1224,11 @@ class RunStore:
             if baseline is None:
                 raise RunStoreError(f"run {run_id} has no monotonic baseline in this process")
             started, offset = baseline
-            (last,) = self._conn.execute(
-                "SELECT MAX(elapsed_ms) FROM ("
-                " SELECT COALESCE(MAX(elapsed_ms), 0) AS elapsed_ms FROM events WHERE run_id = ?"
-                " UNION ALL SELECT COALESCE(MAX(elapsed_ms), 0) FROM state_intervals"
-                " WHERE run_id = ?)",
-                (run_id, run_id),
-            ).fetchone()
-            return max(last, offset + round((self.clock.monotonic() - started) * 1000))
+            measured = offset + round((self.clock.monotonic() - started) * 1000)
+            last = self._run_last_elapsed.get(run_id, offset)
+            if not self._in_memory:
+                last = max(last, self._persisted_max_elapsed(run_id))
+            return max(last, measured)
 
     def state_timings(self, run_id: str) -> dict[str, int]:
         """Sum measured state intervals, excluding waits from active time (RM25).
@@ -1352,11 +1379,13 @@ class RunStore:
                     probe=self.probe_reservation() is not None,
                 )
             self.start_run_clock(run_id)
+            interval_elapsed = self.elapsed_ms(run_id)
             self._conn.execute(
                 "INSERT INTO state_intervals (run_id, version, state, elapsed_ms)"
                 " VALUES (?, ?, ?, ?)",
-                (run_id, expected_version + 1, to_state, self.elapsed_ms(run_id)),
+                (run_id, expected_version + 1, to_state, interval_elapsed),
             )
+            self._remember_elapsed(run_id, interval_elapsed)
             if event is not None:
                 self._insert_events(run_id, [event])
             if holds_slot:
@@ -1375,6 +1404,7 @@ class RunStore:
                 self._require_run(run_id)
                 self._conn.execute("DELETE FROM runs WHERE run_id = ?", (run_id,))
             self._run_started.pop(run_id, None)
+            self._run_last_elapsed.pop(run_id, None)
 
     def _retention_cutoff(self) -> str:
         """Runs created at or before this time are past retention (section 5)."""
@@ -1399,6 +1429,7 @@ class RunStore:
             run_ids = sorted(row["run_id"] for row in rows)
             for run_id in run_ids:
                 self._run_started.pop(run_id, None)
+                self._run_last_elapsed.pop(run_id, None)
         return run_ids
 
     # -- measured model calls and terminal skill outcomes (RM27) ----------
@@ -1773,10 +1804,10 @@ class RunStore:
     def _insert_events(self, run_id: str, drafts: Sequence[EventDraft]) -> list[TraceEvent]:
         """Validate and insert events with the next seqs, in the caller's transaction.
 
-        The caller has checked the run exists. The last seq and elapsed_ms
-        are read from SQLite, never cached, so another store on the same
-        file stays consistent: elapsed_ms is this store's monotonic
-        measure, never less than the run's last persisted value (RM25).
+        The caller has checked the run exists. The last seq is read once
+        via the primary key; elapsed_ms uses this store's monotonic
+        baseline and never moves backwards across stores sharing one file
+        (RM25).
         """
         baseline = self._run_started.get(run_id)
         if baseline is None:
@@ -1784,15 +1815,24 @@ class RunStore:
                 f"run {run_id} has no monotonic baseline in this process; "
                 "elapsed_ms is never derived from wall-clock time"
             )
-        last, last_elapsed = self._conn.execute(
-            "SELECT COALESCE(MAX(seq), 0), COALESCE(MAX(elapsed_ms), 0)"
-            " FROM events WHERE run_id = ?",
-            (run_id,),
-        ).fetchone()
+        started, offset = baseline
+        if self._in_memory:
+            (last,) = self._conn.execute(
+                "SELECT COALESCE(MAX(seq), 0) FROM events WHERE run_id = ?",
+                (run_id,),
+            ).fetchone()
+            last_elapsed = self._run_last_elapsed.get(run_id, offset)
+        else:
+            last, persisted_elapsed = self._conn.execute(
+                f"SELECT COALESCE((SELECT MAX(seq) FROM events WHERE run_id = ?), 0),"
+                f" {self._MAX_ELAPSED_SQL}",
+                (run_id, run_id, run_id),
+            ).fetchone()
+            last_elapsed = max(self._run_last_elapsed.get(run_id, offset), int(persisted_elapsed))
         events: list[TraceEvent] = []
-        rows: list[dict[str, Any]] = []
+        rows: list[tuple[Any, ...]] = []
         for seq, (event_type, actor, payload) in enumerate(drafts, start=last + 1):
-            measured = self.elapsed_ms(run_id)
+            measured = offset + round((self.clock.monotonic() - started) * 1000)
             last_elapsed = max(last_elapsed, measured)
             event = validate_trace_event(
                 {
@@ -1806,22 +1846,59 @@ class RunStore:
                     "payload": dict(payload),
                 }
             )
-            event = self._reference_large_result(event)
-            # Validate the persisted representation too, including artifact metadata.
-            event = validate_trace_event(event.to_json_object())
-            row = event.to_json_object()
-            row["payload"] = json.dumps(row["payload"], ensure_ascii=False, sort_keys=True)
+            referenced = self._reference_large_result(event)
+            if referenced is not event:
+                # Re-validate only when artifact replacement rewrote the payload.
+                event = validate_trace_event(referenced.to_json_object())
             events.append(event)
-            rows.append(row)
-        columns = list(rows[0])
-        self._conn.executemany(
-            f"INSERT INTO events ({', '.join(columns)})"
-            f" VALUES ({', '.join(f':{c}' for c in columns)})",
-            rows,
+            rows.append(
+                (
+                    event.schema_version,
+                    event.run_id,
+                    event.seq,
+                    event.timestamp,
+                    event.elapsed_ms,
+                    event.event_type.value,
+                    event.actor,
+                    json.dumps(event.payload, ensure_ascii=False, sort_keys=True),
+                )
+            )
+        insert_sql = (
+            "INSERT INTO events (schema_version, run_id, seq, timestamp, elapsed_ms,"
+            " event_type, actor, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
         )
+        if len(rows) == 1:
+            self._conn.execute(insert_sql, rows[0])
+        else:
+            self._conn.executemany(insert_sql, rows)
+        self._remember_elapsed(run_id, last_elapsed)
         for event in events:
             self._record_outcome_event(event)
         return events
+
+    @staticmethod
+    def _trace_event(row: sqlite3.Row) -> TraceEvent:
+        return TraceEvent(
+            schema_version=row["schema_version"],
+            run_id=row["run_id"],
+            seq=row["seq"],
+            timestamp=row["timestamp"],
+            elapsed_ms=row["elapsed_ms"],
+            event_type=EventType(row["event_type"]),
+            actor=row["actor"],
+            payload=json.loads(row["payload"]),
+        )
+
+    def latest_event(self, run_id: str, event_type: EventType) -> TraceEvent | None:
+        """The latest retained event of one type for a run, or None."""
+        with self._lock:
+            self._check_open()
+            row = self._conn.execute(
+                "SELECT * FROM events WHERE run_id = ? AND event_type = ?"
+                " ORDER BY seq DESC LIMIT 1",
+                (run_id, event_type.value),
+            ).fetchone()
+        return None if row is None else self._trace_event(row)
 
     def events(
         self, run_id: str, *, after_seq: int = 0, event_type: EventType | None = None
@@ -1840,16 +1917,7 @@ class RunStore:
             self._check_open()
             rows = self._conn.execute(query + " ORDER BY seq", params).fetchall()
         # Rows were validated when they were written.
-        return [
-            TraceEvent(
-                **{
-                    **dict(row),
-                    "event_type": EventType(row["event_type"]),
-                    "payload": json.loads(row["payload"]),
-                }
-            )
-            for row in rows
-        ]
+        return [self._trace_event(row) for row in rows]
 
     # -- tool operations and artifacts -------------------------------------
 

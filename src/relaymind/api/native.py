@@ -19,6 +19,8 @@ from collections.abc import AsyncIterator, Collection, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
+
 from relaymind.adapters import AdapterHealth, Message, ModelAdapter
 from relaymind.api.chat_request import parse_managed_messages
 from relaymind.api.errors import ApiError
@@ -184,9 +186,8 @@ def sweep_expired_waits(orchestrator: LocalOrchestrator) -> None:
 
 
 def _last(orchestrator: LocalOrchestrator, run_id: str, event_type: EventType) -> TraceEvent | None:
-    """The latest event of one type; the store filters, so other payloads stay undecoded."""
-    events = orchestrator.store.events(run_id, event_type=event_type)
-    return events[-1] if events else None
+    """The latest event of one type via an indexed LIMIT 1 query."""
+    return orchestrator.store.latest_event(run_id, event_type)
 
 
 def run_view(
@@ -301,16 +302,24 @@ async def event_stream(
     last_sent = loop.time()
     next_sweep = loop.time()
     cursor = after_seq
+
+    def _poll_store(should_sweep: bool, after: int) -> tuple[RunState, list[TraceEvent], bool]:
+        state = RunState(store.get_run(run_id).state)
+        swept = False
+        if state in WAITING_STATES and should_sweep:
+            swept = True
+            sweep_expired_waits(orchestrator)
+            state = RunState(store.get_run(run_id).state)
+        return state, store.events(run_id, after_seq=after), swept
+
     while True:
         try:
-            state = RunState(store.get_run(run_id).state)
-            if state in WAITING_STATES and loop.time() >= next_sweep:
+            due = loop.time() >= next_sweep
+            state, events, swept = await run_in_threadpool(_poll_store, due, cursor)
+            if swept:
                 # Only a waiting run can expire, and not faster than the
                 # sweep interval: an open stream does not keep the store busy.
                 next_sweep = loop.time() + settings.sweep_seconds
-                sweep_expired_waits(orchestrator)
-                state = RunState(store.get_run(run_id).state)
-            events = store.events(run_id, after_seq=cursor)
         except RunNotFoundError:
             return
         for event in events:

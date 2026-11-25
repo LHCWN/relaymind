@@ -31,6 +31,8 @@ from collections.abc import AsyncGenerator, AsyncIterator, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
+from starlette.concurrency import run_in_threadpool
+
 from relaymind.adapters import ToolCall, ToolSchema
 from relaymind.api.chat_request import CLIENT_TOOLS, MANAGED, ChatRequest
 from relaymind.api.errors import (
@@ -264,8 +266,11 @@ class ManagedChat(_RunChat):
                     # Snapshot termination BEFORE reading: a final append can never
                     # slip between the last drain and a terminal check (RM17/RM32).
                     ended = task.done()
-                    events = self.orchestrator.store.events(
-                        run_id, after_seq=cursor, event_type=EventType.ANSWER_DELTA
+                    events = await run_in_threadpool(
+                        self.orchestrator.store.events,
+                        run_id,
+                        after_seq=cursor,
+                        event_type=EventType.ANSWER_DELTA,
                     )
                     for event in events:
                         cursor = event.seq

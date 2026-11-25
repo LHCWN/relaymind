@@ -160,7 +160,10 @@ def stored_chat_result(
             )
         calls = tuple(ToolCall(p["proposal_id"], p["tool_name"], p["arguments"]) for p in proposed)
         return ChatResult(run_id, None, TOOL_CALLS, tool_calls=calls), record.updated_at
-    completed = store.events(run_id, event_type=EventType.RUN_COMPLETED)[-1].payload
+    completed_event = store.latest_event(run_id, EventType.RUN_COMPLETED)
+    if completed_event is None:
+        raise ApiError("internal_error", "an internal error occurred", run_id=run_id)
+    completed = completed_event.payload
     answer: Any = completed.get("answer")
     if not isinstance(answer, str):
         raise ApiError("internal_error", "an internal error occurred", run_id=run_id)
