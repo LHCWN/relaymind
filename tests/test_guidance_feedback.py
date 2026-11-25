@@ -529,6 +529,24 @@ def test_a_remembered_remote_inference_is_asked_again_after_ten_minutes():
     assert len(router.feedbacks) == 1
 
 
+def test_a_remote_inference_question_that_could_not_be_sent_does_not_start_the_ten_minutes():
+    """Review of PR 306: only an answered question moves the next question ten minutes on."""
+    router = Router(inference="remote")
+    clock = Clock()
+    http = client(router, clock=clock)
+    tell(http, ask(http)["recommendation_id"], [])  # Asked: remote.
+    clock.now += 601
+    router.outcome, router.sync_status = "not_ready", 500
+    recommendation_id = ask(http)["recommendation_id"]  # Its sync fails and starts the wait.
+    tell(http, recommendation_id, [])  # The question cannot be sent during the wait.
+    assert len([s for s in router.syncs if s["operation"] == "find_missing"]) == 2
+    clock.now += 31  # The wait is over, well within ten minutes.
+    router.outcome, router.sync_status, router.inference = "ranked", 200, "local"
+    tell(http, ask(http)["recommendation_id"], [])
+    assert len([s for s in router.syncs if s["operation"] == "find_missing"]) == 3
+    assert len(router.feedbacks) == 1
+
+
 def test_feedback_counts_the_used_assets_the_select_did_not_offer():
     """Review of PR 306: it tells whether the offer limit, not the selector, lost an asset."""
     router = Router()

@@ -167,8 +167,10 @@ class GuidanceFeedback:
             # waits after a failure: this feedback is skipped.
             inference = self._sync.inference
             if inference is None or (inference == "remote" and self._clock() >= self._ask_again_at):
-                self._ask_again_at = self._clock() + ASK_AGAIN_S
                 inference = await self._sync.ask_inference(job.offered)
+                # Only an answer was learned; a question not sent leaves the next one due.
+                if inference is not None:
+                    self._ask_again_at = self._clock() + ASK_AGAIN_S
             if inference != "local":
                 return "feedback_skipped"
         answer = await exchange(
