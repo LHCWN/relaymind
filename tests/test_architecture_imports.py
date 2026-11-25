@@ -14,7 +14,10 @@ SRC = REPO / "src" / "relaymind"
 ARCH_DOC = REPO / "docs" / "ARCHITECTURE.md"
 
 LEAVES = frozenset({"canonical", "schema_util", "redaction"})
-CORE_STORE_MODULES = frozenset({"run_store.py", "trace_event.py", "model_timings.py"})
+CORE_STORE_MODULES = frozenset(
+    {"run_store.py", "trace_event.py", "model_timings.py", "outcomes.py"}
+)
+CORE_STORE_NAMES = frozenset(name.removesuffix(".py") for name in CORE_STORE_MODULES)
 
 # Documented package-level allowed dependencies from docs/ARCHITECTURE.md.
 ALLOWED_PACKAGE_EDGES: dict[str, frozenset[str]] = {
@@ -174,7 +177,7 @@ def test_package_imports_match_documented_architecture_contract():
 
 
 def test_core_store_modules_depend_only_on_leaves():
-    """#297: core run_store/trace_event/model_timings never depend on adapters or higher layers."""
+    """#297: core store modules never depend on M10 store modules or higher layers."""
     violations: list[str] = []
     for name in sorted(CORE_STORE_MODULES):
         path = SRC / "store" / name
@@ -183,9 +186,59 @@ def test_core_store_modules_depend_only_on_leaves():
             if len(parts) < 2:
                 continue
             target = parts[1]
-            if target != "store" and target not in LEAVES:
+            if target == "store":
+                if len(parts) >= 3 and parts[2] not in CORE_STORE_NAMES:
+                    violations.append(f"{path.relative_to(REPO)} imports non-core store {mod}")
+            elif target not in LEAVES:
                 violations.append(f"{path.relative_to(REPO)} imports {mod}")
-    assert not violations, "Core store must only import leaves:\n" + "\n".join(violations)
+    assert not violations, "Core store must only import leaves/core store:\n" + "\n".join(
+        violations
+    )
+
+
+def test_documented_module_level_layer_restrictions():
+    """#297: enforce narrow module-level edges documented in docs/ARCHITECTURE.md."""
+    violations: list[str] = []
+    # skills/ may only import tools.registry from tools.
+    for path in sorted((SRC / "skills").rglob("*.py")):
+        for mod in sorted(_imported_modules(path)):
+            parts = mod.split(".")
+            if len(parts) >= 2 and parts[1] == "tools" and mod != "relaymind.tools.registry":
+                violations.append(
+                    f"{path.relative_to(REPO)} imports {mod} (only tools.registry allowed)"
+                )
+    # recommendations/ may only import api.errors from api.
+    for path in sorted((SRC / "recommendations").rglob("*.py")):
+        for mod in sorted(_imported_modules(path)):
+            parts = mod.split(".")
+            if len(parts) >= 2 and parts[1] == "api" and mod != "relaymind.api.errors":
+                violations.append(
+                    f"{path.relative_to(REPO)} imports {mod} (only api.errors allowed)"
+                )
+    # identifiers.py may only reference tools under TYPE_CHECKING, never at runtime.
+    id_path = SRC / "identifiers.py"
+    tree = ast.parse(id_path.read_text("utf-8"), filename=str(id_path))
+    for node in tree.body:
+        if (
+            isinstance(node, ast.If)
+            and isinstance(node.test, ast.Name)
+            and node.test.id == "TYPE_CHECKING"
+        ):
+            continue
+        for sub in ast.walk(node):
+            if (
+                isinstance(sub, ast.ImportFrom)
+                and sub.module
+                and sub.module.startswith("relaymind.tools")
+            ):
+                violations.append(f"src/relaymind/identifiers.py imports {sub.module} at runtime")
+            if isinstance(sub, ast.Import):
+                for alias in sub.names:
+                    if alias.name.startswith("relaymind.tools"):
+                        violations.append(
+                            f"src/relaymind/identifiers.py imports {alias.name} at runtime"
+                        )
+    assert not violations, "Module-level layering violations:\n" + "\n".join(violations)
 
 
 def test_adapters_never_import_sqlite_or_other_relaymind_packages():
@@ -238,11 +291,17 @@ def test_selection_never_creates_an_orchestrator_module_cycle():
 
 
 def test_architecture_doc_lists_every_public_api_module():
-    """#297: docs/ARCHITECTURE.md component map lists every major src/relaymind/api module."""
-    text = ARCH_DOC.read_text("utf-8")
+    """#297: docs/ARCHITECTURE.md API map row lists every public src/relaymind/api module."""
+    api_rows = [
+        line
+        for line in ARCH_DOC.read_text("utf-8").splitlines()
+        if line.startswith("| API |") and "`src/relaymind/api/`" in line
+    ]
+    assert len(api_rows) == 1, f"Expected one API component-map row, found {len(api_rows)}"
+    api_row = api_rows[0]
     api_modules = sorted(p.name for p in (SRC / "api").glob("*.py") if not p.name.startswith("_"))
-    missing = [name for name in api_modules if f"`{name}`" not in text]
-    assert not missing, f"API modules missing from docs/ARCHITECTURE.md: {missing}"
+    missing = [name for name in api_modules if f"`{name}`" not in api_row]
+    assert not missing, f"API modules missing from docs/ARCHITECTURE.md API row: {missing}"
 
 
 def test_skills_never_imports_upward_from_orchestrator():
