@@ -84,7 +84,7 @@ without cancelling the others. A newer push to the same pull request cancels its
 older run; pushes to `master` and tags always finish. Timing artifacts are kept
 for 30 days, and the workflow token is read-only.
 
-The [30 October baseline](https://github.com/Last-Humans-Coding-Under-White-Nights/relaymind/actions/runs/41135214423)
+The [30 October baseline](https://github.com/LHCWN/relaymind/actions/runs/41135214423)
 put Windows OpenClaw at 18m43s: 592s in Python tests and 400s in the host
 lifecycle, including 195s installing the plugin. These observations do not
 establish savings from the cache or browser change. Compare successful warm

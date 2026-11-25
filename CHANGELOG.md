@@ -106,29 +106,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `--tools-file`, writes the plugin's tool list from `openclaw mcp probe`. A partial list changes nothing, and
   descriptions an operator wrote are kept. The tutorial now says how a selector can prepare before the first prompt.
 
-### Changed
-
-- Correct the guidance documents: the plugin API gives an ordinary plugin no tool list, which is not a rule about
-  official plugins. Lead the README and the repository description with OpenClaw.
-
-- Specification 0.70 (RM33; section 7.5, section 14.1; AC24): the OpenClaw plugin declares
-  `>=2026.10.7 <2027.0.0-0` to the host instead of exactly `2026.10.7`, so an operator on a later 2026
-  OpenClaw can install it. Only 2026.10.7 stays qualified; any other release is reported as unqualified.
-  New `relaymind openclaw install` and `relaymind openclaw token` commands run the host's own install,
-  configure, enable and token steps with checks before any change. The release record now names the declared
-  range, the qualified release and the build release. Developer release steps and user install steps are
-  rewritten in the OpenClaw README.
-
-### Documentation
-
-- Reorganize the project overview around model use, skill/tool discovery and
-  OpenClaw setup. Consolidate the component map, link current status from
-  operator guides, correct stale qualification and platform claims, and
-  document maintenance conventions. Requirement semantics and historical
-  evidence remain unchanged. Register the editorial specification digest for
-  new evaluation inventories while retaining the original supported digests.
-
-### Added
 
 - Specification 0.69 (#284; RM45, RM46; AC38 to AC40; section 7.7): guidance tells similar assets apart and can limit a turn. The picker sees the sentences that set assets apart and picks the set a prompt needs, one asset for each task, with `max_picks` now 8 by default; `decision: choose` and pick summaries cover a prompt that does not decide; `recent_text` serves follow-ups; without a picker only strong matches are named in a long list; `guidance.total_ms` is 12000 by default and `guidance.max_choices` is new. The plugin's optional `limit: "strict"` refuses what was offered and not selected, reading tool names and read paths as the host does. It is off by default and is not a security wall. A blank task is `invalid_request`; a third-party failure falls back to word match only; keywords written for a whole prompt of several tasks still count.
 - `scripts/guidance_compare.py` (RM16, RM40, RM45): precision, recall, F1, MRR and more for any selector against a baseline. `scripts/guidance_similar_benchmark.py` and `evaluation/assets/guidance-similar/similar.v1.json`: families of similar skills, with development and holdout splits.
@@ -327,501 +304,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   (`payload.tools` instead of `groups[].tools`), not a host result; the
   settlement document records the correction.
 
-### Fixed
-
-- Hardened automated-host control polling and provider-response failures. Future executions require explicit v2 control budgets and fresh preregistration; historical inputs and outcomes remain unchanged. Timeout paths retain the last recommendation state, and functional transport tests allow cold worker startup (RM03, RM05, RM16, RM44).
-
-- Addressed #277/#280 review findings: portable transport tests, clear blind-CLI input errors, consistent stored row evidence, fenced JSON proposals, private-file read bounds, and redacted public home paths with retained original bindings. Historical benchmark results and qualification claims are unchanged.
-
-- Spec 0.66 section 12.6.6 owner-run checks (review of #276; RM40, RM44; AC31,
-  AC36): a `same_family` machine_dual record now needs two different template
-  digests even when its two model IDs differ. The release validator now
-  requires every `machine_drafted_owner_approved` case to name one drafter, the
-  same for the whole release, with role `author` only and no competencies, so a
-  tuner, annotator or adjudicator can no longer pass as the drafter
-  (`drafter_role`). The committed #259 trial evidence passes both rules
-  unchanged.
-
-- `scripts/asset_whole_task.py trial-install` (and `trial`) failed on a fresh
-  OpenClaw 2026.10.7 host, which installs the plugin disabled until it is
-  configured (#269; RM39/RM44; AC30/AC36 tooling). The kit now follows the
-  operator guide's lifecycle: install, configure `baseUrl` (`--base-url`,
-  default `http://127.0.0.1:8080/v1`), enable, inspect. It records each step,
-  and inspect must report the plugin loaded and enabled. `--base-url` must meet
-  the plugin's `baseUrl` rules (loopback http/https `/v1` root, no
-  credentials, query or fragment); any other value is refused before any host
-  command runs and is never written out. The kit parses the value with the
-  plugin's WHATWG URL rules (`src/relaymind/evaluation/plugin_base_url.py`), so
-  it accepts and refuses what the plugin does and configures the plugin's
-  normal form (`http://127.1:8080/v1` becomes `http://127.0.0.1:8080/v1`);
-  `tests/test_openclaw_pinned_package.py` compares it case by case with the
-  plugin's own `config.ts` under Node. Verified with a host
-  double that models the disabled fresh install; not yet rerun on the
-  owner's M1 (#259).
-- Ordinary local skill discovery (#268; RM34/AC25; spec 0.66 section 4.6.1)
-  admitted only 8 of OpenClaw 2026.10.7's 49 bundled skills: 32 bodies were
-  rejected for `<placeholder>` text or HTML examples and 9 for more than three
-  code-fence lines, and one rejected file failed the whole folder. Bodies now
-  keep only the NFC, encoding, control and size checks, and a rejected candidate is
-  excluded on its own with a fixed reason. Five verbatim copies are test
-  fixtures (`tests/fixtures/openclaw-bundled-skills/`, MIT) in the default
-  suite. `tests/test_openclaw_pinned_package.py` scans a copy of the pinned
-  package's `skills/` directory installed by `npm ci` and checks that all 49
-  bundled skills are admitted; it runs in the `openclaw-plugin` CI job and
-  skips elsewhere without `node_modules`. This is a developer check of the
-  bundled files, not an AC25 live host subcase. A rejected root `SKILL.md`
-  after an earlier child generation is now a partial generation (the child
-  records stay, stale) instead of a whole-scan failure, and a scan that fails
-  after a candidate rejection keeps that rejection in its recorded exclusions
-  and rejected count (spec 0.66 section 4.6.1).
-- Walkthrough recorder fonts (RM39; AC30): `--font-dir` on
-  `integrations/openclaw/test/host-walkthrough/record.py` copies the `.otf`,
-  `.ttf` and `.ttc` files of a directory once into the private work root, and
-  each language's install step copies that snapshot into the isolated browser
-  home's `$XDG_DATA_HOME/fonts` (fontconfig), so Chinese labels render on a host
-  without a system CJK font. `manifest.json` lists the snapshot's file names,
-  SHA-256 digests and sizes under `fonts`. An empty, missing or non-directory
-  font directory is the structured refusal `walkthrough_font_dir` before
-  anything is created, and an environment whose font data directory
-  (`XDG_DATA_HOME`, else `HOME/.local/share`) is unset or relative fails the
-  install step (`walkthrough_font_home`) rather than installing elsewhere.
-  `tests/test_openclaw_walkthrough.py` covers these cases.
-
-- Owner-run qualification records and `owner_machine` labelling (#251; RM16,
-  RM39, RM40, RM42, RM44; AC30, AC31, AC33, AC35–AC37; spec 0.66 section
-  12.6.6): the closed `asset_qualification_record.v1.json` schema and
-  `asset_qualification_record.py` verify every bound SHA-256, the machine role,
-  preregistration order, labelling and the review (one org member other than
-  the owner). `grade-*` take `--qualification-record`; only an approved record
-  binding the report's exact bytes removes `qualified_evidence_review`, and the
-  output reports its `labelling`. Label commands take `--labelling
-  owner_machine` (`owner_machine.v1`: the owner may also tune, the machine
-  annotator never); the record's Cohen's kappa is recomputed from the labels.
-  Every bound freeze, tasks, episodes or labels subject must be the report's
-  resolved input, platform records included; a platform record may carry the
-  corpus review; Time fields must be real UTC instants
-  (`invalid_record_time`). Under `owner_machine` only the owner custodian may
-  also tune. `known_host_limitations` returns approved negative
-  `host_operation` records for the roadmap, docs and reports to list; nothing
-  consumes it until such a record is approved. Fixture-tested only; no
-  record exists and no gate has passed.
-
-- Native host configuration preflight (#250; RM16/RM39/RM40/RM44;
-  AC31/AC35/AC36/AC37): a bounded Node checker uses pinned OpenClaw 2026.10.7
-  validation, including defaults, strict refinements and plugin schemas, and
-  returns a closed verdict with the SHA-256 of every pinned host entry point it
-  imports. The Python wrapper enforces a timeout and accepts only that pinned
-  validator identity; input resolution rejects invalid native preflights and
-  retains validator identities by config digest. Offline resolution can consume
-  captured verdicts without Node; native fixture tests run in the OpenClaw CI job.
-  The isolated state (no operator HOME or credentials) installs the packaged
-  RelayMind plugin when the config names `relaymind`, so ordinary installed
-  discovery validates its settings without `plugins.load.paths`. A referenced
-  plugin (in `plugins.entries` or `plugins.allow`) whose schema the host did
-  not inspect (undiscovered, or a discovery owner the host preserved
-  uninspected) is `unavailable` with reason
-  `plugin_schema_not_inspected`, never `valid`; every verdict carries a closed
-  `reason`.
-  Qualified captured-evidence verification remains open in #240.
-- Platform runs on GitHub-hosted runners (#241, #235; RM38, RM39, RM44; AC29,
-  AC37): a separate `Platform runs` workflow on `macos-latest`,
-  `windows-latest` and `ubuntu-latest`.
-  - `scripts/asset_operations_run.py operations` runs the lexical portion of
-    the AC29 protocol as a fixture (it does not close AC29): ten clean
-    startups, a recommendations-disabled memory baseline, and the 60-second
-    2 req/s workload with four 25-record metadata-import batches and a derived
-    rebuild. The workload goes through the existing `run_workload` and
-    `summarize_operations` over an evaluation-only gateway control channel
-    (`asset_operations_child`).
-  - `scripts/asset_platform_run.py` runs the ordinary host step (Linux-only
-    harness honestly recorded elsewhere) and builds the platform report over
-    fixture companion inputs locked to the runner. Its `verify` grades
-    downloaded artifacts again.
-  - Platform reports now name `mcp_use_disabled`, `restart_not_observed` and
-    `ordinary_harness_linux_only`, and can bind the operations report as
-    `operations_evidence`.
-  - Only harness errors fail the job. Reports stay `fixture`; CI runners are
-    not the acceptance platforms, and no gate is claimed.
-  - Review fixes: a gateway that exits before readiness is a recorded harness
-    error, and the report is still written. A failed ordinary UI action is a
-    failed platform step, not a harness error. Memory phases name only what
-    was sampled. The sampled PID is the gateway's own, which is recorded.
-    A missing install-check record is written as `platform-not-built.json`
-    and fails `verify`. An existing bundle directory is refused, and
-    `asset_platform_run.py` exits 2 with a reason on input errors and on an
-    ordinary-step timeout. The gateway control child answers every command
-    even when its job store fails, and its reader ignores a closed loop.
-  - Second review fixes: a startup launch that fails before readiness is a
-    harness error (`startup_<n>_<reason>`, exit 2) in `operations` and
-    `startup`; `verify` fails an operations report with harness errors, and a
-    platform report without its bundle or a bundle without its report. The
-    control child binds the job the request awaited (`job_id`), never the
-    newest listed job, and reports an unbindable job as a harness error. The
-    bundle registers `platform-runner-files`, the digests of the driver
-    scripts, workflow, ordinary harness and test helpers the run executes,
-    and `verify` checks them against the checkout. The workflow's path filter
-    covers the run's dependency closure, and every step has a time limit that
-    fits inside the job's. A non-object environment lock exits 2, and a
-    reused `--work` starts from the requested catalog and new stores. The
-    docs call the run the lexical AC29 fixture portion and no longer quote
-    uncommitted local numbers.
-  - Third review fixes: an operations harness error no longer skips the
-    release and lifecycle steps; its exit code is kept in `operations.exit`
-    and a final `Harness result` step fails the job on it. The ordinary step
-    passes `--timeout 780`, so its own `ordinary_timeout` fires before the
-    step limit. The test files and workflow the run binds check out with LF
-    line endings on Windows, so a `windows-latest` report verifies on another
-    checkout. The control channel reads lines up to 16 MiB, a control call
-    after the reply stream ended fails at once with `control_closed`, a job
-    reported in two replies is kept once in its latest state, and memory
-    phases are listed only when a workload sample is known.
-  - Fourth review fixes: the verify step writes its job summary even when
-    verify fails, then fails with verify's exit code. `platform-runner-files`
-    binds only tracked files, so local files such as `.DS_Store` never change
-    it, and a test checks that every bound file checks out with LF (or as
-    exact bytes). A gateway that exits before its token is `gateway_exited`,
-    not a token timeout; the gateway child ends quietly when the parent has
-    closed its pipe; ordinary-step failure messages go to stderr.
-- Episode and host-task run kit (#236, #237; RM40–RM44; AC31–AC36): blind
-  label templates, adjudication worksheet and `AssetLabelsV1` freeze;
-  `preregister-host`/`preregister-episodes` checks; a resumable, crash-safe
-  journaled `run-host` over an operator executor program, and journaled
-  episode runs; `capture-costs` from RelayMind trace events. Runs are only
-  `fixture` or `provisional`; no real episode, host run or gate result is
-  claimed. Review fixes: the worksheet requires two distinct annotators,
-  malformed worksheets, unwritable outputs and a lone `--evidence-root`
-  reject with exit 2, traces with out-of-order or repeated call events reject,
-  and `run-host --executor-timeout` bounds a hung executor program. Second
-  review: the run journal binds the execution identity (environment,
-  artifacts, input manifest, qualification) and is owner-only; cancelled and
-  gateway-bounded calls keep their own outcome, with dispatch counted only
-  when evidenced; `--events`/`--artifacts` use the bounded strict reader;
-  executor output is capped while read; host task sets missing a required
-  lane are not acceptance-eligible. Third review: episode probes outside the
-  `held_out` split make the set ineligible (`probes_not_held_out`); the
-  episode journal also binds the corpus release lock; an executor `not_run`
-  row is invalid; a journal with only a torn header starts again; a second
-  signal stops `run-host` at once and kills the executor's group; dispatch
-  needs a received token or a known usage count, also for
-  `provider_unreachable`.
-- Early installed-skill trial kit (#234; RM39, RM44; AC30, AC36; spec 0.65
-  section 12.6.5): `scripts/asset_whole_task.py trial-preflight`,
-  `trial-install`, `trial-run` and `trial`.
-  - Preflight checks macOS arm64, Apple M1, 8 GiB, the environment lock, the
-    pinned OpenClaw 2026.10.7 host and the plugin release checksum against the
-    frozen package.
-  - The plugin is installed with the pinned host CLI.
-  - The frozen plan runs through the existing driver over operator-captured row
-    observations. Missing rows stay `not_run`.
-  - Every original is bundled with `SHA256SUMS` and a companion manifest and
-    graded offline with the unchanged grader.
-  - Output is fixture or provisional only; no trial has been run.
-  - Review follow-ups: the bundle and copied originals are private (`0700`/`0600`)
-    and appear only when complete; the install record keeps closed inspect codes
-    and a diagnostics count, never host text; the provisional gate checks the
-    closed record shapes, recomputes the machine checks and binds the records to
-    the frozen package; output paths under a symlinked parent (macOS `/tmp`)
-    work; evidence keeps the 10 MiB original limit; `plan.json` names the lane
-    and prompt case.
-- Bilingual packaged walkthrough recorder (#238; RM39; AC30, AC35):
-  `integrations/openclaw/test/host-walkthrough/record.py` runs the unchanged
-  ordinary installed-host qualification in `en-US` and `zh-CN`.
-  - It uses the plugin's own labels, with screenshots, video and a digest
-    manifest.
-  - A step is recorded only when the harness predicate accepts the capture.
-    Loaded skill use, MCP use and host MCP approval are always `blocked`.
-  - The tier is `functional_fixture`, it is not in CI, and no walkthrough has
-    been recorded yet.
-  - Every partial screenshot is listed by digest, and a torn or unsafe media
-    set still writes an incomplete manifest with fixed `media_problems`.
-- Qualification assessment for the section 12.6.5 exports (#240; RM16, RM40,
-  RM42, RM44; AC31, AC33, AC36, AC37): graded host, platform and adaptation
-  results record the claimed label, the tier assessed from the resolved inputs
-  and fixed safe reasons. A provisional, qualified or measured label over
-  fixture inputs is rejected (`qualification_contradiction`), and no
-  unqualified tier passes a gate. The specification defines no reviewed S3
-  qualification record yet, so no report can be assessed qualified.
-  `plan-host` records the preregistered input and freeze digests, and the new
-  `plan-episodes` command verifies frozen episodes and writes their probe plan
-  (#236, #237). No measured or qualified result is claimed.
-- Native loaded-use fence and conditional MCP use path in the OpenClaw adapter
-  (#239/#204; spec 0.65 sections 7.6.1, 7.6.2 and 14.5; RM16/RM37/RM39;
-  AC28/AC30/AC35). The reviewed registry now names `skill_loaded_use` and
-  `mcp_use` as separate operations; an `mcp_use` entry must declare its exact
-  route, transport, tool class and finite maximum approval wait, and a
-  malformed entry qualifies nothing. The loaded-use fence rechecks fresh
-  native authority for the same session incarnation, registration, the
-  unexpired choice, the eligible asset and operator association, a nonremoved
-  library entry and the immutable selected bytes before loading, after the
-  exact read and immediately before delivery, keeps R0 across a library head
-  update and blocks the conversation after a fence failure. The `relaymind.mcp`
-  handler implements the closed request, the 60-second preparation/dispatch
-  deadline with the separately bounded approval wait, exact native binding with
-  a recomputed canonical schema hash, closed argument validation, approval
-  binding to the bound server/tool/schema/session and single use, the closed
-  receipt and same-scope idempotency. Key claims, consumed allow-once
-  approvals and blocked conversations are kept in a durable private ledger
-  synced before dispatch (`src/recommendation-native-ledger.ts`): after a
-  restart an unresolved key replays as indeterminate and never dispatches
-  again, and a full or unreadable ledger refuses. Without a ledger nothing is
-  dispatched. An admitted key is bound to its request at admission, so its
-  pre-dispatch refusal is its historical receipt and a different request
-  under it is `idempotency_conflict`. Host schema
-  patterns are admitted only in a provably bounded anchored subset, a schema
-  whose gateway hash cannot be recomputed here (for example `0.0`) is
-  `unavailable`, and all native RPC requests are capped at 512 KiB. Neither
-  operation is in the shipped registry, no production MCP route exists, and
-  `relaymind.mcp` is not registered; the tests use injected fixture resolvers
-  and routes only. The shipped direct-action/exact-selection entry is re-pinned
-  to the new adapter revision `943e1f0e2ba6e9e8dad45456e6eb8122a475c91ced0c9e1e3f8d249471fe240f`; its evidence revision names
-  the fresh capture of this revision (CI run 41318389858, SHA-256
-  `35436e519245…`). A release-artifact test now fails when the registry
-  and the built adapter digest drift. After review, the ledger never writes a
-  record recovery would reject and has `close()` (on gateway stop); a
-  same-key request during preparation recovers that attempt's actual receipt;
-  gateway transport, overload and deadline failures report `unavailable` or
-  `timeout`; only failures attributable to the verified person and session
-  block a conversation; and each native method registers on its own entry.
-  A second review added: one live ledger owner per path (an exclusive lock
-  file, taken over only from an exited owner); separate dispatch markers, so a
-  key bound before a restart that never dispatched recovers as
-  `not_dispatched`; reserved block capacity, with managed use refused once no
-  further block could be recorded; and a fence recheck of registration,
-  choice and operator association after the exact native read. A third
-  review made the stale-lock takeover race-safe (per-owner lock files, never
-  removing a live owner's lock) and made each ledger record complete across
-  short writes before it is acknowledged; the shipped entry is re-pinned to
-  adapter revision `b49d94d8267076516430fb2e4fb64d41fad2961fc8009c84e60921cf43e9e98e`,
-  whose evidence revision names its fresh capture (CI run 41322540111, SHA-256
-  `6b8947df711e…`). A fourth review rejects malformed request text and
-  non-string session fields as `invalid_request`, drops a duplicate
-  registration check and keeps the native deadline live, and the ledger cuts
-  a torn final record through a separate read-write handle (a Windows append
-  handle cannot truncate); the entry was re-pinned to adapter revision
-  `a29cac121c5e01932b6b3ee75e9bab2214e5e9e72cbc36d8f802f62b917c7cfe`. A fifth
-  review rereads a same-key MCP request's history after its registration
-  check (a receipt settled meanwhile is recovered, never reported as
-  `not_dispatched`), keeps a host `UNAVAILABLE` exact-read result from
-  blocking a conversation, digests the adapter bytes once per resolver, takes
-  over a stale ledger lock naming this process's PID that this process did
-  not create (PID 1 in a container), reserves exact room for each binding's
-  marker and longest receipt under the byte cap and compiles each host schema
-  pattern once per operation; the entry is re-pinned to adapter revision
-  `37f9b415c47260065d42453b5d85474375a796b8a7416af78732668863357f2d`, whose
-  evidence revision names its fresh capture (CI run 41335800361, SHA-256
-  `1212d0e28080…`). The host qualification harnesses then built their backend
-  on the real wall clock instead of the test default `FakeClock`, so the
-  capture was recaptured with them at the same adapter revision (CI run
-  41351781170, SHA-256 `58c6df0ba6dc…`; unmodified, no runner hostname in it).
-
-- Native loaded-skill observation harness (#239; RM39/AC30): retain native
-  `skills_read` bytes, their receiving gateway request and host/run correlation,
-  with isolated stale/deleted/reset observations over deterministic inference.
-  This is evidence tooling only; loaded-use qualification remains unavailable.
-  Observation now requires `--observe-loaded-use` (default off); the ordinary
-  direct-action/exact-selection exit criterion is unchanged. CI runs a separate
-  six-minute observation step and artifact: only harness/fixture errors fail it,
-  never truthful observation outcomes, without `continue-on-error`. Native
-  records tolerate only a torn trailing line with one bounded re-read; retained
-  pin names, advertised revisions, socket receipts and independent provider/run
-  records are checked, and incomplete hooks cannot label a turn `not_loaded`.
-  Request and content retention limits preserve later control windows.
-- Add a disposable MCP use capability tier (#204; RM39/AC35), raw-evidence
-  accounting tests, bounded sandbox servers and an optional CI capture. Exact
-  use, native approval trials and human acceptance remain blocked/not_run.
-- Harden the MCP capability tier (#204; RM39/AC35): fail CI on harness or
-  discovery errors, bind source/artifact evidence, join real server call/effect
-  records, observe approval identity and resolution, and rescan final captures
-  for secrets. The CI timeout is four minutes; missing run traces and native
-  exact-use receipts still prevent qualification.
-- Fix the MCP capability tier's `tools.effective` projection (#204; RM39/AC35):
-  the pinned host returns grouped entries (`groups[].tools[].id`), so the old
-  flat `payload.tools` projection always recorded an empty list. The probe now
-  records an explicit `listed`/`empty`/`malformed` outcome, the host's MCP
-  server/original mapping and notice IDs, and discovery requires both colliding
-  fixture tools in the session inventory. Earlier captures' empty
-  `tools.effective` lists came from the projection, not the host. The person
-  probe now starts the session's MCP runtime with public `mcp.app.discover`
-  before the read (MCP Apps enabled, the shipped RelayMind model selected, zero
-  heartbeat). A Linux x86-64 VPS run of the CI command at bba0cf1 listed both
-  colliding tools; exact use stays blocked. That capture is now committed as
-  `docs/evidence/m10/openclaw-mcp-use-20261101-vps3.json` (#255).
-  A refused `chat.send` retains its request window, correlated provider records
-  and native hooks; any such activity fails the case closed
-  (`ordinary_skill_refusal_contradicted`) instead of an activity-free refusal.
-  Provider attempt records are read by their own per-turn window, so a
-  failure before HTTP reached the gateway is retained with its outcome, and an
-  unexplained record fails the case (`ordinary_skill_provider_unexplained`).
-  The turn drains asynchronous hooks until every tool call is resolved
-  (`ordinary_skill_tool_unresolved` otherwise), including after a refused
-  send. The committed VPS2 observation capture predates this change and must
-  be recaptured.
-
-- Operations and platform run kit (#242, toward #241, #235, #234; RM38, RM39, RM44; AC29, AC37):
-  - `scripts/asset_operations_run.py startup` measures ten real `relaymind serve` startups over a generated 300-skill bilingual catalog, using the existing AC29 driver. It waits for recommendations to be ready and samples memory on POSIX and Windows.
-  - `platform` builds an `AssetPlatformReportV1` from install-check and ordinary installed-host records, bound to the companion input manifest. Skill use is never inferred from a selection receipt.
-  - All output is labeled `fixture`.
-- Exact native Skill Library selection through the ordinary installed host
-  (#197; RM39, AC30): the qualification saves a skill with
-  `skills.library.save`, maps it to the chosen asset, selects it with
-  `relaymind.skill` and checks `skills.library.list`. The evidence predicate
-  binds skill ID, revision, asset ID, content hash and source version, and
-  requires the unmapped-skill, cross-session and own-session foreign-person
-  refusals with their exact error codes. Browser failures and the overall
-  deadline remain failures through skill selection. The listing must show the
-  selection itself: its `session.sessionKey` is the authenticated target
-  session and its `session.selections` are exactly the selected skill at the
-  selected revision, both when the harness captures it and in the predicate,
-  so a no-op or wrong-session activation fails. The committed capture is a
-  recapture with this harness (CI run 41317645014, SHA-256 `3a063ab37411…`),
-  which the registry's evidence revision names.
-
-- CI: the core `check` job runs tests in parallel with pytest-xdist, one file per worker at a time, and caches the Chromium shell per OS and Playwright version. The Windows test step took about 29 minutes in one process. Tests that build real recommendation or native-preparation evidence from timing use fixed clocks or synthetic timestamps, so a loaded runner cannot turn them into a deadline error.
-- CI: the shared asset benchmark fixture uses a deterministic recommendation
-  budget instead of the production 500/150 ms pair, so a loaded runner cannot
-  expire a confident HTTP selector attempt and flatten its paired coverage.
-  Deliberate timeout cases keep explicit small budgets, the HTTP cancellation
-  test uses the shared fixed clock, and a slowed-selector regression test
-  proves the old deadline failed on every host.
-- CI: a small `plan` job picks the platforms (and logs its decision); both
-  `check` and `openclaw-plugin` take them from it and run stacked PRs on Linux only to
-  conserve CI capacity, with no base-branch filter. Every PR must target
-  `master` and pass the full Linux/macOS/Windows matrix before merge; pushes
-  also run all three platforms. `openclaw-plugin` now shares the Chromium
-  shell cache keyed by OS and Playwright version; its test tiers remain serial.
-- Stabilize installed OpenClaw qualification on loaded runners (RM16/RM39;
-  AC30): use bounded ten-second host-event waits, keep fixture holds alive
-  through retirement observation, and capture only fixed ordinary substeps and
-  error classes. Browser failures and the overall deadline now remain failures
-  through UI actions and finalization; the 570-second harness and 12-minute CI
-  bounds and all evidence predicates remain unchanged. Fresh evidence must bind
-  the changed harness sources.
-
-- Section 12.6.5 verifier closure and episode driver (#229, #202, #205, #207):
-  - The frozen corpus is verified from the input manifest, and host tasks and episodes are bound to it.
-  - Off/on adaptation configurations are checked as a named ablation.
-  - Every dispatched probe's request and offered-catalog digests are recomputed.
-  - Spec 0.64 reset evidence lets the command verify resets.
-  - A driver runs adaptation episodes through the real recommendation lifecycle on the locked corpus projection; it is evaluation-only and never qualified.
-  - A Simplified Chinese command guide is added.
-- Spec 0.60 section 12.6.5 exports (#198/#202/#204/#205/#206; RM16, RM38–RM44;
-  AC29–AC37): closed host freeze, task, report, adaptation episode and platform
-  schemas; a deterministic three-arm plan and conserving host driver; offline
-  graders that recompute every summary; companion input-manifest resolution with
-  blocked/rejected exits (`scripts/asset_whole_task.py`). Fixture-verified tooling
-  only; no measured result or acceptance is claimed. Remaining verifier gaps: #229.
-
-- Activate two independently reviewed exact Linux CPU embedding identities;
-  record ordinary native launch and provisional 412/128 benchmark results,
-  including partial indexing, lexical fallback and the observed quality regression.
-
-### Fixed
-
-- The loaded-use observation harness records the exact person-scope
-  `sessions.reset` refusal (`operator.admin` required on the pinned host) as
-  `control_refused`, with no turn, instead of raising
-  `ordinary_skill_control_failed`. CI run 41286397320 hit that error. Any other
-  refusal, and any turn evidence on a refused control, still fails the
-  predicate (#255). The second VPS run observed the refusal as
-  `control_refused`. [CI run 41340879424](https://github.com/LHCWN/relaymind/actions/runs/41340879424)
-  at ed21e007 also completed loaded-use observation with that reset result and
-  confirmed corrected MCP discovery; exact use stayed blocked. These newer CI
-  captures are workflow artifacts, not committed evidence.
-
-### Changed
-
-- Specification 0.65 → 0.66 (#251; RM16/RM38–RM44; AC29–AC37): adds the
-  owner-run acceptance profile (section 12.6.6). Names the owner's M1 8 GiB
-  MacBook and native x86-64 Windows PC as the target machines and the Ubuntu
-  VPS as the Linux functional host; defines `owner_machine` labelling with a
-  recorded machine annotator, Cohen's kappa and owner adjudication; held-out
-  split, commit-based preregistration, at least 20 tasks per lane within the
-  100, blind arm-anonymized success judging, disjoint usage components and
-  their capture sources, native-RPC episode corrections, rank 4–10 choice
-  receipts, the MCP ledger location/retention, the open-source MCP acceptance
-  catalog, and the closed qualification record with PR approval. A reviewed
-  negative record closes the loaded-use or MCP-use gate on the pinned host with
-  the operation disabled as a known host limitation (sections 7.6.1, 7.6.2).
-  `stop_point_absent` means no host point can fence the next model request as
-  section 7.6.1 requires (a stop-only point without fresh person authority,
-  session incarnation and pinned-byte re-verification does not count);
-  `exact_route_absent` means no supported route invokes an independent,
-  non-App MCP tool by its exact native identity (App view routes such as
-  `mcp.app.callTool` do not count). The record's `corpus_review` is allowed
-  on host, adaptation and platform records (a platform report resolves the same
-  frozen corpus) and is null on walkthrough and host_operation records; under
-  `owner_machine` the tuner exclusion is waived for the owner custodian only.
-  "Customer" wording about who runs trials becomes owner/operator. No metric,
-  threshold or budget changes. Amended before release (#268; RM34/AC25;
-  sections 4.6, 4.6.1, 14.5): each ordinary local SKILL.md candidate is
-  admitted or rejected on its own. A rejected file records one
-  `{asset_id,reason}` exclusion and makes the scan a partial generation
-  (complete=false, rejected/omitted records kept stale, no removals) instead
-  of failing the whole folder; path safety, read errors, budgets and
-  cancellation still fail the whole scan. The markup and repeated-line rules
-  apply to offered record fields; the internal instruction body keeps only the
-  NFC, encoding, control and size rules.
-  A later 0.66 addition (#260) adds `machine_drafted_owner_approved` prompt
-  authorship (one pinned drafting model, owner approval by PR review) and
-  `machine_dual_owner_approved` labelling (two blind machine annotators,
-  `same_family` when only one model family is available, Cohen's kappa before
-  a third machine adjudication pass, owner approval of the frozen labels). The
-  record gains `prompt_authorship`, `drafter` and a machine annotators shape;
-  reports never say `independent` for these labels.
-- Specification 0.64 → 0.65 (#239/#204/#240; RM16/RM34/RM37/RM39/RM40/RM44;
-  AC25/AC28/AC30/AC31/AC35–AC37): defines native skill loaded-byte delivery,
-  immutable-pin versus removal semantics and the later-use authority fence;
-  separates the deterministic-model functional tier from live-model capability
-  and allows a reviewed exact-composition entry only after all controls pass.
-  Defines the conditional direct MCP-use request, exact native binding,
-  lifecycle/approval fences and qualification gates without activating it;
-  automated native UI decisions remain functional evidence, never human approval.
-  Reconciles registration with the existing qualified direct-action exception,
-  places the 512 KiB native request cap in section 14.5, and bounds approval
-  waiting separately from the 60-second preparation/dispatch deadline without
-  changing existing budgets. Clarifies pre-dispatch timeout/cancellation
-  receipts, the native RPC error envelope for pre-admission refusals, and
-  that the outer native request cap applies before the inner create-body cap;
-  both bounds hold. Repairs roadmap links and aligns the bilingual validation
-  notices and historical qualification notes with these unreleased rules.
-  Requires source-bound pinned native host configuration validation with
-  the captured native regex dialect and explicit provider/sampling/budget
-  schema binding.
-  Runtime snapshots and all outstanding acceptance gates remain closed.
-- Specification 0.63 → 0.64 (RM42/RM44; AC33/AC36): names the reset evidence
-  document of section 12.6.5 (`reset:<episode_id>`, holding the before/after
-  preimages), so adaptation reports can be graded offline end to end.
-- Specification 0.62 → 0.63 (RM37/RM39; AC28/AC30): adds the optional expected-scope
-  headers and the scope_mismatch error, checked before any read or write; requires the
-  native adapter to send its binding's scope on every gateway request; clarifies that
-  write privilege and target-agent access are resolved for the actual caller, not
-  required of unrelated roles, and that exact skill selection rechecks choice expiry
-  before each native dispatch.
-- Specification 0.61 → 0.62 (RM37/RM39; AC28/AC30): names the pinned
-  authenticated native action channel and explicit profile/workspace registration,
-  preserves direct choice/feedback/privacy and distributed-commit semantics, and
-  specifies exact native Skill Library selection/read separately from loaded-use.
-  Runtime snapshots and native MCP activation retain their existing qualification gates.
-
-
-
-- Specification 0.55 → 0.56 (RM40/RM44; AC31/AC36; review #219):
-  names `Case.conversation` and attempt/embedding `cost_observations` as
-  order-preserving arrays for canonical hashing. Types `Rate.value` and Wilson
-  bounds as `nonnegative_number`, consistent with their existing [0, 1] limits.
-
-- The 0.57 reconciliation carried these master 0.56 benchmark clarifications
-  and the parallel source-grounded 0.56 additions below as distinct histories.
-
-- Specification 0.52 → 0.53 (RM16, RM38/AC29; #196, review #218):
-  fixed 500 ms request slots admit measured dispatch delay within the original
-  deadline, with a separate scheduled-to-response p95 ≤300 ms gate. Service and
-  dispatch-to-response timings keep their existing meanings. Contention evidence
-  requires foreground overlap with each sequential source/rebuild job and actual
-  inference contention, without requiring two jobs on one worker to run together.
-  All samples, failure denominators and outstanding live qualification gates remain.
-
-### Added
 
 - Native retrieval benchmark tooling (#201; RM16/RM35/RM38/RM40/RM41/RM44;
   AC26/AC29/AC31/AC32): shared semantic factory/parser and offline preimages,
@@ -1407,58 +889,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   successes and higher p95 latency), because a local stage that runs out of time
   still runs the tool work the external stage reuses. No default changes.
 
-### Changed
-
-- Specification 0.51 → 0.52 (#187; RM24, RM34, RM38): section 14.5 defines the
-  offer projection cache, and section 4.6 now says a stale, availability or
-  eligibility change is a changed committed generation that increments
-  catalog_revision, so a result on an older offer is stale; a capture-time-only
-  observation keeps the revision. Projections key catalog_revision,
-  selection_scope and the requested_kinds set (section 10), and a missing usable
-  generation fails a create request before the idempotency claim (section 7.6). Wire schemas
-  are unchanged. Specification change only; no product code.
-
-- Documentation brought up to date with M9 at #139: the spec version and
-  M9 status in `AGENTS.md` (and the OpenClaw scripts in its map), the
-  OpenClaw row and the #139 evaluation pieces in `docs/ARCHITECTURE.md`,
-  the M9 issue status and exit criteria in `docs/ROADMAP.md`, an OpenClaw
-  entry in `README.md`, the M9 gaps in `docs/TESTING.md`, the run record
-  in `integrations/openclaw/README.md`, the status line of the OpenClaw
-  design note, and the status word in the spec's section 7.5 heading. What
-  ran over doubles, in Linux VPS functional checks, and on GitHub-hosted
-  runners stays apart from what is not_run (macOS and Windows
-  qualification, a plugin approval on a real host, the #139 measurement).
-  No behavior change.
-- Specification 0.47 redirects M9 from YAML workflows to OpenClaw
-  integration (#135 to #139, #145, #173): retire the unimplemented RM30 and AC23
-  without reusing their identifiers; add RM33, AC24, the provider ownership
-  and compatibility contract, and a separate host-tool evaluation protocol.
-  Section 7.5 names the host compatibility switches the plugin declares,
-  the request-size and advertised-limit rules, and the error-class
-  mapping; AC24 adds an oversized request.
-  The fixed parallel demo (RM15, AC14) and existing benchmark evidence remain.
-  This is a specification and backlog change; the plugin is not implemented.
-
-### Removed
-
-- The demo UI trace no longer shows the "Workflow steps" section, a placeholder
-  for the retired YAML workflow runner that only said "not recorded" (#173;
-  RM23, AC14; spec 0.47 retired RM30). The fixed parallel demo's workflow
-  summary (RM15) is unchanged, and a stored trace with the reserved `workflow`
-  tool mechanism (section 8) still renders. No spec change.
-
-### Fixed
-
-- `.gitattributes` pins the OpenClaw plugin package
-  (`integrations/openclaw/`) to LF, so a Windows checkout no longer packs
-  CRLF text files into the release tarball (#145; RM18); a Windows runner
-  export has yet to show the digests agree.
-- Loopback gateway health polls and API/SDK client calls in live acceptance
-  and evaluation scripts bypass environment and system proxies without
-  changing process-wide settings (#167; RM01, RM18, RM19). Non-loopback endpoints
-  keep normal proxy handling.
-
-### Added
 
 - Runner provider request options (RM25; spec 0.46, sections 12.2 and 14.1):
   `--external-request-options JSON` on the corpus and latency runners writes
@@ -1811,239 +1241,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   request names it in a 409 `run_terminal` (section 7.1). No code produces it
   yet.
 
-### Changed
-
-- Specification 0.38 clarifies the timing records and estimates required by
-  #129 (RM17, RM25, RM27): actual call actor and kind, nullable measurements,
-  bounded retention, separate warm/cold effective throughput, and terminal
-  skill outcomes. Predictions remain estimates and no execution default changes.
-- Specification 0.37 → 0.37.1 (RM03, RM09, RM25, RM28; section 12.4):
-  a first generation exceeding its call budget receives no set-score credit
-  while preserving raw proposals, usage and independent schema validity. A failed
-  narrowing arm records its failure without model work and stays in the denominator;
-  valid abstentions retain the empty-set experiment. Ordinary schema-invalid names
-  retain their existing independent name metrics. Colliding ToolRet tool names
-  get suffixes in declaration-digest order, so a plain name no longer marks the
-  positive: `evaluation/tools.v2.lock.json` (the same 500 rows; 5 case digests
-  differ) is the default, and `tools.v1.lock.json` stays only to reproduce the
-  recorded runs.
-
-- RouteDecision and HandoffEnvelope accept the reason codes
-  `selection_failed`, `no_local_model`, and `local_slow` under schema version
-  1, and the RouteDecision validator and schema now check that the reason
-  code follows the route (spec 0.31 section 8): local carries
-  `simple_skill`, clarify `missing_input`, parallel `parallel_workflow`, and
-  external one of the reasons for leaving the local path, so `local_budget`,
-  `invalid_output`, and `tool_failure` are never a route's (#131).
-- The routing cache key holds the selector chain (each selector's name and
-  version) and the cache policy version is 2 (spec 0.31 section 10, #131).
-  An entry is stored only when `model_router`'s routing generation chose the
-  skill. `run.accepted` `budgets` holds `selection.timeout_seconds` next to
-  the section 11 limits.
-- The skill-stage layout is unchanged (#124, spec 0.35 section 10). Two
-  layouts of the first system message were measured on 2026-10-23 on the
-  pinned model. The description and tool instruction first, then the skill
-  body (`7bfe3fa`), kept live AC01 at 3 of 4 but lowered the local_only
-  English simple corpus subset (4/12 local completion and 11/12 tool
-  correctness before, 1/12 and 7/12 after, twice each). The skill body first
-  (`4db75b9`) lowered live AC01 to 2 of 4, then 1 of 4, and was not run on the
-  corpus. `docs/EVIDENCE.md` has the runs.
-- A tool event of a gateway-made call has model null and actor `gateway`
-  (RM22, spec 0.32 section 8); `tool.proposed` has an optional `mechanism`
-  (`model`, the default, `prefetch`, or `workflow` with its `step`). The
-  trace schema stays at version 1 with these fields optional. `tool.started`
-  and `tool.finished` of a gateway-made call carry the same `mechanism`, and
-  a null model is valid only with actor `gateway` and a `prefetch` or
-  `workflow` mechanism, so the check that a model-made call names its model
-  (RM22) still holds for the events of every other call. Restart recovery
-  copies the mechanism onto the recovered `tool.finished`.
-- First model action (the demo UI and `scripts/live_acceptance.py`) and tool
-  correctness (`relaymind.evaluation.grading`) count model-made proposals
-  only (section 12.1); a prefetch proposal is counted in the new
-  `gateway_proposals` of a run grade, and a required call is met by a model
-  proposal or by an admitted gateway call (spec 12.2 now says so: with
-  prefetch on the evidence the case needs was gathered either way, and
-  prefetch correctness stays a separate measure). The trace view lists the
-  `mechanism` of each proposal.
-- `scripts/run_corpus.py` takes the draft guards (run language, tool-call
-  JSON) from `relaymind.orchestrator.performance`, so the offline regrade
-  and the gateway apply one rule (#115, #121).
-- `Usage.cached_tokens` is `None` when the source returned no count, not
-  0 (#120; RM16, spec 0.31 section 6, finding F9), and the same holds for
-  `reasoning_tokens`. The recorded `usage` of an event, the timing
-  statistics, the latency benchmark's model calls, and the live harness
-  keep `null`. In the latency benchmark's prefix cache record, a call with
-  no reported count is counted as not measured and a total over no
-  measured call is `null`. Exports made before this change still hold the
-  adapter's default of 0.
-- The launcher sets the read timeout of each real adapter to at least the
-  budget in force: `active_seconds` for the llama.cpp adapter and
-  `external_seconds` for the external adapter, never under the earlier
-  30 seconds (#142, #120; RM03). Before, a raised limit could be cut off
-  by an unrecorded 30 second read timeout. A file without `[budgets]`
-  behaves as before.
-- Adapter event streams now start a generation with a `FirstToken` marker
-  before its first answer text, reasoning text, or tool-call fragment. The
-  timing statistics ignore it, so their definitions are unchanged; a
-  consumer that lists every event of a stream sees one more (#120).
-
-- Specification 0.36 → 0.37 (#126; RM22, RM26, RM28, RM29; sections 7.4
-  and 8): it states what a gateway without a usable local model does where
-  0.31 left it open. Startup detection measures the routing-shaped warm-up
-  cold, because it is the first request after the model loaded; a warm-up
-  that fails, or that does not finish within `placement.warmup_seconds`
-  when that is shorter than the stage budget, classifies the model
-  unavailable. Without a usable local model the chain runs without
-  `model_router`, and with `example_match` alone when that leaves no
-  selector. A model last measured unsuitable comes back unsuitable when
-  readiness sees it answer again. Every `route.selected` of an auto run in
-  managed external execution carries `local_model_status`; `/readyz`
-  reports the class in a `local_model` object and reports a mode the class
-  forbids as not ready. A skill that routes external with its skill ID runs
-  its prefetch calls after `handoff.started` and before the first external
-  generation (RM29).
-
-- Specification 0.35 → 0.36 (#131, #132; RM22, RM24, RM28; sections 8 and
-  10): it states what the selection interface records. A selector chain that
-  chooses nothing makes the gateway record its own decision (route external,
-  skill_id null, reason `selection_failed`) in `route.selected` with the new
-  mechanism `selector_chain`, a `selector` with a null name, version, and
-  mechanism, the whole chain's `elapsed_ms`, and every attempt; a rejected
-  model router output still records no `route.selected` and escalates with
-  `invalid_output`. `tools_narrowed` is the narrowing intersected with the
-  skill's allowlist, in allowlist order. A `route.selected` of `model_router`
-  keeps the local model's actor, and any other selector's choice has actor
-  `gateway`. A result that names another selector, or claims a mechanism of
-  the gateway or of another built-in selector, is an error. The selection
-  time limit is recorded inside `budgets` as `selection.timeout_seconds`.
-  Section 10 names `selector_chain` among the gateway-made routes that are
-  a cache miss and never stored, and a skill another selector chose is not
-  stored either.
-
-- Specification 0.34 → 0.35 (#141, #124; RM06, RM12, RM13, RM16, RM24,
-  RM25; AC14): section 4.4 gives the order of the parts of the external
-  system message (the rules, the skill instructions, the fixed completion
-  criteria, the catalog, the answer instruction, then the handoff JSON),
-  splits the completion criteria into a fixed part and a value part that
-  is refreshed before each external generation and measured with the
-  request, says that an external correction names the failed checks, and
-  leaves the synthesis request of the parallel workflow unchanged.
-  Section 10 no longer asks for the skill body before the conversation in
-  the skill stage: the live measurement of #124 lowered local completion and
-  tool correctness, so that layout stays as it was.
-
-- Specification 0.33 → 0.34 (PR #153 review; RM05, RM09, RM10, RM15,
-  RM16, RM22, RM29; sections 4.3, 4.4, 8, 11, and 12.2; AC18): it states
-  what #122 and #123 implement. Section 4.3: under
-  `calls_per_generation = many` a set within the limit is also rejected
-  whole, with `multiple_tool_calls`, when the tool budget has no room left
-  for it (the room is the tighter of the per-stage and the entire-run limit
-  left in a local stage, the entire-run limit left in the external stage;
-  the room counts one execution per call that needs one, so a replay needs
-  none, while the limit on the number of calls counts every call); the
-  rejection of a set is one exchange that answers every call, and each
-  tool message carries what the trace records for that call: the call
-  that failed its own validation gets its rejection and the others
-  `not_executed`, and a rejection about the set (the limit, a mutating
-  call, no room) is recorded on every call and answers every call; a retry
-  is not reserved for, and exhausted time can stop a set in the middle; an
-  admitted set runs in proposal order, a failed call of the local actor
-  escalates with `tool_failure` and the later calls do not run, and the
-  external actor gets every result as data; under `one` a generation with
-  several calls keeps its old one-call exchange. Sections 4.3 and 4.4: the
-  `local_health` branch of the fixed parallel workflow keeps the one-call
-  rule under either value (RM15). Section 11: the admitted-calls row names
-  the room rejection. RM29: the declarations are checked against the
-  budgets at startup, only when `performance.prefetch` is true, the
-  per-stage limit only for a skill not marked external-required (0.31 to
-  0.33 said a manifest validation error at load); resolved calls the tool
-  budget has no room for are not started or recorded; nothing is pending
-  when every tool the stage offers has a succeeded result; constants are
-  checked against the tool's full schema with every combination of the
-  allowed values of the request-bound identifiers; and the same call
-  declared twice is a manifest validation error. Section 8: `tool.started`
-  and `tool.finished` of a gateway-made call carry its `mechanism` and
-  model null, and a null model is valid only with actor `gateway` and a
-  `prefetch` or `workflow` mechanism. Section 12.2: an admitted
-  gateway-made proposal counts toward a required call group of tool
-  correctness and is reported apart as `gateway_proposals`.
-
-- Specification 0.32 → 0.33 (PR #150 review; RM03, RM12, RM16, RM22;
-  sections 6, 8, and 14.1): `model.finished` holds `cached_tokens` and
-  `reasoning_tokens` inside `usage`, next to the input and output counts,
-  and records a count the source did not report as `null`, never a
-  defaulted 0 (0.31 put them at the top level and said absent);
-  `first_token_ms` is integer milliseconds, `null` when no token arrived;
-  `model.started` records `request_options` only when at least one option
-  is declared, so a local call and an external call without declared
-  options both leave it out. Section 14.1 also states the two rules #150
-  added before this revision: a sampling key (`max_tokens`,
-  `temperature`, `top_p`) in `[external_model.request_options]` is
-  refused, and the launcher sets each real adapter's read timeout to at
-  least the budget in force; a request option key, at any depth, must be
-  non-blank text.
-
-- Specification 0.31 → 0.32 (PR #146 review; RM05, RM17, RM22,
-  RM26, RM28 to RM32; AC11, AC17 to AC20, AC22, AC23): distinguish
-  an absent local model from an unavailable or unsuitable configured
-  one; separate the prefetch option from its declarations; complete
-  the answer-pass event and terminal-error contracts; define selector
-  threshold keys, ranges, and provisional defaults; separate prefetch
-  binding validation from request-time resolution; and specify workflow
-  package loading before workflow-ID checks. Documentation only;
-  phase 2 remains unimplemented.
-
-- Specification 0.30 → 0.31 (phase 2; RM26 to RM32, AC17 to AC23):
-  operation without a usable local model, with detection; placement
-  from recorded timing samples; one replaceable selection interface;
-  prefetch; workflow packages; the draft answer pass; gated answer
-  streaming and early response headers; several read-only calls per
-  generation; completion criteria in the external request; timing and
-  cached-token recording; a budgets launch table; and the selection
-  benchmarks of section 12.4. Every new option defaults to the earlier
-  behavior. Reasoning: `docs/design/2026-10-23-performance-first-routing.md`;
-  findings: the 2026-10-23 analysis in `docs/EVIDENCE.md`; plan: M7 to
-  M9 in `docs/ROADMAP.md`. Documentation only: no code or observable
-  behavior changes.
-- `README.md` is now a short user guide (what it is, install,
-  configure, start, use); project status lives in `docs/ROADMAP.md`
-  and `docs/RELEASE.md`.
-
-### Fixed
-
-- Selection benchmark review (RM03, RM09, RM16, RM25, RM28): clear stale
-  diagnostics before early bypasses, classify HTTP timeouts, preserve failed
-  narrowed arms without inference, and remove score credit for generations
-  exceeding their call budget while retaining proposal evidence. Export distinct
-  HTTP response identity claims, reject skills proposal options before work,
-  share the persistent ToolRet cache, and enforce source/case locks without
-  changing the frozen files or historical measurement exports. Count only
-  `unknown_tool` and `invalid_arguments` against proposal schema validity,
-  check SkillsBench archives against the lock digests in a per-user cache, and
-  pin `docs/evidence/*.json` to LF line endings.
-
-- Correct the skill guide's workflow-key description, repair the testing
-  guide's README link, and install the client SDK before the Python
-  quickstart example (PR #146 review).
-
-- `docs/EVIDENCE.md`: the 2026-10-22 latency entry reported "0 cached
-  prompt tokens" as a runtime figure; it is the adapter's default
-  (finding F9 of the 2026-10-23 analysis).
-- Demo skill completion predicates reject answers that break spec
-  section 9 (#13; RM05, RM16, RM23): negated or mixed health statuses,
-  inferred incident causes or a missing service, invented deployment IDs,
-  negated or extra-database deletion reports, and empty or mid-sentence
-  diagnostic section labels. Example notes and `docs/EVIDENCE.md` state
-  that the Chinese material has not been natively reviewed (spec 0.7
-  section 9); all six packages move to version 0.1.1 (RM07).
-- Loopback llama.cpp inference and runtime startup health polls bypass
-  environment and system proxies without changing process-wide settings
-  (#57; RM01, RM18). Non-loopback endpoints and the external Chat
-  Completions adapter keep normal proxy handling. Deterministic tests
-  cover localhost, IPv4/IPv6 loopback, and remote hostnames; the historical
-  Windows qualification remains evidence for its recorded revision only.
-
-### Added
 
 - Native Windows launcher and latency evidence (#110; RM12, RM17 to
   RM19, RM25, AC15; sections 12.1 to 12.3 and 14.1): supplied exports
@@ -2931,6 +2128,346 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Correct the guidance documents: the plugin API gives an ordinary plugin no tool list, which is not a rule about
+  official plugins. Lead the README and the repository description with OpenClaw.
+
+- Specification 0.70 (RM33; section 7.5, section 14.1; AC24): the OpenClaw plugin declares
+  `>=2026.10.7 <2027.0.0-0` to the host instead of exactly `2026.10.7`, so an operator on a later 2026
+  OpenClaw can install it. Only 2026.10.7 stays qualified; any other release is reported as unqualified.
+  New `relaymind openclaw install` and `relaymind openclaw token` commands run the host's own install,
+  configure, enable and token steps with checks before any change. The release record now names the declared
+  range, the qualified release and the build release. Developer release steps and user install steps are
+  rewritten in the OpenClaw README.
+
+
+- Reorganize the project overview around model use, skill/tool discovery and
+  OpenClaw setup. Consolidate the component map, link current status from
+  operator guides, correct stale qualification and platform claims, and
+  document maintenance conventions. Requirement semantics and historical
+  evidence remain unchanged. Register the editorial specification digest for
+  new evaluation inventories while retaining the original supported digests.
+
+
+- Specification 0.65 → 0.66 (#251; RM16/RM38–RM44; AC29–AC37): adds the
+  owner-run acceptance profile (section 12.6.6). Names the owner's M1 8 GiB
+  MacBook and native x86-64 Windows PC as the target machines and the Ubuntu
+  VPS as the Linux functional host; defines `owner_machine` labelling with a
+  recorded machine annotator, Cohen's kappa and owner adjudication; held-out
+  split, commit-based preregistration, at least 20 tasks per lane within the
+  100, blind arm-anonymized success judging, disjoint usage components and
+  their capture sources, native-RPC episode corrections, rank 4–10 choice
+  receipts, the MCP ledger location/retention, the open-source MCP acceptance
+  catalog, and the closed qualification record with PR approval. A reviewed
+  negative record closes the loaded-use or MCP-use gate on the pinned host with
+  the operation disabled as a known host limitation (sections 7.6.1, 7.6.2).
+  `stop_point_absent` means no host point can fence the next model request as
+  section 7.6.1 requires (a stop-only point without fresh person authority,
+  session incarnation and pinned-byte re-verification does not count);
+  `exact_route_absent` means no supported route invokes an independent,
+  non-App MCP tool by its exact native identity (App view routes such as
+  `mcp.app.callTool` do not count). The record's `corpus_review` is allowed
+  on host, adaptation and platform records (a platform report resolves the same
+  frozen corpus) and is null on walkthrough and host_operation records; under
+  `owner_machine` the tuner exclusion is waived for the owner custodian only.
+  "Customer" wording about who runs trials becomes owner/operator. No metric,
+  threshold or budget changes. Amended before release (#268; RM34/AC25;
+  sections 4.6, 4.6.1, 14.5): each ordinary local SKILL.md candidate is
+  admitted or rejected on its own. A rejected file records one
+  `{asset_id,reason}` exclusion and makes the scan a partial generation
+  (complete=false, rejected/omitted records kept stale, no removals) instead
+  of failing the whole folder; path safety, read errors, budgets and
+  cancellation still fail the whole scan. The markup and repeated-line rules
+  apply to offered record fields; the internal instruction body keeps only the
+  NFC, encoding, control and size rules.
+  A later 0.66 addition (#260) adds `machine_drafted_owner_approved` prompt
+  authorship (one pinned drafting model, owner approval by PR review) and
+  `machine_dual_owner_approved` labelling (two blind machine annotators,
+  `same_family` when only one model family is available, Cohen's kappa before
+  a third machine adjudication pass, owner approval of the frozen labels). The
+  record gains `prompt_authorship`, `drafter` and a machine annotators shape;
+  reports never say `independent` for these labels.
+- Specification 0.64 → 0.65 (#239/#204/#240; RM16/RM34/RM37/RM39/RM40/RM44;
+  AC25/AC28/AC30/AC31/AC35–AC37): defines native skill loaded-byte delivery,
+  immutable-pin versus removal semantics and the later-use authority fence;
+  separates the deterministic-model functional tier from live-model capability
+  and allows a reviewed exact-composition entry only after all controls pass.
+  Defines the conditional direct MCP-use request, exact native binding,
+  lifecycle/approval fences and qualification gates without activating it;
+  automated native UI decisions remain functional evidence, never human approval.
+  Reconciles registration with the existing qualified direct-action exception,
+  places the 512 KiB native request cap in section 14.5, and bounds approval
+  waiting separately from the 60-second preparation/dispatch deadline without
+  changing existing budgets. Clarifies pre-dispatch timeout/cancellation
+  receipts, the native RPC error envelope for pre-admission refusals, and
+  that the outer native request cap applies before the inner create-body cap;
+  both bounds hold. Repairs roadmap links and aligns the bilingual validation
+  notices and historical qualification notes with these unreleased rules.
+  Requires source-bound pinned native host configuration validation with
+  the captured native regex dialect and explicit provider/sampling/budget
+  schema binding.
+  Runtime snapshots and all outstanding acceptance gates remain closed.
+- Specification 0.63 → 0.64 (RM42/RM44; AC33/AC36): names the reset evidence
+  document of section 12.6.5 (`reset:<episode_id>`, holding the before/after
+  preimages), so adaptation reports can be graded offline end to end.
+- Specification 0.62 → 0.63 (RM37/RM39; AC28/AC30): adds the optional expected-scope
+  headers and the scope_mismatch error, checked before any read or write; requires the
+  native adapter to send its binding's scope on every gateway request; clarifies that
+  write privilege and target-agent access are resolved for the actual caller, not
+  required of unrelated roles, and that exact skill selection rechecks choice expiry
+  before each native dispatch.
+- Specification 0.61 → 0.62 (RM37/RM39; AC28/AC30): names the pinned
+  authenticated native action channel and explicit profile/workspace registration,
+  preserves direct choice/feedback/privacy and distributed-commit semantics, and
+  specifies exact native Skill Library selection/read separately from loaded-use.
+  Runtime snapshots and native MCP activation retain their existing qualification gates.
+
+
+
+- Specification 0.55 → 0.56 (RM40/RM44; AC31/AC36; review #219):
+  names `Case.conversation` and attempt/embedding `cost_observations` as
+  order-preserving arrays for canonical hashing. Types `Rate.value` and Wilson
+  bounds as `nonnegative_number`, consistent with their existing [0, 1] limits.
+
+- The 0.57 reconciliation carried these master 0.56 benchmark clarifications
+  and the parallel source-grounded 0.56 additions below as distinct histories.
+
+- Specification 0.52 → 0.53 (RM16, RM38/AC29; #196, review #218):
+  fixed 500 ms request slots admit measured dispatch delay within the original
+  deadline, with a separate scheduled-to-response p95 ≤300 ms gate. Service and
+  dispatch-to-response timings keep their existing meanings. Contention evidence
+  requires foreground overlap with each sequential source/rebuild job and actual
+  inference contention, without requiring two jobs on one worker to run together.
+  All samples, failure denominators and outstanding live qualification gates remain.
+
+
+- Specification 0.51 → 0.52 (#187; RM24, RM34, RM38): section 14.5 defines the
+  offer projection cache, and section 4.6 now says a stale, availability or
+  eligibility change is a changed committed generation that increments
+  catalog_revision, so a result on an older offer is stale; a capture-time-only
+  observation keeps the revision. Projections key catalog_revision,
+  selection_scope and the requested_kinds set (section 10), and a missing usable
+  generation fails a create request before the idempotency claim (section 7.6). Wire schemas
+  are unchanged. Specification change only; no product code.
+
+- Documentation brought up to date with M9 at #139: the spec version and
+  M9 status in `AGENTS.md` (and the OpenClaw scripts in its map), the
+  OpenClaw row and the #139 evaluation pieces in `docs/ARCHITECTURE.md`,
+  the M9 issue status and exit criteria in `docs/ROADMAP.md`, an OpenClaw
+  entry in `README.md`, the M9 gaps in `docs/TESTING.md`, the run record
+  in `integrations/openclaw/README.md`, the status line of the OpenClaw
+  design note, and the status word in the spec's section 7.5 heading. What
+  ran over doubles, in Linux VPS functional checks, and on GitHub-hosted
+  runners stays apart from what is not_run (macOS and Windows
+  qualification, a plugin approval on a real host, the #139 measurement).
+  No behavior change.
+- Specification 0.47 redirects M9 from YAML workflows to OpenClaw
+  integration (#135 to #139, #145, #173): retire the unimplemented RM30 and AC23
+  without reusing their identifiers; add RM33, AC24, the provider ownership
+  and compatibility contract, and a separate host-tool evaluation protocol.
+  Section 7.5 names the host compatibility switches the plugin declares,
+  the request-size and advertised-limit rules, and the error-class
+  mapping; AC24 adds an oversized request.
+  The fixed parallel demo (RM15, AC14) and existing benchmark evidence remain.
+  This is a specification and backlog change; the plugin is not implemented.
+
+
+- Specification 0.38 clarifies the timing records and estimates required by
+  #129 (RM17, RM25, RM27): actual call actor and kind, nullable measurements,
+  bounded retention, separate warm/cold effective throughput, and terminal
+  skill outcomes. Predictions remain estimates and no execution default changes.
+- Specification 0.37 → 0.37.1 (RM03, RM09, RM25, RM28; section 12.4):
+  a first generation exceeding its call budget receives no set-score credit
+  while preserving raw proposals, usage and independent schema validity. A failed
+  narrowing arm records its failure without model work and stays in the denominator;
+  valid abstentions retain the empty-set experiment. Ordinary schema-invalid names
+  retain their existing independent name metrics. Colliding ToolRet tool names
+  get suffixes in declaration-digest order, so a plain name no longer marks the
+  positive: `evaluation/tools.v2.lock.json` (the same 500 rows; 5 case digests
+  differ) is the default, and `tools.v1.lock.json` stays only to reproduce the
+  recorded runs.
+
+- RouteDecision and HandoffEnvelope accept the reason codes
+  `selection_failed`, `no_local_model`, and `local_slow` under schema version
+  1, and the RouteDecision validator and schema now check that the reason
+  code follows the route (spec 0.31 section 8): local carries
+  `simple_skill`, clarify `missing_input`, parallel `parallel_workflow`, and
+  external one of the reasons for leaving the local path, so `local_budget`,
+  `invalid_output`, and `tool_failure` are never a route's (#131).
+- The routing cache key holds the selector chain (each selector's name and
+  version) and the cache policy version is 2 (spec 0.31 section 10, #131).
+  An entry is stored only when `model_router`'s routing generation chose the
+  skill. `run.accepted` `budgets` holds `selection.timeout_seconds` next to
+  the section 11 limits.
+- The skill-stage layout is unchanged (#124, spec 0.35 section 10). Two
+  layouts of the first system message were measured on 2026-10-23 on the
+  pinned model. The description and tool instruction first, then the skill
+  body (`7bfe3fa`), kept live AC01 at 3 of 4 but lowered the local_only
+  English simple corpus subset (4/12 local completion and 11/12 tool
+  correctness before, 1/12 and 7/12 after, twice each). The skill body first
+  (`4db75b9`) lowered live AC01 to 2 of 4, then 1 of 4, and was not run on the
+  corpus. `docs/EVIDENCE.md` has the runs.
+- A tool event of a gateway-made call has model null and actor `gateway`
+  (RM22, spec 0.32 section 8); `tool.proposed` has an optional `mechanism`
+  (`model`, the default, `prefetch`, or `workflow` with its `step`). The
+  trace schema stays at version 1 with these fields optional. `tool.started`
+  and `tool.finished` of a gateway-made call carry the same `mechanism`, and
+  a null model is valid only with actor `gateway` and a `prefetch` or
+  `workflow` mechanism, so the check that a model-made call names its model
+  (RM22) still holds for the events of every other call. Restart recovery
+  copies the mechanism onto the recovered `tool.finished`.
+- First model action (the demo UI and `scripts/live_acceptance.py`) and tool
+  correctness (`relaymind.evaluation.grading`) count model-made proposals
+  only (section 12.1); a prefetch proposal is counted in the new
+  `gateway_proposals` of a run grade, and a required call is met by a model
+  proposal or by an admitted gateway call (spec 12.2 now says so: with
+  prefetch on the evidence the case needs was gathered either way, and
+  prefetch correctness stays a separate measure). The trace view lists the
+  `mechanism` of each proposal.
+- `scripts/run_corpus.py` takes the draft guards (run language, tool-call
+  JSON) from `relaymind.orchestrator.performance`, so the offline regrade
+  and the gateway apply one rule (#115, #121).
+- `Usage.cached_tokens` is `None` when the source returned no count, not
+  0 (#120; RM16, spec 0.31 section 6, finding F9), and the same holds for
+  `reasoning_tokens`. The recorded `usage` of an event, the timing
+  statistics, the latency benchmark's model calls, and the live harness
+  keep `null`. In the latency benchmark's prefix cache record, a call with
+  no reported count is counted as not measured and a total over no
+  measured call is `null`. Exports made before this change still hold the
+  adapter's default of 0.
+- The launcher sets the read timeout of each real adapter to at least the
+  budget in force: `active_seconds` for the llama.cpp adapter and
+  `external_seconds` for the external adapter, never under the earlier
+  30 seconds (#142, #120; RM03). Before, a raised limit could be cut off
+  by an unrecorded 30 second read timeout. A file without `[budgets]`
+  behaves as before.
+- Adapter event streams now start a generation with a `FirstToken` marker
+  before its first answer text, reasoning text, or tool-call fragment. The
+  timing statistics ignore it, so their definitions are unchanged; a
+  consumer that lists every event of a stream sees one more (#120).
+
+- Specification 0.36 → 0.37 (#126; RM22, RM26, RM28, RM29; sections 7.4
+  and 8): it states what a gateway without a usable local model does where
+  0.31 left it open. Startup detection measures the routing-shaped warm-up
+  cold, because it is the first request after the model loaded; a warm-up
+  that fails, or that does not finish within `placement.warmup_seconds`
+  when that is shorter than the stage budget, classifies the model
+  unavailable. Without a usable local model the chain runs without
+  `model_router`, and with `example_match` alone when that leaves no
+  selector. A model last measured unsuitable comes back unsuitable when
+  readiness sees it answer again. Every `route.selected` of an auto run in
+  managed external execution carries `local_model_status`; `/readyz`
+  reports the class in a `local_model` object and reports a mode the class
+  forbids as not ready. A skill that routes external with its skill ID runs
+  its prefetch calls after `handoff.started` and before the first external
+  generation (RM29).
+
+- Specification 0.35 → 0.36 (#131, #132; RM22, RM24, RM28; sections 8 and
+  10): it states what the selection interface records. A selector chain that
+  chooses nothing makes the gateway record its own decision (route external,
+  skill_id null, reason `selection_failed`) in `route.selected` with the new
+  mechanism `selector_chain`, a `selector` with a null name, version, and
+  mechanism, the whole chain's `elapsed_ms`, and every attempt; a rejected
+  model router output still records no `route.selected` and escalates with
+  `invalid_output`. `tools_narrowed` is the narrowing intersected with the
+  skill's allowlist, in allowlist order. A `route.selected` of `model_router`
+  keeps the local model's actor, and any other selector's choice has actor
+  `gateway`. A result that names another selector, or claims a mechanism of
+  the gateway or of another built-in selector, is an error. The selection
+  time limit is recorded inside `budgets` as `selection.timeout_seconds`.
+  Section 10 names `selector_chain` among the gateway-made routes that are
+  a cache miss and never stored, and a skill another selector chose is not
+  stored either.
+
+- Specification 0.34 → 0.35 (#141, #124; RM06, RM12, RM13, RM16, RM24,
+  RM25; AC14): section 4.4 gives the order of the parts of the external
+  system message (the rules, the skill instructions, the fixed completion
+  criteria, the catalog, the answer instruction, then the handoff JSON),
+  splits the completion criteria into a fixed part and a value part that
+  is refreshed before each external generation and measured with the
+  request, says that an external correction names the failed checks, and
+  leaves the synthesis request of the parallel workflow unchanged.
+  Section 10 no longer asks for the skill body before the conversation in
+  the skill stage: the live measurement of #124 lowered local completion and
+  tool correctness, so that layout stays as it was.
+
+- Specification 0.33 → 0.34 (PR #153 review; RM05, RM09, RM10, RM15,
+  RM16, RM22, RM29; sections 4.3, 4.4, 8, 11, and 12.2; AC18): it states
+  what #122 and #123 implement. Section 4.3: under
+  `calls_per_generation = many` a set within the limit is also rejected
+  whole, with `multiple_tool_calls`, when the tool budget has no room left
+  for it (the room is the tighter of the per-stage and the entire-run limit
+  left in a local stage, the entire-run limit left in the external stage;
+  the room counts one execution per call that needs one, so a replay needs
+  none, while the limit on the number of calls counts every call); the
+  rejection of a set is one exchange that answers every call, and each
+  tool message carries what the trace records for that call: the call
+  that failed its own validation gets its rejection and the others
+  `not_executed`, and a rejection about the set (the limit, a mutating
+  call, no room) is recorded on every call and answers every call; a retry
+  is not reserved for, and exhausted time can stop a set in the middle; an
+  admitted set runs in proposal order, a failed call of the local actor
+  escalates with `tool_failure` and the later calls do not run, and the
+  external actor gets every result as data; under `one` a generation with
+  several calls keeps its old one-call exchange. Sections 4.3 and 4.4: the
+  `local_health` branch of the fixed parallel workflow keeps the one-call
+  rule under either value (RM15). Section 11: the admitted-calls row names
+  the room rejection. RM29: the declarations are checked against the
+  budgets at startup, only when `performance.prefetch` is true, the
+  per-stage limit only for a skill not marked external-required (0.31 to
+  0.33 said a manifest validation error at load); resolved calls the tool
+  budget has no room for are not started or recorded; nothing is pending
+  when every tool the stage offers has a succeeded result; constants are
+  checked against the tool's full schema with every combination of the
+  allowed values of the request-bound identifiers; and the same call
+  declared twice is a manifest validation error. Section 8: `tool.started`
+  and `tool.finished` of a gateway-made call carry its `mechanism` and
+  model null, and a null model is valid only with actor `gateway` and a
+  `prefetch` or `workflow` mechanism. Section 12.2: an admitted
+  gateway-made proposal counts toward a required call group of tool
+  correctness and is reported apart as `gateway_proposals`.
+
+- Specification 0.32 → 0.33 (PR #150 review; RM03, RM12, RM16, RM22;
+  sections 6, 8, and 14.1): `model.finished` holds `cached_tokens` and
+  `reasoning_tokens` inside `usage`, next to the input and output counts,
+  and records a count the source did not report as `null`, never a
+  defaulted 0 (0.31 put them at the top level and said absent);
+  `first_token_ms` is integer milliseconds, `null` when no token arrived;
+  `model.started` records `request_options` only when at least one option
+  is declared, so a local call and an external call without declared
+  options both leave it out. Section 14.1 also states the two rules #150
+  added before this revision: a sampling key (`max_tokens`,
+  `temperature`, `top_p`) in `[external_model.request_options]` is
+  refused, and the launcher sets each real adapter's read timeout to at
+  least the budget in force; a request option key, at any depth, must be
+  non-blank text.
+
+- Specification 0.31 → 0.32 (PR #146 review; RM05, RM17, RM22,
+  RM26, RM28 to RM32; AC11, AC17 to AC20, AC22, AC23): distinguish
+  an absent local model from an unavailable or unsuitable configured
+  one; separate the prefetch option from its declarations; complete
+  the answer-pass event and terminal-error contracts; define selector
+  threshold keys, ranges, and provisional defaults; separate prefetch
+  binding validation from request-time resolution; and specify workflow
+  package loading before workflow-ID checks. Documentation only;
+  phase 2 remains unimplemented.
+
+- Specification 0.30 → 0.31 (phase 2; RM26 to RM32, AC17 to AC23):
+  operation without a usable local model, with detection; placement
+  from recorded timing samples; one replaceable selection interface;
+  prefetch; workflow packages; the draft answer pass; gated answer
+  streaming and early response headers; several read-only calls per
+  generation; completion criteria in the external request; timing and
+  cached-token recording; a budgets launch table; and the selection
+  benchmarks of section 12.4. Every new option defaults to the earlier
+  behavior. Reasoning: `docs/design/2026-10-23-performance-first-routing.md`;
+  findings: the 2026-10-23 analysis in `docs/EVIDENCE.md`; plan: M7 to
+  M9 in `docs/ROADMAP.md`. Documentation only: no code or observable
+  behavior changes.
+- `README.md` is now a short user guide (what it is, install,
+  configure, start, use); project status lives in `docs/ROADMAP.md`
+  and `docs/RELEASE.md`.
+
+
 - Specification 0.21 -> 0.22: section 8 adds `answer_options` to the
   run.accepted payload (#91; RM19, RM22, RM25): the effective token
   budget, temperature, and top_p applied to the answer generations. A run
@@ -3189,3 +2726,454 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   Non-thinking stays the default and the latency-experiment
   configuration; reasoning output never appears as answer content, and
   results from the two modes are never mixed.
+
+### Removed
+
+- The demo UI trace no longer shows the "Workflow steps" section, a placeholder
+  for the retired YAML workflow runner that only said "not recorded" (#173;
+  RM23, AC14; spec 0.47 retired RM30). The fixed parallel demo's workflow
+  summary (RM15) is unchanged, and a stored trace with the reserved `workflow`
+  tool mechanism (section 8) still renders. No spec change.
+
+### Fixed
+
+- Hardened automated-host control polling and provider-response failures. Future executions require explicit v2 control budgets and fresh preregistration; historical inputs and outcomes remain unchanged. Timeout paths retain the last recommendation state, and functional transport tests allow cold worker startup (RM03, RM05, RM16, RM44).
+
+- Addressed #277/#280 review findings: portable transport tests, clear blind-CLI input errors, consistent stored row evidence, fenced JSON proposals, private-file read bounds, and redacted public home paths with retained original bindings. Historical benchmark results and qualification claims are unchanged.
+
+- Spec 0.66 section 12.6.6 owner-run checks (review of #276; RM40, RM44; AC31,
+  AC36): a `same_family` machine_dual record now needs two different template
+  digests even when its two model IDs differ. The release validator now
+  requires every `machine_drafted_owner_approved` case to name one drafter, the
+  same for the whole release, with role `author` only and no competencies, so a
+  tuner, annotator or adjudicator can no longer pass as the drafter
+  (`drafter_role`). The committed #259 trial evidence passes both rules
+  unchanged.
+
+- `scripts/asset_whole_task.py trial-install` (and `trial`) failed on a fresh
+  OpenClaw 2026.10.7 host, which installs the plugin disabled until it is
+  configured (#269; RM39/RM44; AC30/AC36 tooling). The kit now follows the
+  operator guide's lifecycle: install, configure `baseUrl` (`--base-url`,
+  default `http://127.0.0.1:8080/v1`), enable, inspect. It records each step,
+  and inspect must report the plugin loaded and enabled. `--base-url` must meet
+  the plugin's `baseUrl` rules (loopback http/https `/v1` root, no
+  credentials, query or fragment); any other value is refused before any host
+  command runs and is never written out. The kit parses the value with the
+  plugin's WHATWG URL rules (`src/relaymind/evaluation/plugin_base_url.py`), so
+  it accepts and refuses what the plugin does and configures the plugin's
+  normal form (`http://127.1:8080/v1` becomes `http://127.0.0.1:8080/v1`);
+  `tests/test_openclaw_pinned_package.py` compares it case by case with the
+  plugin's own `config.ts` under Node. Verified with a host
+  double that models the disabled fresh install; not yet rerun on the
+  owner's M1 (#259).
+- Ordinary local skill discovery (#268; RM34/AC25; spec 0.66 section 4.6.1)
+  admitted only 8 of OpenClaw 2026.10.7's 49 bundled skills: 32 bodies were
+  rejected for `<placeholder>` text or HTML examples and 9 for more than three
+  code-fence lines, and one rejected file failed the whole folder. Bodies now
+  keep only the NFC, encoding, control and size checks, and a rejected candidate is
+  excluded on its own with a fixed reason. Five verbatim copies are test
+  fixtures (`tests/fixtures/openclaw-bundled-skills/`, MIT) in the default
+  suite. `tests/test_openclaw_pinned_package.py` scans a copy of the pinned
+  package's `skills/` directory installed by `npm ci` and checks that all 49
+  bundled skills are admitted; it runs in the `openclaw-plugin` CI job and
+  skips elsewhere without `node_modules`. This is a developer check of the
+  bundled files, not an AC25 live host subcase. A rejected root `SKILL.md`
+  after an earlier child generation is now a partial generation (the child
+  records stay, stale) instead of a whole-scan failure, and a scan that fails
+  after a candidate rejection keeps that rejection in its recorded exclusions
+  and rejected count (spec 0.66 section 4.6.1).
+- Walkthrough recorder fonts (RM39; AC30): `--font-dir` on
+  `integrations/openclaw/test/host-walkthrough/record.py` copies the `.otf`,
+  `.ttf` and `.ttc` files of a directory once into the private work root, and
+  each language's install step copies that snapshot into the isolated browser
+  home's `$XDG_DATA_HOME/fonts` (fontconfig), so Chinese labels render on a host
+  without a system CJK font. `manifest.json` lists the snapshot's file names,
+  SHA-256 digests and sizes under `fonts`. An empty, missing or non-directory
+  font directory is the structured refusal `walkthrough_font_dir` before
+  anything is created, and an environment whose font data directory
+  (`XDG_DATA_HOME`, else `HOME/.local/share`) is unset or relative fails the
+  install step (`walkthrough_font_home`) rather than installing elsewhere.
+  `tests/test_openclaw_walkthrough.py` covers these cases.
+
+- Owner-run qualification records and `owner_machine` labelling (#251; RM16,
+  RM39, RM40, RM42, RM44; AC30, AC31, AC33, AC35–AC37; spec 0.66 section
+  12.6.6): the closed `asset_qualification_record.v1.json` schema and
+  `asset_qualification_record.py` verify every bound SHA-256, the machine role,
+  preregistration order, labelling and the review (one org member other than
+  the owner). `grade-*` take `--qualification-record`; only an approved record
+  binding the report's exact bytes removes `qualified_evidence_review`, and the
+  output reports its `labelling`. Label commands take `--labelling
+  owner_machine` (`owner_machine.v1`: the owner may also tune, the machine
+  annotator never); the record's Cohen's kappa is recomputed from the labels.
+  Every bound freeze, tasks, episodes or labels subject must be the report's
+  resolved input, platform records included; a platform record may carry the
+  corpus review; Time fields must be real UTC instants
+  (`invalid_record_time`). Under `owner_machine` only the owner custodian may
+  also tune. `known_host_limitations` returns approved negative
+  `host_operation` records for the roadmap, docs and reports to list; nothing
+  consumes it until such a record is approved. Fixture-tested only; no
+  record exists and no gate has passed.
+
+- Native host configuration preflight (#250; RM16/RM39/RM40/RM44;
+  AC31/AC35/AC36/AC37): a bounded Node checker uses pinned OpenClaw 2026.10.7
+  validation, including defaults, strict refinements and plugin schemas, and
+  returns a closed verdict with the SHA-256 of every pinned host entry point it
+  imports. The Python wrapper enforces a timeout and accepts only that pinned
+  validator identity; input resolution rejects invalid native preflights and
+  retains validator identities by config digest. Offline resolution can consume
+  captured verdicts without Node; native fixture tests run in the OpenClaw CI job.
+  The isolated state (no operator HOME or credentials) installs the packaged
+  RelayMind plugin when the config names `relaymind`, so ordinary installed
+  discovery validates its settings without `plugins.load.paths`. A referenced
+  plugin (in `plugins.entries` or `plugins.allow`) whose schema the host did
+  not inspect (undiscovered, or a discovery owner the host preserved
+  uninspected) is `unavailable` with reason
+  `plugin_schema_not_inspected`, never `valid`; every verdict carries a closed
+  `reason`.
+  Qualified captured-evidence verification remains open in #240.
+- Platform runs on GitHub-hosted runners (#241, #235; RM38, RM39, RM44; AC29,
+  AC37): a separate `Platform runs` workflow on `macos-latest`,
+  `windows-latest` and `ubuntu-latest`.
+  - `scripts/asset_operations_run.py operations` runs the lexical portion of
+    the AC29 protocol as a fixture (it does not close AC29): ten clean
+    startups, a recommendations-disabled memory baseline, and the 60-second
+    2 req/s workload with four 25-record metadata-import batches and a derived
+    rebuild. The workload goes through the existing `run_workload` and
+    `summarize_operations` over an evaluation-only gateway control channel
+    (`asset_operations_child`).
+  - `scripts/asset_platform_run.py` runs the ordinary host step (Linux-only
+    harness honestly recorded elsewhere) and builds the platform report over
+    fixture companion inputs locked to the runner. Its `verify` grades
+    downloaded artifacts again.
+  - Platform reports now name `mcp_use_disabled`, `restart_not_observed` and
+    `ordinary_harness_linux_only`, and can bind the operations report as
+    `operations_evidence`.
+  - Only harness errors fail the job. Reports stay `fixture`; CI runners are
+    not the acceptance platforms, and no gate is claimed.
+  - Review fixes: a gateway that exits before readiness is a recorded harness
+    error, and the report is still written. A failed ordinary UI action is a
+    failed platform step, not a harness error. Memory phases name only what
+    was sampled. The sampled PID is the gateway's own, which is recorded.
+    A missing install-check record is written as `platform-not-built.json`
+    and fails `verify`. An existing bundle directory is refused, and
+    `asset_platform_run.py` exits 2 with a reason on input errors and on an
+    ordinary-step timeout. The gateway control child answers every command
+    even when its job store fails, and its reader ignores a closed loop.
+  - Second review fixes: a startup launch that fails before readiness is a
+    harness error (`startup_<n>_<reason>`, exit 2) in `operations` and
+    `startup`; `verify` fails an operations report with harness errors, and a
+    platform report without its bundle or a bundle without its report. The
+    control child binds the job the request awaited (`job_id`), never the
+    newest listed job, and reports an unbindable job as a harness error. The
+    bundle registers `platform-runner-files`, the digests of the driver
+    scripts, workflow, ordinary harness and test helpers the run executes,
+    and `verify` checks them against the checkout. The workflow's path filter
+    covers the run's dependency closure, and every step has a time limit that
+    fits inside the job's. A non-object environment lock exits 2, and a
+    reused `--work` starts from the requested catalog and new stores. The
+    docs call the run the lexical AC29 fixture portion and no longer quote
+    uncommitted local numbers.
+  - Third review fixes: an operations harness error no longer skips the
+    release and lifecycle steps; its exit code is kept in `operations.exit`
+    and a final `Harness result` step fails the job on it. The ordinary step
+    passes `--timeout 780`, so its own `ordinary_timeout` fires before the
+    step limit. The test files and workflow the run binds check out with LF
+    line endings on Windows, so a `windows-latest` report verifies on another
+    checkout. The control channel reads lines up to 16 MiB, a control call
+    after the reply stream ended fails at once with `control_closed`, a job
+    reported in two replies is kept once in its latest state, and memory
+    phases are listed only when a workload sample is known.
+  - Fourth review fixes: the verify step writes its job summary even when
+    verify fails, then fails with verify's exit code. `platform-runner-files`
+    binds only tracked files, so local files such as `.DS_Store` never change
+    it, and a test checks that every bound file checks out with LF (or as
+    exact bytes). A gateway that exits before its token is `gateway_exited`,
+    not a token timeout; the gateway child ends quietly when the parent has
+    closed its pipe; ordinary-step failure messages go to stderr.
+- Episode and host-task run kit (#236, #237; RM40–RM44; AC31–AC36): blind
+  label templates, adjudication worksheet and `AssetLabelsV1` freeze;
+  `preregister-host`/`preregister-episodes` checks; a resumable, crash-safe
+  journaled `run-host` over an operator executor program, and journaled
+  episode runs; `capture-costs` from RelayMind trace events. Runs are only
+  `fixture` or `provisional`; no real episode, host run or gate result is
+  claimed. Review fixes: the worksheet requires two distinct annotators,
+  malformed worksheets, unwritable outputs and a lone `--evidence-root`
+  reject with exit 2, traces with out-of-order or repeated call events reject,
+  and `run-host --executor-timeout` bounds a hung executor program. Second
+  review: the run journal binds the execution identity (environment,
+  artifacts, input manifest, qualification) and is owner-only; cancelled and
+  gateway-bounded calls keep their own outcome, with dispatch counted only
+  when evidenced; `--events`/`--artifacts` use the bounded strict reader;
+  executor output is capped while read; host task sets missing a required
+  lane are not acceptance-eligible. Third review: episode probes outside the
+  `held_out` split make the set ineligible (`probes_not_held_out`); the
+  episode journal also binds the corpus release lock; an executor `not_run`
+  row is invalid; a journal with only a torn header starts again; a second
+  signal stops `run-host` at once and kills the executor's group; dispatch
+  needs a received token or a known usage count, also for
+  `provider_unreachable`.
+- Early installed-skill trial kit (#234; RM39, RM44; AC30, AC36; spec 0.65
+  section 12.6.5): `scripts/asset_whole_task.py trial-preflight`,
+  `trial-install`, `trial-run` and `trial`.
+  - Preflight checks macOS arm64, Apple M1, 8 GiB, the environment lock, the
+    pinned OpenClaw 2026.10.7 host and the plugin release checksum against the
+    frozen package.
+  - The plugin is installed with the pinned host CLI.
+  - The frozen plan runs through the existing driver over operator-captured row
+    observations. Missing rows stay `not_run`.
+  - Every original is bundled with `SHA256SUMS` and a companion manifest and
+    graded offline with the unchanged grader.
+  - Output is fixture or provisional only; no trial has been run.
+  - Review follow-ups: the bundle and copied originals are private (`0700`/`0600`)
+    and appear only when complete; the install record keeps closed inspect codes
+    and a diagnostics count, never host text; the provisional gate checks the
+    closed record shapes, recomputes the machine checks and binds the records to
+    the frozen package; output paths under a symlinked parent (macOS `/tmp`)
+    work; evidence keeps the 10 MiB original limit; `plan.json` names the lane
+    and prompt case.
+- Bilingual packaged walkthrough recorder (#238; RM39; AC30, AC35):
+  `integrations/openclaw/test/host-walkthrough/record.py` runs the unchanged
+  ordinary installed-host qualification in `en-US` and `zh-CN`.
+  - It uses the plugin's own labels, with screenshots, video and a digest
+    manifest.
+  - A step is recorded only when the harness predicate accepts the capture.
+    Loaded skill use, MCP use and host MCP approval are always `blocked`.
+  - The tier is `functional_fixture`, it is not in CI, and no walkthrough has
+    been recorded yet.
+  - Every partial screenshot is listed by digest, and a torn or unsafe media
+    set still writes an incomplete manifest with fixed `media_problems`.
+- Qualification assessment for the section 12.6.5 exports (#240; RM16, RM40,
+  RM42, RM44; AC31, AC33, AC36, AC37): graded host, platform and adaptation
+  results record the claimed label, the tier assessed from the resolved inputs
+  and fixed safe reasons. A provisional, qualified or measured label over
+  fixture inputs is rejected (`qualification_contradiction`), and no
+  unqualified tier passes a gate. The specification defines no reviewed S3
+  qualification record yet, so no report can be assessed qualified.
+  `plan-host` records the preregistered input and freeze digests, and the new
+  `plan-episodes` command verifies frozen episodes and writes their probe plan
+  (#236, #237). No measured or qualified result is claimed.
+- Native loaded-use fence and conditional MCP use path in the OpenClaw adapter
+  (#239/#204; spec 0.65 sections 7.6.1, 7.6.2 and 14.5; RM16/RM37/RM39;
+  AC28/AC30/AC35). The reviewed registry now names `skill_loaded_use` and
+  `mcp_use` as separate operations; an `mcp_use` entry must declare its exact
+  route, transport, tool class and finite maximum approval wait, and a
+  malformed entry qualifies nothing. The loaded-use fence rechecks fresh
+  native authority for the same session incarnation, registration, the
+  unexpired choice, the eligible asset and operator association, a nonremoved
+  library entry and the immutable selected bytes before loading, after the
+  exact read and immediately before delivery, keeps R0 across a library head
+  update and blocks the conversation after a fence failure. The `relaymind.mcp`
+  handler implements the closed request, the 60-second preparation/dispatch
+  deadline with the separately bounded approval wait, exact native binding with
+  a recomputed canonical schema hash, closed argument validation, approval
+  binding to the bound server/tool/schema/session and single use, the closed
+  receipt and same-scope idempotency. Key claims, consumed allow-once
+  approvals and blocked conversations are kept in a durable private ledger
+  synced before dispatch (`src/recommendation-native-ledger.ts`): after a
+  restart an unresolved key replays as indeterminate and never dispatches
+  again, and a full or unreadable ledger refuses. Without a ledger nothing is
+  dispatched. An admitted key is bound to its request at admission, so its
+  pre-dispatch refusal is its historical receipt and a different request
+  under it is `idempotency_conflict`. Host schema
+  patterns are admitted only in a provably bounded anchored subset, a schema
+  whose gateway hash cannot be recomputed here (for example `0.0`) is
+  `unavailable`, and all native RPC requests are capped at 512 KiB. Neither
+  operation is in the shipped registry, no production MCP route exists, and
+  `relaymind.mcp` is not registered; the tests use injected fixture resolvers
+  and routes only. The shipped direct-action/exact-selection entry is re-pinned
+  to the new adapter revision `943e1f0e2ba6e9e8dad45456e6eb8122a475c91ced0c9e1e3f8d249471fe240f`; its evidence revision names
+  the fresh capture of this revision (CI run 41318389858, SHA-256
+  `35436e519245…`). A release-artifact test now fails when the registry
+  and the built adapter digest drift. After review, the ledger never writes a
+  record recovery would reject and has `close()` (on gateway stop); a
+  same-key request during preparation recovers that attempt's actual receipt;
+  gateway transport, overload and deadline failures report `unavailable` or
+  `timeout`; only failures attributable to the verified person and session
+  block a conversation; and each native method registers on its own entry.
+  A second review added: one live ledger owner per path (an exclusive lock
+  file, taken over only from an exited owner); separate dispatch markers, so a
+  key bound before a restart that never dispatched recovers as
+  `not_dispatched`; reserved block capacity, with managed use refused once no
+  further block could be recorded; and a fence recheck of registration,
+  choice and operator association after the exact native read. A third
+  review made the stale-lock takeover race-safe (per-owner lock files, never
+  removing a live owner's lock) and made each ledger record complete across
+  short writes before it is acknowledged; the shipped entry is re-pinned to
+  adapter revision `b49d94d8267076516430fb2e4fb64d41fad2961fc8009c84e60921cf43e9e98e`,
+  whose evidence revision names its fresh capture (CI run 41322540111, SHA-256
+  `6b8947df711e…`). A fourth review rejects malformed request text and
+  non-string session fields as `invalid_request`, drops a duplicate
+  registration check and keeps the native deadline live, and the ledger cuts
+  a torn final record through a separate read-write handle (a Windows append
+  handle cannot truncate); the entry was re-pinned to adapter revision
+  `a29cac121c5e01932b6b3ee75e9bab2214e5e9e72cbc36d8f802f62b917c7cfe`. A fifth
+  review rereads a same-key MCP request's history after its registration
+  check (a receipt settled meanwhile is recovered, never reported as
+  `not_dispatched`), keeps a host `UNAVAILABLE` exact-read result from
+  blocking a conversation, digests the adapter bytes once per resolver, takes
+  over a stale ledger lock naming this process's PID that this process did
+  not create (PID 1 in a container), reserves exact room for each binding's
+  marker and longest receipt under the byte cap and compiles each host schema
+  pattern once per operation; the entry is re-pinned to adapter revision
+  `37f9b415c47260065d42453b5d85474375a796b8a7416af78732668863357f2d`, whose
+  evidence revision names its fresh capture (CI run 41335800361, SHA-256
+  `1212d0e28080…`). The host qualification harnesses then built their backend
+  on the real wall clock instead of the test default `FakeClock`, so the
+  capture was recaptured with them at the same adapter revision (CI run
+  41351781170, SHA-256 `58c6df0ba6dc…`; unmodified, no runner hostname in it).
+
+- Native loaded-skill observation harness (#239; RM39/AC30): retain native
+  `skills_read` bytes, their receiving gateway request and host/run correlation,
+  with isolated stale/deleted/reset observations over deterministic inference.
+  This is evidence tooling only; loaded-use qualification remains unavailable.
+  Observation now requires `--observe-loaded-use` (default off); the ordinary
+  direct-action/exact-selection exit criterion is unchanged. CI runs a separate
+  six-minute observation step and artifact: only harness/fixture errors fail it,
+  never truthful observation outcomes, without `continue-on-error`. Native
+  records tolerate only a torn trailing line with one bounded re-read; retained
+  pin names, advertised revisions, socket receipts and independent provider/run
+  records are checked, and incomplete hooks cannot label a turn `not_loaded`.
+  Request and content retention limits preserve later control windows.
+- Add a disposable MCP use capability tier (#204; RM39/AC35), raw-evidence
+  accounting tests, bounded sandbox servers and an optional CI capture. Exact
+  use, native approval trials and human acceptance remain blocked/not_run.
+- Harden the MCP capability tier (#204; RM39/AC35): fail CI on harness or
+  discovery errors, bind source/artifact evidence, join real server call/effect
+  records, observe approval identity and resolution, and rescan final captures
+  for secrets. The CI timeout is four minutes; missing run traces and native
+  exact-use receipts still prevent qualification.
+- Fix the MCP capability tier's `tools.effective` projection (#204; RM39/AC35):
+  the pinned host returns grouped entries (`groups[].tools[].id`), so the old
+  flat `payload.tools` projection always recorded an empty list. The probe now
+  records an explicit `listed`/`empty`/`malformed` outcome, the host's MCP
+  server/original mapping and notice IDs, and discovery requires both colliding
+  fixture tools in the session inventory. Earlier captures' empty
+  `tools.effective` lists came from the projection, not the host. The person
+  probe now starts the session's MCP runtime with public `mcp.app.discover`
+  before the read (MCP Apps enabled, the shipped RelayMind model selected, zero
+  heartbeat). A Linux x86-64 VPS run of the CI command at bba0cf1 listed both
+  colliding tools; exact use stays blocked. That capture is now committed as
+  `docs/evidence/m10/openclaw-mcp-use-20261101-vps3.json` (#255).
+  A refused `chat.send` retains its request window, correlated provider records
+  and native hooks; any such activity fails the case closed
+  (`ordinary_skill_refusal_contradicted`) instead of an activity-free refusal.
+  Provider attempt records are read by their own per-turn window, so a
+  failure before HTTP reached the gateway is retained with its outcome, and an
+  unexplained record fails the case (`ordinary_skill_provider_unexplained`).
+  The turn drains asynchronous hooks until every tool call is resolved
+  (`ordinary_skill_tool_unresolved` otherwise), including after a refused
+  send. The committed VPS2 observation capture predates this change and must
+  be recaptured.
+
+- Operations and platform run kit (#242, toward #241, #235, #234; RM38, RM39, RM44; AC29, AC37):
+  - `scripts/asset_operations_run.py startup` measures ten real `relaymind serve` startups over a generated 300-skill bilingual catalog, using the existing AC29 driver. It waits for recommendations to be ready and samples memory on POSIX and Windows.
+  - `platform` builds an `AssetPlatformReportV1` from install-check and ordinary installed-host records, bound to the companion input manifest. Skill use is never inferred from a selection receipt.
+  - All output is labeled `fixture`.
+- Exact native Skill Library selection through the ordinary installed host
+  (#197; RM39, AC30): the qualification saves a skill with
+  `skills.library.save`, maps it to the chosen asset, selects it with
+  `relaymind.skill` and checks `skills.library.list`. The evidence predicate
+  binds skill ID, revision, asset ID, content hash and source version, and
+  requires the unmapped-skill, cross-session and own-session foreign-person
+  refusals with their exact error codes. Browser failures and the overall
+  deadline remain failures through skill selection. The listing must show the
+  selection itself: its `session.sessionKey` is the authenticated target
+  session and its `session.selections` are exactly the selected skill at the
+  selected revision, both when the harness captures it and in the predicate,
+  so a no-op or wrong-session activation fails. The committed capture is a
+  recapture with this harness (CI run 41317645014, SHA-256 `3a063ab37411…`),
+  which the registry's evidence revision names.
+
+- CI: the core `check` job runs tests in parallel with pytest-xdist, one file per worker at a time, and caches the Chromium shell per OS and Playwright version. The Windows test step took about 29 minutes in one process. Tests that build real recommendation or native-preparation evidence from timing use fixed clocks or synthetic timestamps, so a loaded runner cannot turn them into a deadline error.
+- CI: the shared asset benchmark fixture uses a deterministic recommendation
+  budget instead of the production 500/150 ms pair, so a loaded runner cannot
+  expire a confident HTTP selector attempt and flatten its paired coverage.
+  Deliberate timeout cases keep explicit small budgets, the HTTP cancellation
+  test uses the shared fixed clock, and a slowed-selector regression test
+  proves the old deadline failed on every host.
+- CI: a small `plan` job picks the platforms (and logs its decision); both
+  `check` and `openclaw-plugin` take them from it and run stacked PRs on Linux only to
+  conserve CI capacity, with no base-branch filter. Every PR must target
+  `master` and pass the full Linux/macOS/Windows matrix before merge; pushes
+  also run all three platforms. `openclaw-plugin` now shares the Chromium
+  shell cache keyed by OS and Playwright version; its test tiers remain serial.
+- Stabilize installed OpenClaw qualification on loaded runners (RM16/RM39;
+  AC30): use bounded ten-second host-event waits, keep fixture holds alive
+  through retirement observation, and capture only fixed ordinary substeps and
+  error classes. Browser failures and the overall deadline now remain failures
+  through UI actions and finalization; the 570-second harness and 12-minute CI
+  bounds and all evidence predicates remain unchanged. Fresh evidence must bind
+  the changed harness sources.
+
+- Section 12.6.5 verifier closure and episode driver (#229, #202, #205, #207):
+  - The frozen corpus is verified from the input manifest, and host tasks and episodes are bound to it.
+  - Off/on adaptation configurations are checked as a named ablation.
+  - Every dispatched probe's request and offered-catalog digests are recomputed.
+  - Spec 0.64 reset evidence lets the command verify resets.
+  - A driver runs adaptation episodes through the real recommendation lifecycle on the locked corpus projection; it is evaluation-only and never qualified.
+  - A Simplified Chinese command guide is added.
+- Spec 0.60 section 12.6.5 exports (#198/#202/#204/#205/#206; RM16, RM38–RM44;
+  AC29–AC37): closed host freeze, task, report, adaptation episode and platform
+  schemas; a deterministic three-arm plan and conserving host driver; offline
+  graders that recompute every summary; companion input-manifest resolution with
+  blocked/rejected exits (`scripts/asset_whole_task.py`). Fixture-verified tooling
+  only; no measured result or acceptance is claimed. Remaining verifier gaps: #229.
+
+- Activate two independently reviewed exact Linux CPU embedding identities;
+  record ordinary native launch and provisional 412/128 benchmark results,
+  including partial indexing, lexical fallback and the observed quality regression.
+
+
+- The loaded-use observation harness records the exact person-scope
+  `sessions.reset` refusal (`operator.admin` required on the pinned host) as
+  `control_refused`, with no turn, instead of raising
+  `ordinary_skill_control_failed`. CI run 41286397320 hit that error. Any other
+  refusal, and any turn evidence on a refused control, still fails the
+  predicate (#255). The second VPS run observed the refusal as
+  `control_refused`. [CI run 41340879424](https://github.com/LHCWN/relaymind/actions/runs/41340879424)
+  at ed21e007 also completed loaded-use observation with that reset result and
+  confirmed corrected MCP discovery; exact use stayed blocked. These newer CI
+  captures are workflow artifacts, not committed evidence.
+
+
+- `.gitattributes` pins the OpenClaw plugin package
+  (`integrations/openclaw/`) to LF, so a Windows checkout no longer packs
+  CRLF text files into the release tarball (#145; RM18); a Windows runner
+  export has yet to show the digests agree.
+- Loopback gateway health polls and API/SDK client calls in live acceptance
+  and evaluation scripts bypass environment and system proxies without
+  changing process-wide settings (#167; RM01, RM18, RM19). Non-loopback endpoints
+  keep normal proxy handling.
+
+
+- Selection benchmark review (RM03, RM09, RM16, RM25, RM28): clear stale
+  diagnostics before early bypasses, classify HTTP timeouts, preserve failed
+  narrowed arms without inference, and remove score credit for generations
+  exceeding their call budget while retaining proposal evidence. Export distinct
+  HTTP response identity claims, reject skills proposal options before work,
+  share the persistent ToolRet cache, and enforce source/case locks without
+  changing the frozen files or historical measurement exports. Count only
+  `unknown_tool` and `invalid_arguments` against proposal schema validity,
+  check SkillsBench archives against the lock digests in a per-user cache, and
+  pin `docs/evidence/*.json` to LF line endings.
+
+- Correct the skill guide's workflow-key description, repair the testing
+  guide's README link, and install the client SDK before the Python
+  quickstart example (PR #146 review).
+
+- `docs/EVIDENCE.md`: the 2026-10-22 latency entry reported "0 cached
+  prompt tokens" as a runtime figure; it is the adapter's default
+  (finding F9 of the 2026-10-23 analysis).
+- Demo skill completion predicates reject answers that break spec
+  section 9 (#13; RM05, RM16, RM23): negated or mixed health statuses,
+  inferred incident causes or a missing service, invented deployment IDs,
+  negated or extra-database deletion reports, and empty or mid-sentence
+  diagnostic section labels. Example notes and `docs/EVIDENCE.md` state
+  that the Chinese material has not been natively reviewed (spec 0.7
+  section 9); all six packages move to version 0.1.1 (RM07).
+- Loopback llama.cpp inference and runtime startup health polls bypass
+  environment and system proxies without changing process-wide settings
+  (#57; RM01, RM18). Non-loopback endpoints and the external Chat
+  Completions adapter keep normal proxy handling. Deterministic tests
+  cover localhost, IPv4/IPv6 loopback, and remote hostnames; the historical
+  Windows qualification remains evidence for its recorded revision only.

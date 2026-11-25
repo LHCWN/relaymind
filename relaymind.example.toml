@@ -1,5 +1,5 @@
 # Example configuration for `relaymind serve --config relaymind.example.toml`
-# (spec 0.21 section 14.1). Copy it and edit. Relative paths resolve against
+# (spec 0.74 section 14.1). Copy it and edit. Relative paths resolve against
 # the directory you start the command in. No credential belongs in this file.
 
 [server]

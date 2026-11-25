@@ -33,7 +33,7 @@ acceptance status, use [ROADMAP.md](ROADMAP.md); for M10 setup, use the
   (`eval/external-request-options`, spec 0.46): 4854 passed, 1 skipped,
   13 live tests deselected, on Linux x86_64 (Ubuntu 26.04.1), Python
   3.14.4, without `llama-server` on PATH, so
-  `tests/test_live_acceptance.py::test_gateway_start_and_healthy`
+  `tests/test_live_acceptance.py::test_gateway_checks_hold_on_the_live_model`
   skips. `ruff check .` and `ruff format --check .` pass. This is not
   the Apple M1 machine of the measured results; no run of this branch
   on it is recorded here.
@@ -41,7 +41,7 @@ acceptance status, use [ROADMAP.md](ROADMAP.md); for M10 setup, use the
   (`m8/evidence-decisions`): 4781 passed, 0 failed, 13 live tests
   deselected, on Apple M1, macOS 27.0.1, Python 3.14.9, with
   `llama-server` on PATH. Without it,
-  `tests/test_live_acceptance.py::test_gateway_start_and_healthy` skips
+  `tests/test_live_acceptance.py::test_gateway_checks_hold_on_the_live_model` skips
   (4780 passed, 1 skipped). `ruff check .` and `ruff format --check .`
   pass.
 - `python -m pytest` for the #110 documentation and evidence PR on

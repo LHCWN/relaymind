@@ -251,7 +251,7 @@ bilingual skill selection and the M6 benchmark remain separate gates.
   This warning comes from the pinned build's
   [common argument parser](https://github.com/ggml-org/llama.cpp/blob/620d2225c/common/arg.cpp#L3554-L3570)
   on every platform; it was not a test failure. The passing qualification
-  retains the manifest settings. [#58](https://github.com/Last-Humans-Coding-Under-White-Nights/relaymind/issues/58)
+  retains the manifest settings. [#58](https://github.com/LHCWN/relaymind/issues/58)
   tracks migrating the controls and requalifying the adapter at the next
   runtime update.
 - **Proxy and loopback:** before the environment overrides above,
@@ -260,7 +260,7 @@ bilingual skill selection and the M6 benchmark remain separate gates.
   overrides, the live suite passed in 11.73 s. At the recorded revision,
   the adapter created its HTTP client with default proxy handling.
   The subsequent loopback bypass fix in
-  [#57](https://github.com/Last-Humans-Coding-Under-White-Nights/relaymind/issues/57)
+  [#57](https://github.com/LHCWN/relaymind/issues/57)
   has deterministic coverage; this historical run does not qualify that
   new behavior on Windows. See [the current testing notes](TESTING.md#windows-qualification-notes).
   In CPython 3.12.10 on Windows,
@@ -696,7 +696,7 @@ passed. The earlier 342-test baseline also passed.
 | Application | PR head `6ccd7cc5ebfba259835f7473bf2cb00b110fbcf2`, tested merge `4b3eb3db4f2cb8fd777dc254294b30cf6c40cf26`; the subsequent single-commit amendment adds documentation/evidence only |
 | Command | `python -m pytest tests/test_llamacpp_live_smoke.py -m live -v -s --basetemp=evidence/tmp --junitxml=evidence/results.xml` |
 | Result | **3 passed, 0 skipped in 5.75 s**: both text cases answered `pong`; reasoning absent/present respectively; parsed `get_service_health` with `service=staging-api` |
-| Workflow | [Runtime smoke run 39564456074](https://github.com/Last-Humans-Coding-Under-White-Nights/relaymind/actions/runs/39564456074), successful; artifact `runtime-smoke-windows` |
+| Workflow | [Runtime smoke run 39564456074](https://github.com/LHCWN/relaymind/actions/runs/39564456074), successful; artifact `runtime-smoke-windows` |
 | Raw evidence | [pytest](evidence/2026-10-21-reasoning-controls/windows-pytest.txt), [JUnit](evidence/2026-10-21-reasoning-controls/windows-results.xml), [server](evidence/2026-10-21-reasoning-controls/windows-server.txt), [provenance and tested-file hashes](evidence/2026-10-21-reasoning-controls/windows-provenance.json), [qualified manifest](evidence/2026-10-21-reasoning-controls/qualified-manifest.json) |
 
 The Windows job ran native executables without WSL, Docker, proxy
@@ -710,7 +710,7 @@ proxy, or Windows GPU backends. Text artifact line endings were normalized
 to LF and trailing spaces removed when copied into this repository
 (also for the macOS logs).
 
-The corresponding [deterministic CI run](https://github.com/Last-Humans-Coding-Under-White-Nights/relaymind/actions/runs/39564455956)
+The corresponding [deterministic CI run](https://github.com/LHCWN/relaymind/actions/runs/39564455956)
 passed on Ubuntu, macOS, and Windows. Both target platforms now have new
 non-thinking, thinking, and tool-call smoke evidence for b11785. These
 English smoke cases do not establish bilingual skill quality or the M6

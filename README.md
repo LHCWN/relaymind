@@ -236,7 +236,9 @@ curl -s http://127.0.0.1:8080/v1/chat/completions \
 ```
 
 - **Choose where it runs** with the header `X-RelayMind-Execution-Mode`:
-  `auto` (default), `local_only`, or `external_only`.
+  `auto` (default), `local_only`, `external_only`, or `parallel_demo` (on the
+  managed `relaymind` alias when a parallel workflow is enabled in
+  configuration).
 - **Missing details** come back as a question; send a new request with
   the answer.
 - **Changes** wait for approval in the trace UI; a "yes" in the chat

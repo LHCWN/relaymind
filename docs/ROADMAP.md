@@ -48,10 +48,10 @@ native x86-64 Windows (#46), using the pinned model and runtime commit
 (RM18; spec sections 3, 6, 14). Windows setup differences and the proxy
 workaround are recorded with that run.
 Automatic loopback proxy bypass is implemented with deterministic coverage in
-[#57](https://github.com/Last-Humans-Coding-Under-White-Nights/relaymind/issues/57);
+[#57](https://github.com/LHCWN/relaymind/issues/57);
 the historical Windows run used a session workaround and predates this fix.
 The reasoning-control migration
-([#58](https://github.com/Last-Humans-Coding-Under-White-Nights/relaymind/issues/58),
+([#58](https://github.com/LHCWN/relaymind/issues/58),
 #63) requalified llama.cpp b11785 with `--reasoning off` on both target
 platforms; the live runs are recorded in [`EVIDENCE.md`](EVIDENCE.md),
 separately from the historical runtime evidence. The M1 milestone is
@@ -303,7 +303,7 @@ Carried forward, not done in M3:
   endpoint, which spec 0.29 does not count as a second endpoint. The
   swap to a second compatible endpoint, Z.ai to bigmodel.cn with only
   the `[external_model]` table changed, ran live in M6 and closes AC08
-  ([#109](https://github.com/Last-Humans-Coding-Under-White-Nights/relaymind/issues/109)).
+  ([#109](https://github.com/LHCWN/relaymind/issues/109)).
   Caveat: both endpoints are Zhipu's (international and mainland
   China platforms), so a second vendor's API is not covered.
 - Restart recovery exists as `LocalOrchestrator.recover_after_restart`,
@@ -922,15 +922,15 @@ OpenClaw requests (about 9.4k to 10.6k tokens with the pinned tokenizer on
 macOS) do not fit it, so auto goes external and local_only gets
 needs_external.
 
-Status (2026-10-29): **M9 closed** (PRs #176 to #185, spec 0.49 and
+Status (2026-10-29): **M9 code-complete over model doubles, with explicit open platform gates** (PRs #176 to #185, spec 0.49 and
 0.50). The GitHub milestone is closed (2026-10-29), with all 16 of its
 issues closed. The compatibility qualification (#135), the provider package
 (#136), the round trips (#137), cancellation and errors (#138), packaging
 and CI (#145), the evaluation (#139), and the UI placeholder removal (#173)
 are merged, with the macOS qualification and the live measurement recorded
-in `EVIDENCE.md`. The Windows qualification and a plugin approval answered
-on a real host stay declared gaps, not_run; neither is inferred from a
-runner.
+in `EVIDENCE.md`. Under this roadmap's done rule, the Windows qualification
+and a plugin approval answered on a real host stay open declared gaps
+(`not_run`); neither is inferred from a runner.
 
 The unimplemented YAML workflow expansion and plan benchmark are removed
 from M9 (RM30 and AC23 retired). The implemented fixed parallel demo remains
