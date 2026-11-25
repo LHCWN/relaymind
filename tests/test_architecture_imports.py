@@ -6,6 +6,7 @@ edges fail deterministically in CI.
 """
 
 import ast
+import re
 from collections import defaultdict
 from pathlib import Path
 
@@ -325,6 +326,28 @@ def test_architecture_doc_lists_every_public_api_module():
     api_modules = sorted(p.name for p in (SRC / "api").glob("*.py") if not p.name.startswith("_"))
     missing = [name for name in api_modules if f"`{name}`" not in api_row]
     assert not missing, f"API modules missing from docs/ARCHITECTURE.md API row: {missing}"
+
+
+def test_architecture_doc_component_map_files_exist():
+    """#297: every .py file named in single-directory rows of docs/ARCHITECTURE.md exists."""
+    missing: list[str] = []
+    checked = 0
+    for line in ARCH_DOC.read_text("utf-8").splitlines():
+        if not line.startswith("|") or line.startswith("| ---"):
+            continue
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if len(cells) < 3:
+            continue
+        dirs = re.findall(r"`(src/relaymind/(?:[^`]+/)?)`", cells[1])
+        if len(dirs) != 1:
+            continue
+        base_dir = REPO / dirs[0]
+        for filename in re.findall(r"`([A-Za-z0-9_]+\.py)`", cells[2]):
+            checked += 1
+            if not (base_dir / filename).is_file():
+                missing.append(f"{dirs[0]}{filename}")
+    assert checked >= 20
+    assert not missing, f"Missing files referenced in docs/ARCHITECTURE.md component map: {missing}"
 
 
 def test_skills_never_imports_upward_from_orchestrator():
