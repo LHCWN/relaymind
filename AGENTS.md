@@ -11,11 +11,12 @@ codebase.
    requirement IDs from it (RM01–RM48, AC01–AC43; RM30 and AC23 are retired;
    RM33 and AC24 specify the M9 OpenClaw integration, added in 0.47 and
    revised in 0.49, 0.50 and 0.70; RM34–RM44 and AC25–AC37 define M10
-   recommendations, added in 0.51 and revised through 0.68; RM45–RM48 and AC38–AC43 define per-prompt guidance,
-   added in 0.69, 0.71, 0.72 and 0.75 and revised in 0.73, 0.74 and 0.75; the spec is at 0.75).
-   Sections 12.6.6–12.6.7 define recorded automated qualification review and
-   the separate automated host experiment. Implementation status
-   is recorded in docs/ROADMAP.md. If code and spec disagree,
+   recommendations, added in 0.51 and revised through 0.68; RM45–RM48 and
+   AC38–AC43 define per-prompt guidance, added in 0.69, 0.71, 0.72 and 0.75 and
+   revised in 0.73, 0.74 and 0.75; the spec is at 0.75). Sections
+   12.6.6–12.6.7 define recorded automated qualification review and the
+   separate automated host experiment. Implementation status is recorded in
+   [`docs/ROADMAP.md`](docs/ROADMAP.md). If code and spec disagree,
    the spec wins. If the spec is wrong, revise the spec first, then change
    the code.
 2. **Tests come before code.** Write a failing test that captures the

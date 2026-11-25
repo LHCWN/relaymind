@@ -772,6 +772,9 @@ original artifact digests and recovery time. Before recovery updates the index,
 `controller-before-<sha256>.json` preserves its exact previous bytes, including
 interrupted status and coordinator-failure timestamps. Later resumes verify this
 snapshot and controller identity. Missing retained cost evidence is refused.
+`matrix_controller.py` and `evaluation_session.py` are internal helpers shared
+by the matrix and evaluation runners for controller bootstrap, recovery
+provenance, frozen-prior startup, and durable work directories.
 
 After reviewing reconciliation, resume with the same controller, measurement root,
 output/runtime and original provider settings using `--execute`. Completed cells

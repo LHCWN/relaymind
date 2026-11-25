@@ -103,3 +103,67 @@ def test_specification_section_8_1_shipped_schemas_exist():
                 missing.append(str(full.relative_to(REPO)))
     assert checked >= 20
     assert not missing, f"Shipped schemas missing on disk: {missing}"
+
+
+def _github_heading_slugs(text: str) -> set[str]:
+    counts: dict[str, int] = {}
+    slugs: set[str] = set()
+    for line in text.splitlines():
+        match = re.match(r"^#{1,6}\s+(.*)$", line)
+        if not match:
+            continue
+        heading = match.group(1).strip().lower()
+        heading = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", heading)
+        heading = re.sub(r"[`*_~]", "", heading)
+        heading = re.sub(r"[^\w\s-]", "", heading)
+        base = heading.replace(" ", "-")
+        seen = counts.get(base, 0)
+        counts[base] = seen + 1
+        slugs.add(base if seen == 0 else f"{base}-{seen}")
+    return slugs
+
+
+def test_active_docs_relative_links_and_anchors_resolve():
+    """#298: relative markdown links and heading anchors in active docs resolve."""
+    docs = (
+        *ACTIVE_DOCS,
+        REPO / "skills" / "README.md",
+        REPO / "scripts" / "README.md",
+        REPO / "models" / "README.md",
+        REPO / "integrations" / "openclaw" / "README.md",
+        REPO / "integrations" / "openclaw" / "README.zh-CN.md",
+    )
+    heading_cache: dict[Path, set[str]] = {}
+    broken: list[str] = []
+    link_re = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
+    for path in docs:
+        text = path.read_text("utf-8")
+        for lineno, line in enumerate(text.splitlines(), 1):
+            for _, target in link_re.findall(line):
+                if target.startswith(("http://", "https://", "mailto:")):
+                    continue
+                file_part, _, anchor = target.partition("#")
+                dest = path if not file_part else (path.parent / file_part).resolve()
+                if not dest.exists():
+                    broken.append(f"{path.relative_to(REPO)}:{lineno}: missing target {target}")
+                    continue
+                if anchor and dest.suffix == ".md":
+                    slugs = heading_cache.get(dest)
+                    if slugs is None:
+                        slugs = _github_heading_slugs(dest.read_text("utf-8"))
+                        heading_cache[dest] = slugs
+                    if anchor not in slugs:
+                        broken.append(
+                            f"{path.relative_to(REPO)}:{lineno}: missing anchor #{anchor} in "
+                            f"{dest.relative_to(REPO)}"
+                        )
+    assert not broken, "Broken relative links or anchors in active docs:\n" + "\n".join(broken)
+
+
+def test_scripts_readme_mentions_every_top_level_script():
+    """#298: scripts/README.md indexes every top-level Python script in scripts/."""
+    readme = (REPO / "scripts" / "README.md").read_text("utf-8")
+    missing = [
+        path.name for path in sorted((REPO / "scripts").glob("*.py")) if path.name not in readme
+    ]
+    assert not missing, f"Top-level scripts missing from scripts/README.md: {missing}"
