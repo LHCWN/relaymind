@@ -977,3 +977,76 @@ def test_concurrent_external_cancel_during_cancel_waiting_releases_issued_token(
     assert waiting.run_id not in gateway.orchestrator._waiting
     assert gateway.orchestrator._issued == {}
     assert gateway.orchestrator.reveal_confirmation(waiting.run_id) is None
+
+
+def test_transient_read_error_after_cancel_still_releases_issued_token(tmp_path, monkeypatch):
+    """RM11, #299: a read error after cancel_waiting succeeded never retains _issued."""
+    gateway, waiting, _ = waiting_gateway(tmp_path)
+    assert waiting.run_id in gateway.orchestrator._issued
+    version = gateway.store.get_run(waiting.run_id).version
+
+    monkeypatch.setattr(
+        gateway.orchestrator, "_still_waiting", lambda _id, *, default=False: default
+    )
+
+    record = asyncio.run(gateway.orchestrator.cancel(waiting.run_id, version))
+    assert RunState(record.state) is RunState.CANCELLED
+    assert waiting.run_id not in gateway.orchestrator._waiting
+    assert gateway.orchestrator._issued == {}
+    assert gateway.orchestrator.reveal_confirmation(waiting.run_id) is None
+
+
+def test_replaced_wait_version_drops_stale_tracking_and_never_expires_new_wait(tmp_path):
+    """RM11, #299: another process advancing a wait into a newer wait drops stale state."""
+    gateway, waiting, _ = waiting_gateway(tmp_path)
+    assert waiting.run_id in gateway.orchestrator._issued
+    stale_version = gateway.store.get_run(waiting.run_id).version
+
+    # Another orchestrator sharing the store resumes v1 and later enters a new wait (v3).
+    resumed = gateway.orchestrator.machine.resume(waiting.run_id, stale_version)
+    newer_wait = gateway.orchestrator.machine.transition(
+        waiting.run_id, resumed.version, RunState.WAITING_CONFIRMATION
+    )
+    assert newer_wait.version > stale_version
+
+    # Even past the old wait's expiry, expire_waiting drops stale tracking and leaves v3 alone.
+    gateway.clock.advance(6 * 60)
+    expired = gateway.orchestrator.expire_waiting()
+    assert expired == []
+    assert waiting.run_id not in gateway.orchestrator._waiting
+    assert gateway.orchestrator._issued == {}
+    current = gateway.store.get_run(waiting.run_id)
+    assert RunState(current.state) is RunState.WAITING_CONFIRMATION
+    assert current.version == newer_wait.version
+
+
+@pytest.mark.parametrize("action", ["resume_confirmation", "cancel"])
+def test_replaced_wait_version_drops_stale_tracking_on_stale_version_error(tmp_path, action):
+    """RM11, #299: cancel/resume with stale version drops a replaced wait before raising 409."""
+    gateway, waiting, _ = waiting_gateway(tmp_path)
+    assert waiting.run_id in gateway.orchestrator._issued
+    stale_version = gateway.store.get_run(waiting.run_id).version
+    request = waiting.confirmation
+
+    resumed = gateway.orchestrator.machine.resume(waiting.run_id, stale_version)
+    gateway.orchestrator.machine.transition(
+        waiting.run_id, resumed.version, RunState.WAITING_CONFIRMATION
+    )
+
+    with pytest.raises(StaleVersionError):
+        if action == "resume_confirmation":
+            asyncio.run(
+                gateway.orchestrator.resume_confirmation(
+                    waiting.run_id,
+                    stale_version,
+                    approval_id=request.approval_id,
+                    token=request.token,
+                    approve=True,
+                )
+            )
+        else:
+            asyncio.run(gateway.orchestrator.cancel(waiting.run_id, stale_version))
+
+    assert waiting.run_id not in gateway.orchestrator._waiting
+    assert gateway.orchestrator._issued == {}
+    assert gateway.orchestrator.reveal_confirmation(waiting.run_id) is None
