@@ -315,7 +315,12 @@ def create_app(
         require_bearer_token(request.headers.get("authorization"), token)
         run_id = request.path_params["run_id"]
         sweep_expired_waits(orchestrator)
-        view = await run_in_threadpool(run_view, orchestrator, run_id, reveal_token=True)
+        view = await run_in_threadpool(run_view, orchestrator, run_id, reveal_token=False)
+        approval = view.get("pending_approval")
+        if approval is not None:
+            revealed = orchestrator.reveal_confirmation(run_id)
+            if revealed is not None and revealed.approval_id == approval["approval_id"]:
+                approval["token"] = revealed.token
         return JSONResponse(view, headers={"Cache-Control": "no-store"})
 
     @app.get("/relay/v1/runs/{run_id}/events")

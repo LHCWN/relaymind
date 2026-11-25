@@ -321,7 +321,7 @@ def install_recommendation_routes(
 
     async def readiness(request):
         _query(request)
-        body = await run_in_threadpool(service.readiness) if service else readiness_body()
+        body = service.readiness() if service else readiness_body()
         return JSONResponse(validate_readiness(body))
 
     def object_id(request):

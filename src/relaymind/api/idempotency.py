@@ -136,36 +136,39 @@ def stored_chat_result(
     calls come from tool.proposed; arguments that were redacted would
     differ from the first response, so they are refused (RM12).
     """
-    record = store.get_run(run_id)
-    state = RunState(record.state)
-    if state not in TERMINAL_STATES:
-        raise ApiError("idempotency_conflict", f"run {run_id} has not finished", run_id=run_id)
-    if state is not RunState.COMPLETED:
-        raise ApiError(
-            "run_terminal",
-            f"run {run_id} ended {state.value}; send a new {IDEMPOTENCY_HEADER} to try again",
-            run_id=run_id,
-        )
-    proposed = [
-        e.payload
-        for e in store.events(run_id, event_type=EventType.TOOL_PROPOSED)
-        if e.payload.get("owner") == "client"
-    ]
-    if proposed:
-        if any(_redacted(p["arguments"]) for p in proposed):
+    with store.sql_read():
+        record = store.get_run(run_id)
+        state = RunState(record.state)
+        if state not in TERMINAL_STATES:
+            raise ApiError("idempotency_conflict", f"run {run_id} has not finished", run_id=run_id)
+        if state is not RunState.COMPLETED:
             raise ApiError(
-                "idempotency_conflict",
-                f"the stored tool calls of run {run_id} were redacted and cannot be replayed",
+                "run_terminal",
+                f"run {run_id} ended {state.value}; send a new {IDEMPOTENCY_HEADER} to try again",
                 run_id=run_id,
             )
-        calls = tuple(ToolCall(p["proposal_id"], p["tool_name"], p["arguments"]) for p in proposed)
-        return ChatResult(run_id, None, TOOL_CALLS, tool_calls=calls), record.updated_at
-    completed_event = store.latest_event(run_id, EventType.RUN_COMPLETED)
-    if completed_event is None:
-        raise ApiError("internal_error", "an internal error occurred", run_id=run_id)
-    completed = completed_event.payload
-    answer: Any = completed.get("answer")
-    if not isinstance(answer, str):
-        raise ApiError("internal_error", "an internal error occurred", run_id=run_id)
-    pieces = answer_pieces(store, run_id, answer) if stream else ()
-    return ChatResult(run_id, answer, pieces=pieces), record.updated_at
+        proposed = [
+            e.payload
+            for e in store.events(run_id, event_type=EventType.TOOL_PROPOSED)
+            if e.payload.get("owner") == "client"
+        ]
+        if proposed:
+            if any(_redacted(p["arguments"]) for p in proposed):
+                raise ApiError(
+                    "idempotency_conflict",
+                    f"the stored tool calls of run {run_id} were redacted and cannot be replayed",
+                    run_id=run_id,
+                )
+            calls = tuple(
+                ToolCall(p["proposal_id"], p["tool_name"], p["arguments"]) for p in proposed
+            )
+            return ChatResult(run_id, None, TOOL_CALLS, tool_calls=calls), record.updated_at
+        completed_event = store.latest_event(run_id, EventType.RUN_COMPLETED)
+        if completed_event is None:
+            raise ApiError("internal_error", "an internal error occurred", run_id=run_id)
+        completed = completed_event.payload
+        answer: Any = completed.get("answer")
+        if not isinstance(answer, str):
+            raise ApiError("internal_error", "an internal error occurred", run_id=run_id)
+        pieces = answer_pieces(store, run_id, answer) if stream else ()
+        return ChatResult(run_id, answer, pieces=pieces), record.updated_at

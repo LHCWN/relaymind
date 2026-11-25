@@ -197,19 +197,31 @@ def run_view(
 
     reveal_token asks for the plaintext confirmation token; the
     orchestrator hands it out once, to the first reader that asks.
+    All store reads run under one store lock critical section so
+    background-thread callers never observe a torn state/events view.
     """
     store = orchestrator.store
-    record = store.get_run(run_id)
-    state = RunState(record.state)
-    accepted = _last(orchestrator, run_id, EventType.RUN_ACCEPTED)
-    payload = {} if accepted is None else accepted.payload
-    # Only run.failed carries codes; a cancelled run's reason is not an error.
-    failed = _last(orchestrator, run_id, EventType.RUN_FAILED) if state is RunState.FAILED else None
-    codes = {} if failed is None else failed.payload
-    output = None
-    if state is RunState.COMPLETED:
-        deltas = store.events(run_id, event_type=EventType.ANSWER_DELTA)
-        output = "".join(e.payload["text"] for e in deltas) if deltas else None
+    with store.sql_read():
+        record = store.get_run(run_id)
+        state = RunState(record.state)
+        accepted = _last(orchestrator, run_id, EventType.RUN_ACCEPTED)
+        payload = {} if accepted is None else accepted.payload
+        # Only run.failed carries codes; a cancelled run's reason is not an error.
+        failed = (
+            _last(orchestrator, run_id, EventType.RUN_FAILED) if state is RunState.FAILED else None
+        )
+        codes = {} if failed is None else failed.payload
+        output = None
+        if state is RunState.COMPLETED:
+            deltas = store.events(run_id, event_type=EventType.ANSWER_DELTA)
+            output = "".join(e.payload["text"] for e in deltas) if deltas else None
+        pending_question = _pending_question(orchestrator, run_id, state)
+        pending_approval = _pending_approval(orchestrator, run_id, state)
+        metrics = _metrics(orchestrator, run_id, state)
+    if reveal_token and pending_approval is not None:
+        revealed = orchestrator.reveal_confirmation(run_id)
+        if revealed is not None and revealed.approval_id == pending_approval["approval_id"]:
+            pending_approval["token"] = revealed.token
     return {
         "run_id": run_id,
         "state": state.value,
@@ -219,9 +231,9 @@ def run_view(
         "output": output,
         "error_code": codes.get("error_code"),
         "reason_code": codes.get("reason_code"),
-        "pending_question": _pending_question(orchestrator, run_id, state),
-        "pending_approval": _pending_approval(orchestrator, run_id, state, reveal_token),
-        "metrics": _metrics(orchestrator, run_id, state),
+        "pending_question": pending_question,
+        "pending_approval": pending_approval,
+        "metrics": metrics,
         "events_url": events_url(run_id),
     }
 
@@ -243,7 +255,7 @@ def _pending_question(
 
 
 def _pending_approval(
-    orchestrator: LocalOrchestrator, run_id: str, state: RunState, reveal: bool
+    orchestrator: LocalOrchestrator, run_id: str, state: RunState
 ) -> dict[str, Any] | None:
     if state is not RunState.WAITING_CONFIRMATION:
         return None
@@ -256,8 +268,7 @@ def _pending_approval(
     keys = ("approval_id", "tool_name", "proposal_id", "arguments", "target", "state_version")
     view = {key: issued.payload.get(key) for key in keys}
     view["expires_at"] = issued.payload.get("expires_at")
-    revealed = orchestrator.reveal_confirmation(issued.run_id) if reveal else None
-    view["token"] = None if revealed is None else revealed.token
+    view["token"] = None
     return view
 
 
