@@ -341,6 +341,13 @@ def test_a_platform_row_that_fell_back_counts_as_failed(attempts):
     assert compare.metrics(rows)["degraded"] == 1
 
 
+def test_every_table_row_has_as_many_cells_as_the_header():
+    """Review of PR 306: the delimiter row must match the header after the Partial column."""
+    lines = compare.table({"arm": {"metrics": compare.metrics(ROWS)}}).splitlines()
+    assert len({line.count("|") for line in lines}) == 1
+    assert "| Partial |" in lines[0]
+
+
 def test_a_degraded_partial_platform_answer_counts_as_failed():
     """Review of PR 306: the reference selector writes `_degraded:partial`; the suffix is read
     under the :partial label (spec 0.75; RM47, AC42)."""
