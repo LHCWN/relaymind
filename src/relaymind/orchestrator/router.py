@@ -27,7 +27,7 @@ trusted only for the skill choice:
   gets a clarify decision with missing_input, naming that skill and the
   missing argument, when no allowed value appears in a user turn
   (``relaymind.orchestrator.identifiers``).
-- On resume after such a clarification (section 5), resume_decision
+- On resume after such a clarification (section 5), skill_routing
   checks the new input for the missing identifier with the same rule,
   without a routing generation: the chosen skill's route, or the same
   clarify again.

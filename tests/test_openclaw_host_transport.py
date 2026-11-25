@@ -27,6 +27,7 @@ from api_helpers import RUN_ID_HEADER, RunningServer, make_app, token_of
 from gateway_helpers import build_gateway, text_turn, tool_turn
 from helpers import load_script_module, make_capabilities, of_type
 from native_helpers import GatedAdapter
+from openclaw_helpers import require_node_dependencies
 from relaymind.api.chat import ClientToolsChat
 from relaymind.orchestrator.local_loop import ConfiguredModel
 
@@ -145,8 +146,6 @@ def test_node_is_found_on_path_as_the_harness_finds_it(monkeypatch, tmp_path):
 
 @pytest.fixture(autouse=True)
 def node_dependencies():
-    from openclaw_helpers import require_node_dependencies
-
     require_node_dependencies(_missing, required=REQUIRED)
 
 

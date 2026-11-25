@@ -65,7 +65,9 @@ def is_closed_mapping(value: object, fields: Collection[str], *, exact: bool = T
     """True when value is a Mapping with exact field set (or subset when exact=False)."""
     if not isinstance(value, Mapping):
         return False
-    return set(value) == set(fields) if exact else not (set(value) - set(fields))
+    expected = fields if isinstance(fields, (set, frozenset)) else set(fields)
+    keys = set(value)
+    return keys == expected if exact else keys <= expected
 
 
 def max_bytes_validator(message: str) -> Callable[[Any, Any, Any, Any], Any]:

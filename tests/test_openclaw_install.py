@@ -24,6 +24,7 @@ import pytest
 
 from api_helpers import RunningServer, token_of
 from gateway_helpers import text_turn, tool_turn
+from openclaw_helpers import require_node_dependencies
 from relaymind.openclaw_setup import DECLARED_RANGE as DECLARED
 from test_openclaw_host_transport import (
     PACKAGE,
@@ -72,8 +73,6 @@ def _npm() -> list[str]:
 
 @pytest.fixture
 def node_dependencies():
-    from openclaw_helpers import require_node_dependencies
-
     require_node_dependencies(_missing, required=REQUIRED)
 
 

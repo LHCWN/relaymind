@@ -12,6 +12,7 @@ from collections.abc import Mapping, Sequence
 from relaymind.canonical import canonical_digest
 from relaymind.evaluation.asset_host_runner import host_preregistration
 from relaymind.evaluation.asset_whole_task import validate_whole_task
+from relaymind.schema_util import is_closed_mapping
 
 _HASH = re.compile(r"[0-9a-f]{64}\Z")
 
@@ -21,8 +22,6 @@ class AutomatedHostRejected(ValueError):
 
 
 def _closed(value, keys):
-    from relaymind.schema_util import is_closed_mapping
-
     if not is_closed_mapping(value, keys.split()):
         raise AutomatedHostRejected("fields")
 

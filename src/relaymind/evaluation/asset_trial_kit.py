@@ -62,6 +62,7 @@ from relaymind.evaluation.asset_whole_task import (
 )
 from relaymind.evaluation.plugin_base_url import check_base_url
 from relaymind.openclaw_setup import DECLARED_RANGE, DEFAULT_BASE_URL, QUALIFIED_RELEASE_TEXT
+from relaymind.schema_util import is_closed_mapping
 
 PINNED_OPENCLAW = QUALIFIED_RELEASE_TEXT
 TARGET_OS, TARGET_ARCHITECTURE, TARGET_CPU = "Darwin", "arm64", "Apple M1"
@@ -478,8 +479,6 @@ def install_plugin(
 
 
 def _closed(value, keys: set) -> bool:
-    from relaymind.schema_util import is_closed_mapping
-
     return is_closed_mapping(value, keys)
 
 
