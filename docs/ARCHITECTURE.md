@@ -10,7 +10,7 @@ Follow the linked operator guides for commands.
 
 | Component | Directory | Main files | Responsibility |
 | --- | --- | --- | --- |
-| API | `src/relaymind/api/` | `app.py`, `chat.py`, `native.py`, `auth.py`, `errors.py`, `idempotency.py` | Validate requests, authenticate callers, expose compatible chat and native run APIs, and map errors. `server.py` binds to loopback. |
+| API | `src/relaymind/api/` | `app.py`, `chat.py`, `chat_request.py`, `native.py`, `recommendations.py`, `guidance.py`, `user_actions.py`, `auth.py`, `errors.py`, `idempotency.py`, `server.py` | Validate requests, authenticate callers, expose compatible chat, native run, recommendation, user-action, and guidance APIs, and map errors. `server.py` binds to loopback. |
 | Orchestrator | `src/relaymind/orchestrator/` | `local_loop.py`, `router.py`, `route_decision.py`, `budgets.py`, `identifiers.py` | Admit model proposals, enforce budgets and identifier provenance, run the managed loop, and own answer publication. |
 | Handoff and client-owned inference | `src/relaymind/orchestrator/` | `handoff.py`, `client_loop.py` | Transfer completed work within the remaining budget; return client-owned tool proposals without executing them. |
 | Lifecycle and performance | `src/relaymind/orchestrator/` | `recovery.py`, `warmup.py`, `local_status.py`, `placement.py`, `performance.py`, `prefetch.py`, `routing_cache.py`, `workflows.py` | Recover interrupted runs, assess local availability, predict placement, and implement optional optimizations and the fixed parallel workflow. Predictions never change budgets. |
@@ -22,7 +22,7 @@ Follow the linked operator guides for commands.
 | UI | `src/relaymind/ui/` | `trace_view.py`, `render.py`, `routes.py`, `comparison.py`, `settings.py` | Render recorded evidence, collect explicit input, and compare runs over reset fixtures. It does not infer hidden reasoning. |
 | Launcher | `src/relaymind/` | `launcher.py` | Validate TOML configuration, wire dependencies, recover runs, warm the local model and print the application token. See [configuration](../relaymind.example.toml). |
 | OpenClaw setup helper | `src/relaymind/` | `openclaw_setup.py` | `relaymind openclaw install`, `token` and `guidance`: check their inputs and run the host's own install, configure, enable, token and MCP list commands. `guidance` also writes the guidance plugin's tool list. Never starts the gateway or prints the token. |
-| Shared boundaries | `src/relaymind/` | `canonical.py`, `schema_util.py`, `redaction.py`, `stats.py` | Canonical hashes, schema validation, configured secret redaction and adapter timing exports. |
+| Shared boundaries | `src/relaymind/` | `canonical.py`, `schema_util.py`, `redaction.py`, `identifiers.py`, `stats.py` | Canonical hashes, schema validation, configured secret redaction, RM05 identifier provenance helpers, and adapter timing exports. |
 | Asset catalog | `src/relaymind/assets/`, `src/relaymind/store/` | All of `assets/`; `asset_catalog.py` in `store/` | Discover and publish metadata, enforce eligibility, schedule refresh, and rebuild lexical/semantic indexes. |
 | Asset recommendation selection (v2) | `src/relaymind/selection/` | `asset_*.py` | Rank offered skills and independent MCP tools with separate selection, fallback, hybrid and adaptation evidence. This is distinct from managed skill selection v1. |
 | Per-prompt guidance (RM45 to RM48) | `src/relaymind/guidance/`, `src/relaymind/api/guidance.py`, `integrations/openclaw/guidance-plugin/` | `pipeline.py`, `models.py`, `sync.py`, `feedback.py`, plugin `index.js` | Stateless and off by default. For one prompt and the list the host sends, word match, optional keywords and picker, or a third-party selector propose the few assets. A separate host plugin names them in one labeled hint and, only when the operator sets `limit=strict`, refuses what was offered and not selected. The gateway retains nothing and removes nothing. With a third-party selector it can also keep the selector's index in sync (`sync.py`, RM47) and, after a successful turn, tell the selector which offered assets the turn used (`feedback.py`, RM48). Tutorial: `docs/guidance.md`. |
@@ -104,44 +104,79 @@ api ──► orchestrator ──► skills ──► tools ──► store
           └───────► redaction
 ```
 
-The layer order, from top to bottom, is: api, orchestrator, skills,
-tools, then store and adapters side by side, then the leaf modules.
-A module imports only from layers below it.
+The core execution stack is strictly layered from top to bottom:
+`api` (with sibling `ui`), `orchestrator`, `skills`, `tools`, then core `store`
+(`run_store.py`, `trace_event.py`, `model_timings.py`) and `adapters` side by
+side, then the leaf modules (`canonical.py`, `schema_util.py`, `redaction.py`).
+These dependency rules are enforced by `tests/test_architecture_imports.py`.
 
-- The skill registry imports the tool registry: a manifest's tools are
-  checked against it at load, and completion predicates read tool
-  results.
-- The tools import the store (`TraceClock`, and `RunStore` in the
-  executor), `ToolSchema` from the adapters, and `redaction.py` in the
-  executor.
-- The orchestrator imports all of these, and `redaction.py` for the
-  events it writes.
-- The selection package (RM28) sits beside the orchestrator's routing
-  modules rather than below the whole orchestrator: `selection/` imports
-  `orchestrator/router.py`, `route_decision.py`, and `identifiers.py` (the
-  router that `model_router` wraps and admission reuses, and the identifier
-  rule `example_match` masks with), the skills (the catalog), the tools
-  (`example_match` reads the tool schemas), the adapters, and
-  `schema_util.py`; `orchestrator/local_loop.py` and `routing_cache.py`
-  import `selection/`. None of the modules `selection/` imports imports it
-  back.
-- `canonical.py`, `schema_util.py`, and `redaction.py` are leaf modules
-  that import no other RelayMind package. The store and the tools use
-  `canonical.py`; the orchestrator, skills, store, and tools use
-  `schema_util.py`; the orchestrator and the tool executor use
-  `redaction.py`.
+Core stack rules:
 
-The demo UI sits beside the API layer. `api/app.py` installs the UI
-routes, and `ui/routes.py` reuses the API's token check, error contract,
-and native request parsing. `ui/trace_view.py` builds views from
-stored events, and `ui/render.py` renders them. `ui/comparison.py`
-also imports `Message` from the adapters; it starts runs and requests
-cancellation through the orchestrator, reads run state from the store,
-and resets the configured sandbox fixtures before each comparison run.
-A chat disconnect asks the orchestrator to cancel the run the request
-owns (`request_cancel`), the same path as the native cancel (section 7.4).
+- `canonical.py`, `schema_util.py`, and `redaction.py` are leaf modules that
+  import no other RelayMind package.
+- `adapters/` imports no other RelayMind package and must not depend on SQLite
+  or `store/`.
+- Core run-store modules (`store/run_store.py`, `store/trace_event.py`,
+  `store/model_timings.py`) import only leaf modules and must not depend on
+  `adapters/` or higher layers.
+- `identifiers.py` holds the shared RM05 identifier provenance and schema
+  helpers; it imports only `adapters/` (and `tools/registry.py` for type
+  checking), so `skills/` never imports upward from `orchestrator/`.
+  `orchestrator/identifiers.py` re-exports it for compatibility.
+- `stats.py` imports only `adapters/base.py`.
+- `tools/` imports `store/`, `adapters/base.py`, and leaf modules.
+- `skills/` imports `tools/registry.py`, `identifiers.py`, and leaf modules.
+- `orchestrator/` imports `skills/`, `tools/`, `store/`, `adapters/`,
+  `selection/`, `identifiers.py`, and leaf modules; it never imports `api/`,
+  `ui/`, `assets/`, `recommendations/`, `guidance/`, `evaluation/`, or
+  `launcher.py`.
 
-Lower layers must not import higher ones. The store must not depend on
+Named subsystems and explicit exceptions:
+
+- **Managed skill selection v1 (`selection/`):** sits beside the orchestrator's
+  routing modules rather than below the whole orchestrator. `selection/`
+  imports `orchestrator/router.py` and `orchestrator/route_decision.py` (the
+  router that `model_router` wraps and admission reuses), `identifiers.py`,
+  `skills/`, `tools/`, `adapters/`, and leaf modules;
+  `orchestrator/local_loop.py` and `orchestrator/routing_cache.py` import
+  `selection/`. None of the orchestrator modules that `selection/` imports
+  imports `selection/` back.
+- **Asset catalog, recommendations, and v2 selection (`assets/`,
+  `recommendations/`, `selection/asset_*.py`, and M10 `store/` modules):**
+  form a dedicated subsystem built over `RunStore`'s SQLite connection rather
+  than sitting beneath `tools/` or `orchestrator/`:
+  - M10 store modules (`store/asset_catalog.py`, `store/asset_feedback.py`,
+    `store/asset_remote_state.py`, `store/asset_vectors.py`,
+    `store/index_job_event.py`, `store/recommendation_event.py`,
+    `store/recommendations.py`) persist M10 domain records and import schema
+    types, validators, and error definitions from `assets/`,
+    `recommendations/`, and `selection/asset_*.py`.
+  - `assets/` imports `store/` (for persistence), `tools/registry.py` (to
+    project MCP tool schemas), `selection/` (`asset_contract.py`,
+    `asset_lexical.py`, `http.py`), `recommendations/service.py` (in
+    `assets/index_lifecycle.py`), and leaf modules.
+  - `recommendations/` imports `assets/`, `selection/`, `store/`,
+    `api/errors.py` (in `recommendations/errors.py`, to share the HTTP error
+    mapping), and leaf modules.
+  - `selection/asset_*.py` imports `assets/`, `recommendations/`, `store/`,
+    and leaf modules.
+- **Per-prompt guidance (`guidance/`):** sits beside `recommendations/` and
+  imports `adapters/`, `assets/catalog.py`, `recommendations/limits.py`,
+  `selection/` (`asset_admission.py`, `asset_contract.py`, `asset_lexical.py`,
+  `http.py`), and leaf modules. It never imports `orchestrator/`, `store/`,
+  `skills/`, `tools/`, `api/`, or `ui/`.
+- **Demo UI (`ui/`):** sits beside `api/`. `api/app.py` installs UI routes, and
+  `ui/` imports `api/`, `orchestrator/`, `store/`, and `adapters/`.
+- **Composition roots and evaluation (`launcher.py`, `evaluation/`,
+  `openclaw_setup.py`):** sit at the top to wire the server, run benchmarks,
+  and configure OpenClaw. No runtime package below them imports them.
+
+The demo UI handles trace rendering (`ui/trace_view.py`, `ui/render.py`),
+route wiring (`ui/routes.py`), and sandbox comparison runs (`ui/comparison.py`).
+A chat disconnect asks the orchestrator to cancel the run the request owns
+(`request_cancel`), the same path as the native cancel (section 7.4).
+
+Lower core layers must not import higher ones. The store must not depend on
 adapters. Adapters must not depend on SQLite.
 
 ## Independent asset recommendations

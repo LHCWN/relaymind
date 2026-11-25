@@ -48,7 +48,7 @@ from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from relaymind.orchestrator.identifiers import required_enum_identifiers
+from relaymind.identifiers import required_enum_identifiers
 from relaymind.selection.contract import (
     SCHEMA_VERSION,
     SelectionContext,
