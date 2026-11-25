@@ -1357,6 +1357,49 @@ describe("selector feedback (spec 0.75; RM48; AC43)", () => {
     expect(sent()).toHaveLength(0);
   });
 
+  it("reports an offered asset the strict limit refused as refused, the clearest miss (review of PR 306)", async () => {
+    const { handlers, used, end, sent } = await turn(withId(["chosen"]), { limit: "strict" });
+    expect(handlers.before_tool_call({ toolName: "skills_read", params: { name: "other" } }, RUN).block).toBe(true);
+    expect(handlers.before_tool_call({ toolName: "demo__two", params: {} }, RUN).block).toBe(true);
+    // Search refuses no particular asset, so it is not feedback.
+    expect(handlers.before_tool_call({ toolName: "skills_search", params: { query: "x" } }, RUN).block).toBe(true);
+    used("skills_read", { name: "chosen" });
+    await end();
+    expect(JSON.parse(String(sent()[0]![1].body)).used).toEqual([
+      { name: "other", kind: "skill", signal: "refused" },
+      { name: "demo__two", kind: "mcp_tool", signal: "refused" },
+      { name: "chosen", kind: "skill", signal: "loaded" },
+    ]);
+  });
+
+  it("keeps what the run used across a second prompt build of the same run, a retry (review of PR 306)", async () => {
+    const { handlers, used, end, sent } = await turn(withId(["chosen"]));
+    used("skills_read", { name: "other" });
+    vi.stubGlobal("fetch", gatewayWithFeedback({ ...withId(["chosen"]), recommendation_id: "rec-2" }));
+    await handlers.before_prompt_build(EVENT, RUN);
+    used("skills_read", { name: "chosen" });
+    await end();
+    const posts = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => String(url).endsWith("/feedback"));
+    expect(sent()).toHaveLength(0);
+    expect(posts).toHaveLength(1);
+    expect(JSON.parse(String(posts[0]![1].body))).toMatchObject({
+      recommendation_id: "rec-2",
+      used: [
+        { name: "other", kind: "skill", signal: "loaded" },
+        { name: "chosen", kind: "skill", signal: "loaded" },
+      ],
+    });
+  });
+
+  it("gives the feedback request a short time of its own, not the prompt hook's (review of PR 306)", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    const { end } = await turn(withId(["chosen"]));
+    timeout.mockClear();
+    await end();
+    expect(timeout).toHaveBeenCalledWith(2000);
+    timeout.mockRestore();
+  });
+
   it("sends nothing when the answer has no recommendation_id", async () => {
     const { used, end, sent } = await turn(picks(["chosen"]));
     used("skills_read", { name: "chosen" });
@@ -1369,7 +1412,11 @@ describe("selector feedback (spec 0.75; RM48; AC43)", () => {
     expect(handlers.before_tool_call({ toolName: "skills_read", params: { name: "other" } }, RUN).block).toBe(true);
     used("skills_read", { name: "chosen" });
     await end();
-    expect(JSON.parse(String(sent()[0]![1].body)).used).toEqual([{ name: "chosen", kind: "skill", signal: "loaded" }]);
+    // The refused one is reported too (review of PR 306).
+    expect(JSON.parse(String(sent()[0]![1].body)).used).toEqual([
+      { name: "other", kind: "skill", signal: "refused" },
+      { name: "chosen", kind: "skill", signal: "loaded" },
+    ]);
   });
 
   it("reports at most 1,000 assets, the gateway's limit", async () => {

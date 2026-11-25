@@ -677,7 +677,8 @@ def _record(item: Mapping, redact: Callable[[str], str]) -> dict:
 
 
 class _NotReady(Exception):
-    """The selector has not indexed what it was offered (spec 0.72): a selector failure."""
+    """The selector has not indexed what it was offered (spec 0.72), or says it is unavailable
+    (spec 0.75): a selector failure, so the fallback answers."""
 
 
 def is_partial(mechanism: str) -> bool:
@@ -764,7 +765,7 @@ async def _third_party(
                 if "path" in item
             }
             on_sync(v2.data["catalog"], files)
-        if not_ready:
+        if not_ready or outcome == "unavailable":
             raise _NotReady
         return parsed
 

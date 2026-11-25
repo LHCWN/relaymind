@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://relaymind.local/schemas/guidance_feedback.v1.json",
-  "description": "GuidanceFeedbackV1 (spec 0.75 section 7.7; RM48). What the host plugin says one turn used of the assets it offered; no text or path.",
+  "description": "GuidanceFeedbackV1 (spec 0.75 section 7.7; RM48). What the host plugin says one turn used of the assets it offered; no text or path. A refused asset is one the strict limit turned down (spec 0.75).",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -43,7 +43,8 @@
           "signal": {
             "enum": [
               "loaded",
-              "executed"
+              "executed",
+              "refused"
             ]
           }
         },
@@ -57,14 +58,20 @@
         "then": {
           "properties": {
             "signal": {
-              "const": "loaded"
+              "enum": [
+                "loaded",
+                "refused"
+              ]
             }
           }
         },
         "else": {
           "properties": {
             "signal": {
-              "const": "executed"
+              "enum": [
+                "executed",
+                "refused"
+              ]
             }
           }
         }

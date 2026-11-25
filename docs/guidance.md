@@ -181,8 +181,8 @@ The rules:
 - `mechanism` is your own label. Do not use `lexical_overlap`, `gateway_lexical_fallback` or the built-in
   selector names; they are refused.
 - If nothing fits, answer `"outcome":"no_match","decision":"no_match","candidates":[]`.
-- A failure, an invalid answer or `"outcome":"not_ready"` falls back to word match with `degraded: true`,
-  unless `fallback = false`. A partial answer, with a `mechanism` ending in `:partial`, is not a failure; see
+- A failure, an invalid answer, `"outcome":"not_ready"` or `"outcome":"unavailable"` falls back to word match
+  with `degraded: true`, unless `fallback = false`. A partial answer, with a `mechanism` ending in `:partial`, is not a failure; see
   [Keep your selector in sync](#keep-your-selector-in-sync).
 - A selector proposes. The gateway admits only exact offered records, and nothing runs because of a pick.
 
@@ -255,9 +255,11 @@ turn to word match until a sync gets it indexed, unless you give a partial answe
 A selector that can rank the pairs it has not indexed from the select itself, for example by word match over their
 names and descriptions, may answer before it has indexed every offered pair (spec 0.75). Answer `ranked` or
 `no_match` over the whole offer and end your `mechanism` with `:partial`, for example `"mechanism":"my_rule:partial"`.
-The gateway passes the answer on with `degraded: false`, adds no word match of its own, and still syncs after it, as
-after `not_ready`. If you cannot rank the part you have not indexed, answer `not_ready`. Comparison runs count
-partial answers in their own column, because they are not your full ranking.
+Use the same label for any answer that is not your full ranking for a reason other than indexing under way, such as
+your embedding model being down while you answer by word match. The gateway passes the answer on with
+`degraded: false`, adds no word match of its own, and still syncs after it, as after `not_ready`; when nothing is
+missing, that sync is one `find_missing`. If you cannot rank the part you have not indexed, answer `not_ready`.
+Comparison runs count partial answers in their own column, because they are not your full ranking.
 
 `scripts/guidance_selector_server.py --sync-root DIR` is a reference selector for this protocol: it serves `/sync`
 and `/feedback`, reads files only under its roots and answers `not_ready` until it has every offered pair, or a
@@ -300,28 +302,35 @@ reports which offered assets it used, and after answering the plugin the gateway
 {"schema_version":1,"operation":"feedback","feeder_id":"guidance",
  "recommendation_id":"7e46678a-d704-4027-b916-2c84de864101",
  "used":[{"asset_id":"host:skill:pdf-merge","content_hash":"<as offered>","kind":"skill","signal":"loaded"},
-         {"asset_id":"host:mcp_tool:weather","content_hash":"<as offered>","kind":"mcp_tool","signal":"executed"}]}
+         {"asset_id":"host:mcp_tool:weather","content_hash":"<as offered>","kind":"mcp_tool","signal":"executed"}],
+ "not_offered":0}
 ```
 
 Answer `{"schema_version":1,"operation":"feedback","inference":"local","missing":null,"results":null}`.
 
 - `used` holds every offered asset the turn used, whether you picked it or not. An empty list is a signal too.
+  `not_offered` counts the assets the turn used that this select did not offer, as above 1,000 host assets, so it
+  tells you whether the offer limit, not your ranking, lost an asset.
 - `loaded` means `skills_read` of the skill, or a plain `read` inside its folder, returned without error;
-  `executed` means a call of the tool returned without error. Whether the model followed the skill is not observed,
-  and a subagent's own run is not counted. A turn that fails sends nothing.
+  `executed` means a call of the tool returned without error. Under `limit = "strict"`, `refused` means the limit
+  turned down a call of an offered asset you did not pick: the clearest miss. A later use in the turn replaces it.
+- Not seen: whether the model followed the skill, a subagent's own run, and a skill the user starts with OpenClaw's
+  own command, which OpenClaw does not show to a plugin's hooks. A turn that fails sends nothing. A turn that builds
+  its prompt again, as on a retry, keeps what it used so far, and the latest select gets the feedback.
 - No prompt text, path or body is sent. You already have the request under its `recommendation_id`; keep what you
   choose, on this machine.
 - Feedback goes only to a selector whose last valid answer said `"inference":"local"`, unless the operator sets
   `sync_allow_remote = true`. Without that setting, if no sync has told the gateway yet, it first sends a
   `find_missing` with that select's pairs to `sync_url` only to learn this, and uploads nothing. That question
   takes the one sync slot and keeps the sync's wait: while a sync runs, or after a failed sync, the feedback is
-  skipped, and a failed question starts the wait like a failed sync.
+  skipped, and a failed question starts the wait like a failed sync. If your selector said `remote`, the gateway
+  asks again at most once every 10 minutes, so a selector restarted with local inference gets feedback again.
 - Each select gets at most one feedback. The gateway remembers a select for at most one hour, at most 1,024 of
-  them, and sends one feedback at a time; a feedback that finds 16 others waiting is dropped. Each exchange gets
+  them, also above 1,000 host assets, where every select is its own offer, and sends one feedback at a time; a feedback that finds 16 others waiting is dropped. Each exchange gets
   `sync_ms`, there is no retry, and a failure changes no answer.
 - `GET /relay/v1/guidance/sync` adds `feedback_enabled`, `feedback_sent`, `feedback_failed` and `feedback_skipped`
-  (remote inference, a full queue, or an inference question that could not be sent), counted since the gateway
-  started.
+  (remote inference, a full queue, an inference question that could not be sent, or a select the gateway no
+  longer remembers), counted since the gateway started.
 
 ### Check against the real asset-router
 

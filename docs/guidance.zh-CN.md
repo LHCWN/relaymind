@@ -144,7 +144,7 @@ total_ms = 12000
 - 用 HTTP 200 和 `application/json` 响应，最大 1 MiB。不能有重复的 JSON 键或非有限数字。
 - `mechanism` 是你自己的标签。不要使用 `lexical_overlap`、`gateway_lexical_fallback` 或内置选择器的名称，它们会被拒绝。
 - 没有合适项时，响应 `"outcome":"no_match","decision":"no_match","candidates":[]`。
-- 失败、无效的响应或 `"outcome":"not_ready"` 会退回到词匹配并标记 `degraded: true`，除非设置 `fallback = false`。`mechanism` 以 `:partial` 结尾的部分响应不算失败；见[让选择器保持同步](#让选择器保持同步)。
+- 失败、无效的响应、`"outcome":"not_ready"` 或 `"outcome":"unavailable"` 会退回到词匹配并标记 `degraded: true`，除非设置 `fallback = false`。`mechanism` 以 `:partial` 结尾的部分响应不算失败；见[让选择器保持同步](#让选择器保持同步)。
 - 选择器只做提议。网关只接受所提供的准确记录，提议本身不会运行任何东西。
 
 主机资产超过 1,000 项时，你的选择器会收到词匹配最好的 1,000 项；内置步骤最多处理 20,000 项。托管服务前面需要一个小型本地进程，因为 URL 必须在环回地址上。
@@ -178,7 +178,7 @@ openclaw skills info <name> --json        # filePath 是该技能的 SKILL.md，
 
 这种设计有两个代价。`not_ready` 针对整个选择请求，所以只要有一个配对尚未索引，每一轮都会退回到词匹配，直到同步让它建立索引，除非你给出部分响应（见下文）。另外，挂起的同步最多会占用唯一的同步位置三个 `sync_ms`（默认 3 分钟），在此期间其他同步都会被跳过。
 
-如果选择器能仅凭选择请求本身为尚未索引的配对排序（例如对它们的名称和描述做词匹配），就可以在索引完所有提供的配对之前作答（规范 0.75）。对整个提供响应 `ranked` 或 `no_match`，并让 `mechanism` 以 `:partial` 结尾，例如 `"mechanism":"my_rule:partial"`。网关原样传递该响应，标记 `degraded: false`，不额外加入自己的词匹配，并且和 `not_ready` 之后一样，在作答之后同步。如果你无法为尚未索引的部分排序，就响应 `not_ready`。比较运行会把部分响应单独计为一列，因为它们不是你的完整排序。
+如果选择器能仅凭选择请求本身为尚未索引的配对排序（例如对它们的名称和描述做词匹配），就可以在索引完所有提供的配对之前作答（规范 0.75）。对整个提供响应 `ranked` 或 `no_match`，并让 `mechanism` 以 `:partial` 结尾，例如 `"mechanism":"my_rule:partial"`。凡是因建立索引以外的原因而不是你完整排序的响应，例如嵌入模型不可用、你改用词匹配作答时，也使用同一标签。网关原样传递该响应，标记 `degraded: false`，不额外加入自己的词匹配，并且和 `not_ready` 之后一样，在作答之后同步；没有缺失时，这次同步只是一个 `find_missing`。如果你无法为尚未索引的部分排序，就响应 `not_ready`。比较运行会把部分响应单独计为一列，因为它们不是你的完整排序。
 
 `scripts/guidance_selector_server.py --sync-root DIR` 是这个协议的参考选择器：它提供 `/sync` 和 `/feedback`，只读取其根目录下的文件，并在拥有所有提供的配对之前响应 `not_ready`，加上 `--partial` 时则给出 `:partial` 响应。它仍然按描述排序，所以它展示的是协议，而不是更好的排序。
 
@@ -201,17 +201,19 @@ openclaw skills info <name> --json        # filePath 是该技能的 SKILL.md，
 {"schema_version":1,"operation":"feedback","feeder_id":"guidance",
  "recommendation_id":"7e46678a-d704-4027-b916-2c84de864101",
  "used":[{"asset_id":"host:skill:pdf-merge","content_hash":"<as offered>","kind":"skill","signal":"loaded"},
-         {"asset_id":"host:mcp_tool:weather","content_hash":"<as offered>","kind":"mcp_tool","signal":"executed"}]}
+         {"asset_id":"host:mcp_tool:weather","content_hash":"<as offered>","kind":"mcp_tool","signal":"executed"}],
+ "not_offered":0}
 ```
 
 用 `{"schema_version":1,"operation":"feedback","inference":"local","missing":null,"results":null}` 响应。
 
-- `used` 包含这一轮用过的所有提供的资产，无论你是否选中了它。空列表也是一种信号。
-- `loaded` 表示对该技能的 `skills_read`，或在其目录内的普通 `read`，没有出错就返回了；`executed` 表示对该工具的调用没有出错就返回了。模型是否遵循了技能的说明无法观察到，子智能体自己的运行也不计入。失败的一轮不发送任何内容。
+- `used` 包含这一轮用过的所有提供的资产，无论你是否选中了它。空列表也是一种信号。`not_offered` 统计这一轮用过、但该选择请求没有提供的资产（例如主机资产超过 1,000 个时），从而说明丢失资产的是提供上限，而不是你的排序。
+- `loaded` 表示对该技能的 `skills_read`，或在其目录内的普通 `read`，没有出错就返回了；`executed` 表示对该工具的调用没有出错就返回了。在 `limit = "strict"` 下，`refused` 表示限制拒绝了对一个你没有选中的、已提供资产的调用：这是最清楚的漏选信号。同一轮中之后的使用会取代它。
+- 观察不到：模型是否遵循了技能的说明、子智能体自己的运行，以及用户用 OpenClaw 自己的命令启动的技能（OpenClaw 不向插件的钩子显示这一点）。失败的一轮不发送任何内容。再次构建提示词的一轮（例如重试）会保留到目前为止的使用，由最新的选择请求得到反馈。
 - 不发送提示词文本、路径或正文。你已经按 `recommendation_id` 拥有这个请求；保留什么由你决定，且只在本机保存。
-- 只有当选择器最近一次有效响应说 `"inference":"local"` 时才发送反馈，除非运维人员设置 `sync_allow_remote = true`。没有这个设置时，如果还没有同步告诉过网关，网关会先向 `sync_url` 发送一个包含该选择请求配对的 `find_missing`，只用来了解这一点，不上传任何内容。这个询问占用唯一的同步位置，并遵守同步的等待：同步正在运行时，或同步失败后的等待期间，这次反馈会被跳过；询问失败时，和同步失败一样开始等待。
-- 每个选择请求最多得到一次反馈。网关最多记住 1,024 个选择请求，每个最多一小时，并且同一时间只发送一个反馈；发现已有 16 个在等待的反馈会被丢弃。每次交换使用 `sync_ms`，不重试，失败不会改变任何响应。
-- `GET /relay/v1/guidance/sync` 增加了 `feedback_enabled`、`feedback_sent`、`feedback_failed` 和 `feedback_skipped`（远程推理、队列已满，或无法发送推理询问），从网关启动起计数。
+- 只有当选择器最近一次有效响应说 `"inference":"local"` 时才发送反馈，除非运维人员设置 `sync_allow_remote = true`。没有这个设置时，如果还没有同步告诉过网关，网关会先向 `sync_url` 发送一个包含该选择请求配对的 `find_missing`，只用来了解这一点，不上传任何内容。这个询问占用唯一的同步位置，并遵守同步的等待：同步正在运行时，或同步失败后的等待期间，这次反馈会被跳过；询问失败时，和同步失败一样开始等待。如果你的选择器说过 `remote`，网关最多每 10 分钟再询问一次，这样以本地推理重新启动的选择器会再次得到反馈。
+- 每个选择请求最多得到一次反馈。网关最多记住 1,024 个选择请求（主机资产超过 1,000 个、每个选择请求各自是一份提供时也一样），每个最多一小时，并且同一时间只发送一个反馈；发现已有 16 个在等待的反馈会被丢弃。每次交换使用 `sync_ms`，不重试，失败不会改变任何响应。
+- `GET /relay/v1/guidance/sync` 增加了 `feedback_enabled`、`feedback_sent`、`feedback_failed` 和 `feedback_skipped`（远程推理、队列已满、无法发送推理询问，或网关已不再记得的选择请求），从网关启动起计数。
 
 ### 用真实的 asset-router 检查
 

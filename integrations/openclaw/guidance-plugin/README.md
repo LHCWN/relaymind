@@ -64,8 +64,9 @@ descriptions only after that.
 Selector feedback (spec 0.75): when the gateway's answer carries a `recommendation_id`, which it does only when
 the operator set `feedback_url` for a third-party selector, the plugin records which offered skills that run
 loaded (`skills_read`, or a plain `read` inside the skill's folder) and which offered tools it called, counting
-only calls that returned without error. When the run ends with success it sends them to the gateway, picked or
-not, with no prompt text or path; a failed run sends nothing. It needs no setting of its own, and with no
+only calls that returned without error; with `limit: "strict"` it also reports an offered asset the limit refused.
+When the run ends with success it sends them to the gateway, picked or not, with no prompt text or path; a failed
+run sends nothing. A skill the user starts with OpenClaw's own command is not seen. It needs no setting of its own, and with no
 `recommendation_id` it sends nothing. See [the tutorial](../../../docs/guidance.md#tell-your-selector-what-a-turn-used).
 
 Tools: OpenClaw's plugin API gives a plugin no list of the host's tools, so tools come from the

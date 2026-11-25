@@ -17,6 +17,8 @@ const ENDPOINT = "/relay/v1/guidance";
 const FEEDBACK_ENDPOINT = "/relay/v1/guidance/feedback";
 // The gateway takes at most this many used assets in one feedback (spec 0.75).
 const MAX_USED = 1000;
+// The gateway answers feedback at once, so its request gets a short time of its own.
+const FEEDBACK_TIMEOUT_MS = 2000;
 const DEFAULT_TIMEOUT_MS = 13_000;
 const MAX_TIMEOUT_MS = 14_000; // Below the host's 15 s limit for this hook.
 const MAX_TASK_BYTES = 8192;
@@ -552,7 +554,7 @@ async function report(config, token, feedback) {
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ schema_version: 1, recommendation_id: feedback.id, used: [...feedback.used.values()] }),
     redirect: "manual",
-    signal: AbortSignal.timeout(config.timeoutMs),
+    signal: AbortSignal.timeout(Math.min(config.timeoutMs, FEEDBACK_TIMEOUT_MS)),
   });
   await response.body?.cancel().catch(() => {});
 }
@@ -701,7 +703,6 @@ function register(api) {
   // and every hook falls back to the event's run ID the same way.
   const feedbackKey = (event, ctx) => (feedbackRuns.has(ctx?.runId) ? ctx.runId : event?.runId);
   api.on("before_prompt_build", async (event, ctx) => {
-    if (typeof ctx?.runId === "string") feedbackRuns.delete(ctx.runId);
     const state = strict && ctx?.sessionKey ? session(ctx.sessionKey) : null;
     // A failure, or a turn the user did not start, has no limit.
     if (state) state.limit = null;
@@ -738,7 +739,11 @@ function register(api) {
       // An empty ID would be refused by the gateway, so it asks for no feedback.
       if (typeof answer.recommendation_id === "string" && answer.recommendation_id && typeof ctx?.runId === "string") {
         const offer = state?.offer ?? newOffer(snapshot, assets, ctx?.workspaceDir);
-        feedbackRuns.set(ctx.runId, { id: answer.recommendation_id, offer, used: new Map() });
+        // A run can build its prompt again, as on a retry: what it used so far still counts, and
+        // the latest select gets the feedback.
+        const used = feedbackRuns.get(ctx.runId)?.used ?? new Map();
+        feedbackRuns.delete(ctx.runId);
+        feedbackRuns.set(ctx.runId, { id: answer.recommendation_id, offer, used });
         if (feedbackRuns.size > MAX_SESSIONS) feedbackRuns.delete(feedbackRuns.keys().next().value);
       }
       const hint = buildHint(picks, { decision: answer.decision, strict });
@@ -782,11 +787,25 @@ function register(api) {
     }
   });
   if (!strict) return;
+  // An offered asset the strict limit turned down is the clearest sign the selector missed it
+  // (spec 0.75). A use that worked later replaces it; a refusal never replaces a use.
+  const noteRefusal = (event, ctx) => {
+    try {
+      const feedback = feedbackRuns.get(feedbackKey(event, ctx));
+      const asset = feedback && usedOffered(event?.toolName, event?.params, feedback.offer, ctx);
+      const key = asset && `${asset.kind}:${asset.name}`;
+      if (key && !feedback.used.has(key) && feedback.used.size < MAX_USED) feedback.used.set(key, { ...asset, signal: "refused" });
+    } catch (error) {
+      api.logger.debug?.(`relaymind-guidance did not record a refusal: ${error?.name ?? "error"}`);
+    }
+  };
   api.on("before_tool_call", (event, ctx) => {
     try {
       const limit = stateOf(ctx)?.limit;
       if (!limit) return undefined;
-      return checkCall(event?.toolName, event?.params, limit, ctx);
+      const result = checkCall(event?.toolName, event?.params, limit, ctx);
+      if (result?.block) noteRefusal(event, ctx);
+      return result;
     } catch (error) {
       api.logger.debug?.(`relaymind-guidance did not check a call: ${error?.name ?? "error"}`);
       return undefined;

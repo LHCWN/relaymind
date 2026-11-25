@@ -10,9 +10,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Specification 0.75 (RM47; RM48; AC42; AC43; section 7.7; #301): two optional additions for a third-party guidance
   selector. Neither changes selection v2 or selector sync for a selector that does not use them.
-  - **Partial answer.** While some offered pairs are not indexed, a selector may answer `ranked` or `no_match` over
-    the whole offer with a `mechanism` ending in `:partial`, ranking the part it has not indexed from the select
-    itself. The gateway passes it on with `degraded` false, adds no word match of its own, and still runs the sync
+  - **Partial answer.** While some offered pairs are not indexed, or a ranking stage it needs is not available, a
+    selector may answer `ranked` or `no_match` over the whole offer with a `mechanism` ending in `:partial`, ranking
+    what it cannot rank fully from the select itself. The gateway passes it on with `degraded` false, adds no word match of its own, and still runs the sync
     it would run after `not_ready`. `scripts/guidance_compare.py` counts such answers in a new `Partial` column, and
     the benchmark warm-ups wait for the full ranking. `scripts/guidance_selector_server.py --partial` shows it.
   - **Selector feedback (new RM48, AC43).** With `guidance.feedback_url`, which needs `sync_url`, an answer whose
@@ -21,7 +21,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     run loaded and which offered tools it called without error, picked or not. The gateway sends them to the selector
     as pairs of that select (`operation:feedback`), with no prompt text or path, and only to a selector that
     reported local inference unless `sync_allow_remote` is set; without that setting, when the inference is not
-    known yet, it first asks with a `find_missing` that uploads nothing. The plugin reports at most 1,000 assets.
+    known yet, it first asks with a `find_missing` that uploads nothing, and it asks again every 10 minutes while
+    the selector says `remote`. The plugin reports at most 1,000 assets; under `limit = "strict"` it also reports an
+    offered asset the limit refused (`refused`). The feedback sent to the selector counts the used assets that select
+    did not offer (`not_offered`), and a feedback for a select the gateway no longer remembers counts as skipped.
+  - A selector answer with `outcome:"unavailable"` now falls back like `not_ready`, and starts no sync.
   - `docs/SPECIFICATION.md` 0.75 is a new reviewed anchor in `src/relaymind/evaluation/asset_evidence.py`, as
     earlier revisions were; it is subject to the owner's review. A failed run sends nothing. The gateway remembers at most 1,024
     selects for at most one hour, sends one feedback at a time, and counts sent, failed and skipped feedback in

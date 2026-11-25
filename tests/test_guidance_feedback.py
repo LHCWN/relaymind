@@ -126,6 +126,7 @@ def test_used_assets_reach_the_selector_as_pairs_of_that_select_picked_or_not():
             operation="feedback",
             feeder_id="guidance",
             recommendation_id=select["recommendation_id"],
+            not_offered=0,
             used=[
                 dict(
                     asset_id="host:skill:pdf-merge",
@@ -296,7 +297,8 @@ def test_a_feedback_answer_saying_remote_stops_later_feedback():
     tell(http, ask(http)["recommendation_id"], [])
     assert len(router.feedbacks) == 2
     tell(http, second, [])
-    assert len(router.feedbacks) == 2 and feedback_counts(http)["feedback_skipped"] == 1
+    # Skipped twice: the select already taken, and the remote inference.
+    assert len(router.feedbacks) == 2 and feedback_counts(http)["feedback_skipped"] == 2
 
 
 @pytest.mark.parametrize("where", ["feedback", "inference"])
@@ -462,13 +464,90 @@ def test_the_launched_gateway_sends_feedback_to_the_reference_selector(tmp_path)
     assert index.feedbacks == [(result["recommendation_id"], ["host:mcp_tool:weather"])]
 
 
-def test_an_unavailable_answer_has_no_id_and_starts_no_sync_even_labelled_partial():
-    """Review of PR 306: only ranked, no_match and not_ready get an ID, and only ranked or no_match
-    can be partial (spec 0.75)."""
+def test_an_unavailable_answer_falls_back_has_no_id_and_starts_no_sync_even_labelled_partial():
+    """Review of PR 306: `unavailable` is a selector failure, as `not_ready` is, so word match
+    answers; only ranked, no_match and not_ready get an ID, and only ranked or no_match can be
+    partial (spec 0.75)."""
     router = Router(outcome="unavailable", mechanism="router:partial")
     answer = ask(client(router))
+    assert answer["chosen_by"] == "word_match" and answer["degraded"] is True
+    assert {"stage": "third_party", "outcome": "failed"} in [
+        {k: s[k] for k in ("stage", "outcome")} for s in answer["stages"]
+    ]
     assert "recommendation_id" not in answer
     assert router.syncs == []
+
+
+def test_an_unavailable_answer_without_the_fallback_is_a_degraded_no_match():
+    router = Router(outcome="unavailable")
+    answer = ask(client(router, replace(FEEDING, fallback=False)))
+    assert answer["decision"] == "no_match" and answer["degraded"] is True
+    assert answer["mechanism"] == "third_party_failed"
+
+
+def test_a_feedback_for_a_select_no_longer_remembered_is_counted_as_skipped():
+    """Review of PR 306: an operator must tell "no feedback arrives" from "feedback is lost"."""
+    router = Router()
+    http = client(router)
+    recommendation_id = ask(http)["recommendation_id"]
+    tell(http, recommendation_id, [])
+    tell(http, recommendation_id, [])
+    tell(http, "7e46678a-d704-4027-b916-2c84de864101", [])
+    assert feedback_counts(http)["feedback_skipped"] == 2
+
+
+def test_above_the_offer_limit_every_select_is_remembered_up_to_max_ids(monkeypatch):
+    """Review of PR 306: above 1,000 host assets each select is its own offer, and still the
+    gateway remembers MAX_IDS selects, not fewer, sharing the pairs between them."""
+    monkeypatch.setattr(feedback_module, "MAX_IDS", 40)
+    router = Router()
+    http = client(router)
+    many = [dict(name=f"tool-{i}", kind="mcp_tool", description=f"Tool {i}") for i in range(1001)]
+    ids = []
+    for i in range(40):
+        body = dict(BODY, task_text=f"tool {i} please", assets=[SKILL, *many])
+        ids.append(
+            http.post("/relay/v1/guidance", json=body, headers=AUTH).json()["recommendation_id"]
+        )
+    revisions = {s["catalog_revision"] for s in router.selects}
+    assert len(revisions) > 16
+    assert all(tell(http, i, [USED_SKILL]).json()["queued"] for i in ids)
+
+
+def test_a_remembered_remote_inference_is_asked_again_after_ten_minutes():
+    """Review of PR 306: a selector restarted with local inference may never say not_ready."""
+    router = Router(inference="remote")
+    clock = Clock()
+    http = client(router, clock=clock)
+    tell(http, ask(http)["recommendation_id"], [])
+    tell(http, ask(http)["recommendation_id"], [])
+    assert [s["operation"] for s in router.syncs] == ["find_missing"] and router.feedbacks == []
+    router.inference = "local"
+    clock.now += 601
+    tell(http, ask(http)["recommendation_id"], [])
+    assert [s["operation"] for s in router.syncs] == ["find_missing", "find_missing"]
+    assert len(router.feedbacks) == 1
+
+
+def test_feedback_counts_the_used_assets_the_select_did_not_offer():
+    """Review of PR 306: it tells whether the offer limit, not the selector, lost an asset."""
+    router = Router()
+    http = client(router)
+    others = [dict(name=f"gone-{i}", kind="skill", signal="loaded") for i in range(2)]
+    tell(http, ask(http)["recommendation_id"], [*others, USED_SKILL])
+    assert router.feedbacks[0]["not_offered"] == 2
+    assert len(router.feedbacks[0]["used"]) == 1
+
+
+@pytest.mark.parametrize(
+    "used", [dict(USED_SKILL, signal="refused"), dict(USED_TOOL, signal="refused")]
+)
+def test_a_refused_asset_is_feedback_too(used):
+    """Review of PR 306: under the strict limit a refused offered asset is the clearest miss."""
+    router = Router()
+    http = client(router)
+    tell(http, ask(http)["recommendation_id"], [used])
+    assert router.feedbacks[0]["used"][0]["signal"] == "refused"
 
 
 def test_a_feedback_arriving_as_the_lock_passes_on_still_finds_the_queue_full():

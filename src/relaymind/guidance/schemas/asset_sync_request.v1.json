@@ -11,15 +11,22 @@
     "feeder_id": {"const": "guidance"},
     "assets": {"type": "array", "maxItems": 1000},
     "recommendation_id": {"type": "string", "minLength": 1, "maxLength": 128},
-    "used": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/used"}}
+    "used": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/used"}},
+    "not_offered": {"type": "integer", "minimum": 0}
   },
   "allOf": [
     {
       "if": {"properties": {"operation": {"const": "feedback"}}},
-      "then": {"required": ["recommendation_id", "used"], "not": {"required": ["assets"]}},
+      "then": {"required": ["recommendation_id", "used", "not_offered"], "not": {"required": ["assets"]}},
       "else": {
         "required": ["assets"],
-        "not": {"anyOf": [{"required": ["recommendation_id"]}, {"required": ["used"]}]}
+        "not": {
+          "anyOf": [
+            {"required": ["recommendation_id"]},
+            {"required": ["used"]},
+            {"required": ["not_offered"]}
+          ]
+        }
       }
     },
     {
@@ -37,11 +44,11 @@
         "asset_id": {"type": "string", "minLength": 1},
         "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}(?![\\s\\S])"},
         "kind": {"enum": ["skill", "mcp_tool"]},
-        "signal": {"enum": ["loaded", "executed"]}
+        "signal": {"enum": ["loaded", "executed", "refused"]}
       },
       "if": {"properties": {"kind": {"const": "skill"}}},
-      "then": {"properties": {"signal": {"const": "loaded"}}},
-      "else": {"properties": {"signal": {"const": "executed"}}}
+      "then": {"properties": {"signal": {"enum": ["loaded", "refused"]}}},
+      "else": {"properties": {"signal": {"enum": ["executed", "refused"]}}}
     },
     "pair": {
       "type": "object",
