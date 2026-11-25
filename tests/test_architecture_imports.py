@@ -150,6 +150,13 @@ def _package_of(path: Path) -> str:
     return rel.parts[0] if len(rel.parts) > 1 else rel.stem
 
 
+# Documented narrow module-level restrictions on specific cross-package edges.
+ALLOWED_MODULE_EDGES: dict[tuple[str, str], frozenset[str]] = {
+    ("skills", "tools"): frozenset({"relaymind.tools.registry"}),
+    ("recommendations", "api"): frozenset({"relaymind.api.errors"}),
+}
+
+
 def test_package_imports_match_documented_architecture_contract():
     """#297: every cross-package import obeys docs/ARCHITECTURE.md."""
     violations: list[str] = []
@@ -172,6 +179,12 @@ def test_package_imports_match_documented_architecture_contract():
                 continue
             if target not in allowed:
                 violations.append(f"{path.relative_to(REPO)}: {pkg} -> {target} ({mod})")
+                continue
+            allowed_mods = ALLOWED_MODULE_EDGES.get((pkg, target))
+            if allowed_mods is not None and mod not in allowed_mods:
+                violations.append(
+                    f"{path.relative_to(REPO)}: {pkg} -> {mod} (allowed: {sorted(allowed_mods)})"
+                )
     assert not violations, "Forbidden cross-layer imports:\n" + "\n".join(violations)
     assert discovered_packages <= set(ALLOWED_PACKAGE_EDGES)
 
