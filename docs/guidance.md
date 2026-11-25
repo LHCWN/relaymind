@@ -349,11 +349,26 @@ upload carries only the record (`content: null`). The record's name and descript
 selector indexes it from that. The report's `sync` field shows how long the sync took. That time is not counted in
 any case's latency.
 
-| Metric | Meaning | Better |
+Judge a selector by **macro precision and macro recall** first (spec 0.74). They are measured over the prompts
+that have an answer to find: one-skill prompts and big workflows. Every pick counts, and a prompt with no pick
+scores 0, so a selector cannot look precise by staying silent. The tool also prints them per prompt language, under
+"By language".
+
+| Main metric | Meaning | Better |
+| --- | --- | --- |
+| Macro P | Mean over prompts of the share of picks that are right; 0 for a prompt with no pick | Higher |
+| Macro R | Mean over prompts of how much was found: 1 when a one-skill prompt got any acceptable asset; for a big workflow, the share of its needed set | Higher |
+| Micro P, Micro R | The same over all picks and all needed assets together | Higher |
+| P wins/losses, R wins/losses (p) | Prompts where only one side had better precision, or recall, with a sign test | More wins |
+
+Lowering a threshold usually raises recall and lowers precision. Read both together, never one alone. The other
+metrics explain the result:
+
+| Secondary metric | Meaning | Better |
 | --- | --- | --- |
 | First pick | The first pick is right | Higher |
 | MRR | Mean of 1 / the rank of the first right pick, 0 when none | Higher |
-| P@3 | Of the first 3 picks, the share that are right. Prompts with no pick are left out | Higher |
+| P@3 | Of the first 3 picks, the share that are right. Prompts with no pick are left out, so a selector that often answers `no_match` looks better here than it is | Higher |
 | R@3, R@8 | The first 3 or 8 picks hold a right answer | Higher |
 | F1@3 | 2 x P@3 x R@3 / (P@3 + R@3) | Higher |
 | Picks | Picks per prompt, as delivered | Lower |
@@ -365,7 +380,7 @@ any case's latency.
 | Set exact | On a big workflow, of the picks, the share that are needed | Higher |
 | Set picks | On a big workflow, picks per prompt | About the set's size |
 | Failed | A stage or the selector failed | Lower |
-| Wins/losses (p) | Prompts where only one side did better, with a sign test; repeated runs of a prompt count once | More wins |
+| First pick wins/losses (p) | Prompts where only one side had a right first pick, or more of a workflow's set, with a sign test; repeated runs of a prompt count once | More wins |
 
 Selection v2 has no `choose`, so a third-party selector shows 0% under Asked, and a report of the platform benchmark
 shows "-". Failed counts a selector that did not answer itself, even when a fallback did. Develop on
@@ -405,15 +420,92 @@ warm-up, the gateway's sync counts, and how the selector answered the measured t
 Results so far are in [EVIDENCE.md](EVIDENCE.md#2026-11-05--per-prompt-guidance-development-runs-284). They are
 development diagnostics: the expected answers are developer-authored, and they do not satisfy AC25 to AC37.
 
-## Compare asset-router with the default
+## Compare your selector with the default, step by step
 
-This runs both benchmarks with asset-router as the third-party selector and the built-in default as the baseline
-(spec 0.73 section 7.7; RM47). Selection compares picks with the expected skills. Real turns check whether the model
-then loads the right skill, and at what input size. Everything except the host's model runs on your machine.
+This runs both benchmarks for any third-party selector against the built-in default (spec 0.74 section 7.7;
+RM47). Selection checks the picks against the expected skills. Real turns check whether the host's model then loads
+the right skill, and at what input size. asset-router is the worked example at the end; nothing in steps 1 to 5 is
+specific to it.
 
-**1. Local embeddings.** asset-router does not embed text itself. It calls an OpenAI-compatible
-`{embeddings.baseUrl}/v1/embeddings`. Run llama.cpp's server with a multilingual model on loopback, so the router
-reports `inference: local` and may read skill files:
+**1. What your selector needs.**
+
+- `POST /select` that speaks selection v2, as in [Connect your own algorithm](#connect-your-own-algorithm). It
+  reports a `name` and a `version`. Pass the same values to the harness, because the gateway checks them.
+- `POST /sync`, only if your selector builds an index and answers `not_ready` for assets it has not indexed yet. See
+  [Keep your selector in sync](#keep-your-selector-in-sync). A selector with no index needs no sync.
+- It listens on loopback. If it calls a model, such as an embedding model, run that model on loopback too. Then
+  the selector can report `inference: local` and no prompt leaves the machine.
+
+**2. Start two instances.** One is for selection, the other for real turns. Each has its own fresh store or
+index, because the two runs offer different assets. The real-turn instance reads skill files only from the folder
+where the turn harness installs them, `<turn output>/workspace/skills`. If your selector drops a root that does not
+exist, create that folder before you start it.
+
+**3. Selection.** Run the default, your selector, and, as a reference, a model picker over the same prompts:
+
+```bash
+python scripts/guidance_similar_benchmark.py --split holdout --arm word --output word.json
+python scripts/guidance_similar_benchmark.py --split holdout --arm third_party \
+  --selector-url http://127.0.0.1:<port>/select --sync-url http://127.0.0.1:<port>/sync \
+  --selector-name <name> --selector-version <version> --output mine.json
+RELAYMIND_EXTERNAL_API_KEY=... python scripts/guidance_similar_benchmark.py --split holdout \
+  --arm external_picker --model-base-url https://host/v1 --model some-model \
+  --request-option reasoning_effort=low --output picker.json
+python scripts/guidance_compare.py --baseline word=word.json --arm mine=mine.json \
+  --arm picker=picker.json --by-lane --output compare.json
+```
+
+Leave out `--sync-url` for a selector with no index. Without a background, only the 70 holdout skills are offered.
+To offer the catalog's skills and tools too, as the recorded runs do, build the source catalog
+([SOURCE_BENCHMARK.md](SOURCE_BENCHMARK.md)) and add `--background-catalog <catalog folder>` to every arm. Before
+you read the numbers, check that the report's `sync.outcome` is `ready`, that no row has `degraded: true`, and
+that Failed and Early are 0. Tune on `--split development`, and run the holdout once for the report.
+
+A slow selector, such as one with a large embedding model on a CPU, can miss the gateway's time limit. A row then
+falls back to word match and shows `degraded: true`. Give such a selector more time with `--total-ms` (for example
+60000), and a long first indexing more with `--sync-wait-s`. Record both, and run again any report that has a
+`degraded` row. Keep the selector and its model server running until the whole run ends.
+
+**4. Real turns.** The default arm runs twice, because identical runs differ:
+
+```bash
+RELAYMIND_EXTERNAL_API_KEY=... python scripts/guidance_turn_benchmark.py --similar holdout --per-lane 20 \
+  --arms default,default_repeat,third_party --model-base-url https://host/v1 --model some-model \
+  --third-party-url http://127.0.0.1:<turn port>/select \
+  --third-party-sync-url http://127.0.0.1:<turn port>/sync \
+  --third-party-name <name> --third-party-version <version> --output /abs/turns
+```
+
+Run a short pilot first with `--per-lane 2`, and read the token counts in its `summary.json`. The output folder holds
+`summary.json` (right skill, input sizes and time per arm), `runs.jsonl` (one line per turn) and `sync.json` (the
+warm-up and how the selector answered the measured turns). With `--similar`, the host offers the 70 holdout skills
+and its own bundled skills; the catalog is not installed. To add a selector to runs you already have, run only its
+arm (`--arms third_party`) with the same `--similar`, `--per-lane`, `--seed` and model. Its rows then pair with the
+earlier ones prompt by prompt.
+
+Before the measured turns, the harness checks two prompts and stops if neither got a hint ("no prompt got a hint").
+A selector that answers `no_match` almost everywhere at its threshold stops there, and so does one that is down.
+The gateway's time limit in real turns is fixed at 12 s.
+
+**5. Read the results.**
+
+- Lead with **Macro P and Macro R**, overall and under "By language". P wins/losses and R wins/losses show whether
+  a difference is more than noise. A change that raises one and lowers the other is a trade-off, not a gain.
+- Read false picks on unrelated prompts beside them. A selector that picks something for every prompt gets high
+  recall and fails there.
+- In real turns, compare the right-skill count per language with both default runs. The two default runs already
+  differ on several prompts. Count the turns that got `no_match` (`measured_selects` in `sync.json`, one select per turn after the warm-up, the
+  check prompts included, since they are measured turns too): the guided arms
+  hide the skill list, so such a turn has no hint and no list.
+- Selection latency on one machine that also runs the selector's model is not a speed result. These data and
+  expected answers were written by a model, so the results are development diagnostics and do not satisfy AC25 to
+  AC37.
+
+### Example: asset-router with local embeddings
+
+asset-router does not embed text itself. It calls an OpenAI-compatible `{embeddings.baseUrl}/v1/embeddings` and
+compares the prompt with each asset's description. Serve the embedding model with llama.cpp's server on loopback,
+so the router reports `inference: local` and may read skill files:
 
 ```bash
 # llama.cpp b12237, llama-b12237-bin-ubuntu-x64.tar.gz,
@@ -424,12 +516,8 @@ llama-server -m bge-m3-q8_0.gguf --embeddings --pooling cls --host 127.0.0.1 --p
   -c 8192 -b 8192 -ub 8192 -t 6
 ```
 
-BGE-M3 makes its dense vectors from the CLS token. The 8,192-token batch holds any text the router sends (at most
-4,000 characters) in one piece.
-
-**2. asset-router.** Use a checkout with `npm ci` done, such as the one `scripts/asset_router_interop.py` keeps in
-`~/.cache/relaymind-interop`. Run two instances, each from its own working folder with a fresh store. The router
-reads `config/local.json` from that folder:
+Use an asset-router checkout with `npm ci` done, such as the one `scripts/asset_router_interop.py` keeps in
+`~/.cache/relaymind-interop`. Each instance runs from its own working folder and reads `config/local.json` from it:
 
 ```json
 {
@@ -446,44 +534,51 @@ cd /abs/router-select && node --import <checkout>/node_modules/tsx/dist/loader.m
   <checkout>/src/apps/server/main.ts
 ```
 
-The selection benchmark sends no files, so its instance needs no roots. For real turns, use port 8941, another
-store, and `"allowedRoots": ["/abs/turns/workspace/skills"]`, the folder where the turn harness installs skills under
-its `--output`. Create that folder before you start the router, because the router drops a root that does not exist.
+The selection instance needs no roots. For real turns, use port 8941, another store, and
+`"allowedRoots": ["/abs/turns/workspace/skills"]`.
 
-**3. Selection.** Run the default, asset-router and, as a reference, a model picker. Then compare:
+**Other embedding models.** Any model llama.cpp can serve as embeddings works. Set `embeddings.model`, set
+`embeddings.dimensions` to the model's vector size, and use a fresh store, because vectors of two models cannot be
+mixed. These have been measured (results in [EVIDENCE.md](EVIDENCE.md#2026-11-24--asset-router-with-four-embedding-models-rm47-ac42)):
 
-```bash
-python scripts/guidance_similar_benchmark.py --split holdout --arm word --output word.json
-python scripts/guidance_similar_benchmark.py --split holdout --arm third_party \
-  --selector-url http://127.0.0.1:8940/select --sync-url http://127.0.0.1:8940/sync \
-  --selector-name asset-router --output router.json
-RELAYMIND_EXTERNAL_API_KEY=... python scripts/guidance_similar_benchmark.py --split holdout \
-  --arm external_picker --model-base-url https://host/v1 --model some-model \
-  --request-option reasoning_effort=low --output picker.json
-python scripts/guidance_compare.py --baseline word=word.json --arm asset-router=router.json \
-  --arm picker=picker.json --by-lane
-```
+| Model | GGUF | `--pooling` | `dimensions` | Notes |
+| --- | --- | --- | ---: | --- |
+| `bge-m3` | `ggml-org/bge-m3-Q8_0-GGUF`, above | `cls` | 1024 | asset-router's `minScore` default was set on this model |
+| `ibm-granite/granite-embedding-97m-multilingual-r2` at `835ad14` | none published; convert to F16 | `cls` | 384 | 97M parameters |
+| `nomic-ai/nomic-embed-text-v2-moe-GGUF` at `ffbcf4c`, `nomic-embed-text-v2-moe.Q8_0.gguf` (sha256 `06e7a7e5…3cff`) | published | `mean` | 768 | at most 512 tokens per text: serve it with `-c 2048 -np 4 -b 512 -ub 512`; trained with `search_query: ` and `search_document: ` prefixes, which asset-router does not send |
+| `ThakiCloud/SKILLRET-Embedding-0.6B` at `67f1594` | none published; convert to Q8_0 | `last` | 1024 | fine-tuned for skill retrieval, in English; trained with an `Instruct: … Query:` prompt on queries, which asset-router does not send |
 
-Without a background the offer is only the 70 holdout skills. To offer the catalog's skills and tools too, as the
-recorded runs do, build the source catalog ([SOURCE_BENCHMARK.md](SOURCE_BENCHMARK.md)) and add
-`--background-catalog <catalog folder>` to every arm. Its skills are the ones the turn harness installs as host
-skills. Check that the router report's `sync.outcome` is `ready` and that no row has `degraded: true`.
-
-**4. Real turns.** The default arm runs twice, because identical runs differ:
+To convert a model that has no GGUF, download it at a pinned revision, check its `model.safetensors` against the
+SHA-256 that Hugging Face lists, and run the converter of the same llama.cpp release:
 
 ```bash
-RELAYMIND_EXTERNAL_API_KEY=... python scripts/guidance_turn_benchmark.py --similar holdout --per-lane 20 \
-  --arms default,default_repeat,third_party --model-base-url https://host/v1 --model some-model \
-  --third-party-url http://127.0.0.1:8941/select --third-party-sync-url http://127.0.0.1:8941/sync \
-  --third-party-name asset-router --output /abs/turns
+python <llama.cpp b12237 source>/convert_hf_to_gguf.py <model folder> --outtype q8_0 \
+  --outfile model-q8_0.gguf
 ```
 
-Run a short pilot first with `--per-lane 2`, and read the token counts in its `summary.json`. The output folder holds
-`summary.json` (right skill, input sizes and time per arm), `runs.jsonl` (one line per turn) and `sync.json` (the
-warm-up and how the router answered the measured turns). With `--similar`, the host offers the 70 holdout skills and
-its own bundled skills; the catalog is not installed.
+Then check that the server's vectors match the original model. Embed a few English and Chinese texts with
+`sentence-transformers` and through `/v1/embeddings`: the cosine of each pair should be at least 0.99. A wrong
+`--pooling` gives vectors that still look plausible, so this check is not optional.
 
-**Read the results with care.** Selection latency on one machine that also runs the embeddings server is not a
-speed result. These data and expected answers were written by a model, so the results are development diagnostics
-and do not satisfy AC25 to AC37. Results so far are in
-[EVIDENCE.md](EVIDENCE.md#2026-11-23--asset-router-against-the-default-rm47-ac42).
+**Set `minScore` for each model.** asset-router keeps a candidate only above `minScore` (0.55 by default), and that
+value was set on `bge-m3`. Models score on very different scales. On the holdout, the right skill's median cosine
+with an English prompt was 0.60 with `bge-m3`, 0.87 with granite, 0.54 with nomic and 0.42 with SKILLRET.
+With the default threshold, granite therefore keeps almost everything, and nomic and SKILLRET almost nothing. For another model,
+first see its scale and how well it ranks by embedding alone, with no selector involved:
+
+```bash
+python scripts/guidance_embedding_probe.py --url http://127.0.0.1:8950 --split development \
+  --output probe.json
+```
+
+It reports, for English, mixed and pure Chinese prompts, how often the right skill ranks first or in the top 3
+among the split's skills, and its cosine (minimum, median, maximum). `--query-prefix` and `--document-prefix` show
+what a model's prompts would add. Then set the threshold in the router's config, tune it on `--split development`
+by macro P and macro R, and run the holdout once:
+
+```json
+"router": {"selected": "router.hybrid-bm25", "routers": {"router.hybrid-bm25": {"minScore": 0.40}}}
+```
+
+asset-router's BM25 stage keeps only `[a-z0-9]` in each token, and only BM25 hits become candidates unless
+`recallUnmatched` is true. So a prompt with no Latin word gets `no_match` whatever the embedding model.

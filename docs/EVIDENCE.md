@@ -4177,7 +4177,7 @@ was never pushed and is not compatibility evidence.
 Development diagnostics. A model wrote the similar-skill data and its expected answers (see the 2026-11-05 entry),
 so these are not independent labels, loading a skill is not task success, and none of this satisfies AC25 to AC37.
 Metrics are in [`evidence/2026-11-23-asset-router-vs-default/`](evidence/2026-11-23-asset-router-vs-default/README.md).
-The runbook is in [guidance.md](guidance.md#compare-asset-router-with-the-default).
+The runbook is in [guidance.md](guidance.md#compare-your-selector-with-the-default-step-by-step).
 
 - Machine: Ubuntu 26.04.1 LTS, kernel 7.0.0-43-generic, Intel Xeon (Skylake, IBRS) VM, 8 vCPU, 11 GiB RAM, no GPU;
   Python 3.14.4, Node 24.22.1, OpenClaw 2026.10.7 (`157d8c2`).
@@ -4278,3 +4278,117 @@ prompts get picks. Metrics: `select_router_experiments.json`.
 Cost: about 2.8 million input and 0.1 million output tokens of `glm-5.3-flash` for every run in this entry,
 pilots and probes included, so about $0.5 at Z.AI's listed prices. Turn rows (no prompt text or model answer) are in
 `turn_runs.jsonl`.
+
+## 2026-11-24 — asset-router with four embedding models (RM47, AC42)
+
+Development diagnostics, with the same limits as the 2026-11-23 entry: a model wrote the data and its expected
+answers, loading a skill is not task success, and none of this satisfies AC25 to AC37. Metrics are in
+[`evidence/2026-11-24-asset-router-embedders/`](evidence/2026-11-24-asset-router-embedders/README.md). The
+runbook is in [guidance.md](guidance.md#compare-your-selector-with-the-default-step-by-step).
+
+The 2026-11-23 setup again: the same machine, asset-router `c092bd1` (`router.hybrid-bm25`, fed mode, a fresh
+store per model), llama.cpp `b12237` on loopback, the similar-skill holdout with the same 479 assets, and the same
+40 real turns with `glm-5.3-flash`. The default, the `bge-m3` arm and the GLM picker are the 2026-11-23 runs; only
+the new asset-router arms ran on 2026-11-24. The harnesses (`guidance_similar_benchmark.py`, `guidance_turn_benchmark.py`) are those of RelayMind
+`2a6663a`; the comparisons were made with this change's `guidance_compare.py`. The results are
+read with spec 0.74's main metrics, macro precision and macro recall: every pick counts and a prompt with no pick
+scores 0 (section 7.7).
+
+| Model | GGUF | Pooling | Dimensions |
+| --- | --- | --- | ---: |
+| `bge-m3` (2026-11-23) | `ggml-org/bge-m3-Q8_0-GGUF` `9eba04c`, Q8_0 | CLS | 1024 |
+| `ibm-granite/granite-embedding-97m-multilingual-r2` `835ad14` | converted to F16 with `convert_hf_to_gguf.py` of `b12237`, SHA-256 `f9a1c8e4…383c` | CLS | 384 |
+| `nomic-ai/nomic-embed-text-v2-moe-GGUF` `ffbcf4c` | Q8_0 as published, SHA-256 `06e7a7e5…3cff` | mean | 768 |
+| `ThakiCloud/SKILLRET-Embedding-0.6B` `67f1594` | converted to Q8_0 with `convert_hf_to_gguf.py` of `b12237`, SHA-256 `ed603cbf…593b` | last token | 1024 |
+
+The converted models' vectors were checked against the original weights on five English and Chinese texts:
+cosine 1.0000 for granite (F16 against `transformers`) and 0.997 to 0.999 for SKILLRET (Q8_0 against
+`sentence-transformers`, bf16). asset-router sends plain text, so nomic ran without its `search_query: ` and
+`search_document: ` prefixes and SKILLRET without its query instruction. nomic's 512-token limit cut one text per
+selection run. SKILLRET's router used `timeoutMs` 120,000 for embeddings and its selection runs `--total-ms 60000`:
+with the default 12 s budget, 11 of 284 cases timed out on the loaded machine and fell back to word match
+(`degraded`), so that run was discarded. The other arms had no timeout at the default budget.
+
+**Selection, macro precision and recall.** 236 prompts with an answer to find (one-skill prompts, follow-ups and
+complex requests), router defaults (`minScore` 0.55):
+
+| Arm | Macro P | Macro R | Micro P | Micro R | Macro P / R, English | Macro P / R, Chinese | False picks | Picks |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Default (word match) | 19% | 50% | 16% | 54% | 33% / 83% | 5% / 17% | 12% | 5.63 |
+| asset-router, bge-m3 | 38% | 63% | 38% | 64% | 40% / 91% | 36% / 35% | 0% | 2.58 |
+| asset-router, granite | 24% | 66% | 24% | 69% | 21% / 94% | 27% / 38% | 50% | 4.60 |
+| asset-router, nomic | 49% | 46% | 65% | 42% | 61% / 66% | 37% / 25% | 0% | 0.88 |
+| asset-router, SKILLRET | 17% | 13% | 95% | 10% | 23% / 19% | 11% / 7% | 0% | 0.16 |
+| GLM picker | 89% | 95% | 86% | 95% | 89% / 93% | 90% / 96% | 6% | 1.27 |
+
+False picks are over the 16 unrelated prompts; picks are per one-skill prompt. Against `bge-m3`, prompts won/lost on
+precision, then on recall: granite 8/115 (p 2e-25) and 23/9 (p 0.02), nomic 88/36 (p 3e-6) and 0/65 (p 5e-20),
+SKILLRET 28/129 (p 1e-16) and 0/139 (p 3e-42). The earlier P@3
+leaves out prompts with no pick: nomic scored 76% there and SKILLRET 96%, against macro precision 49% and 17%.
+
+**The threshold belongs to the model.** Router config checks on the same holdout and offer:
+
+| Model | Config | Macro P | Macro R | Macro P / R, Chinese | False picks | Picks |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| bge-m3 | default | 38% | 63% | 36% / 35% | 0% | 2.58 |
+| bge-m3 | `recallUnmatched`, `minScore` 0.40 | 19% | 88% | 16% / 80% | 38% | 7.96 |
+| granite | default | 24% | 66% | 27% / 38% | 50% | 4.60 |
+| granite | `recallUnmatched`, `minScore` 0.40 | 18% | 87% | 16% / 79% | 100% | 8.00 |
+| nomic | default | 49% | 46% | 37% / 25% | 0% | 0.88 |
+| nomic | `recallUnmatched`, `minScore` 0.40 | 28% | 75% | 33% / 55% | 0% | 4.41 |
+| SKILLRET | default | 17% | 13% | 11% / 7% | 0% | 0.16 |
+| SKILLRET | `recallUnmatched`, `minScore` 0.40 | 50% | 50% | 41% / 31% | 6% | 1.32 |
+
+`recallUnmatched` alone changed nothing for nomic and SKILLRET and little for `bge-m3`; for granite it equals the
+0.40 row, because granite scores almost everything above both thresholds. Lowering the threshold moves each model
+along its own precision and recall trade-off. No local config reaches both 50% macro precision and 65% macro
+recall. Against `bge-m3` at its default (`select_router_experiments_vs_bge.json`), SKILLRET at 0.40 wins on precision 91/26 (p 1e-9) and loses on recall 4/60
+(p 7e-14); nomic at 0.40 loses on precision 26/112 (p 6e-14) and wins on recall 44/3 (p 2e-10). These are single
+holdout values, not tuned on the development split.
+
+**By embedding alone.** `scripts/guidance_embedding_probe.py` embeds each one-skill prompt and the 70 holdout
+skill descriptions directly, as asset-router does, and reports where the right skill ranks:
+
+| Model | English (70): first / top 3 / median cosine | Mixed Chinese (24) | Pure Chinese (46) |
+| --- | ---: | ---: | ---: |
+| `bge-m3` | 67% / 84% / 0.60 | 83% / 96% / 0.63 | 50% / 78% / 0.57 |
+| granite | 81% / 90% / 0.87 | 92% / 96% / 0.87 | 48% / 76% / 0.83 |
+| nomic | 79% / 90% / 0.54 | 79% / 96% / 0.53 | 59% / 83% / 0.44 |
+| nomic, with its prefixes | 81% / 96% / 0.56 | 92% / 100% / 0.57 | 63% / 85% / 0.47 |
+| SKILLRET | 89% / 97% / 0.42 | 92% / 100% / 0.42 | 91% / 93% / 0.35 |
+| SKILLRET, with its query instruction | 89% / 97% / 0.41 | 96% / 100% / 0.41 | 87% / 96% / 0.33 |
+
+SKILLRET ranks the right skill first far more often than the others, including on pure Chinese prompts, but on a
+low cosine scale, so `minScore` 0.55 removes nearly all of it. Its query instruction and nomic's prefixes change
+little. On Chinese prompts, the router's BM25 stage keeps only `[a-z0-9]`, so with recall off a pure Chinese prompt
+never reaches the embeddings: with every model, 91% or more of the 46 pure Chinese prompts got `no_match` at the
+default threshold.
+
+**Real turns.** Same 40 prompts, router defaults unless stated:
+
+| Arm | Right skill | English | Chinese | Against the default: won/lost (p) | `no_match` turns | Missed after `no_match` | Median input tokens |
+| --- | ---: | ---: | ---: | --- | ---: | ---: | ---: |
+| Default (2026-11-23) | 33 of 40 | 16 | 17 | | | | 14,698 |
+| Default, repeat (2026-11-23) | 30 of 40 | 14 | 16 | 2/5 (0.45) | | | 14,672 |
+| asset-router, bge-m3 (2026-11-23) | 29 of 40 | 19 | 10 | 5/9 (0.42) | 8, all Chinese | 7 | 5,278 |
+| asset-router, granite | 30 of 40 | 15 | 15 | 4/7 (0.55) | 8, all Chinese | 5 | 5,609 |
+| asset-router, nomic | 27 of 40 | 15 | 12 | 4/10 (0.18) | 17, 13 Chinese | 10 | 5,061 |
+| asset-router, SKILLRET, `recallUnmatched`, `minScore` 0.40 | 36 of 40 | 19 | 17 | 6/3 (0.51) | 8, all Chinese | 1 | 5,307 |
+| GLM picker (2026-11-23) | 37 of 40 | 18 | 19 | 7/3 (0.34) | | | 5,041 |
+
+At router defaults, SKILLRET gave no hint on the harness's two check prompts or on the three more it tries, so the
+harness stopped that arm after those five turns ("no prompt got a hint"); `turn_sync.json` keeps their five
+`no_match` selects, as selection predicts (83% `no_match`). SKILLRET's real turns therefore
+ran with the router config of its selection check. A first run of them was discarded after 31 turns: the embedding
+server stopped mid-run, so the later turns had no selector. The run above is a full rerun.
+
+Prompt by prompt, SKILLRET at 0.40 against `bge-m3` won 9 and lost 2 (p 0.065), against granite 10/4 (p 0.18),
+against nomic 11/2 (p 0.022), and against the GLM picker 3/4 (p 1). The GLM picker against `bge-m3` stays 10/2
+(p 0.039) and against granite 8/1 (p 0.039). The two identical default runs differ on 7 prompts. SKILLRET's 8
+`no_match` turns were all Chinese, and the host's model still found the skill through its own search on 7 of them.
+Median time per turn was 125 s for granite, 83 s for nomic and 48 s for SKILLRET, because the machine load changed
+between runs.
+
+Cost: about 0.9 million input and 0.07 million output tokens of `glm-5.3-flash` for the new real turns, the
+discarded ones included, about $0.2 at Z.AI's listed prices. Selection used no external model. Latency is not compared: the machine also served other
+local models (load average 15 to 23 on 8 vCPU).

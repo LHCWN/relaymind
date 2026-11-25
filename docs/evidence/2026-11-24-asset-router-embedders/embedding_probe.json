@@ -1,0 +1,230 @@
+{
+ "bge-m3": {
+  "split": "holdout",
+  "model": "bge-m3",
+  "query_prefix": "",
+  "document_prefix": "",
+  "groups": {
+   "en": {
+    "prompts": 70,
+    "rank_1": 47,
+    "top_3": 59,
+    "right_cosine": {
+     "min": 0.4553,
+     "median": 0.6027,
+     "max": 0.7544
+    }
+   },
+   "zh_mixed": {
+    "prompts": 24,
+    "rank_1": 20,
+    "top_3": 23,
+    "right_cosine": {
+     "min": 0.5025,
+     "median": 0.6337,
+     "max": 0.7289
+    }
+   },
+   "zh_pure": {
+    "prompts": 46,
+    "rank_1": 23,
+    "top_3": 36,
+    "right_cosine": {
+     "min": 0.4833,
+     "median": 0.572,
+     "max": 0.6559
+    }
+   }
+  }
+ },
+ "granite-97m": {
+  "split": "holdout",
+  "model": "granite-97m",
+  "query_prefix": "",
+  "document_prefix": "",
+  "groups": {
+   "en": {
+    "prompts": 70,
+    "rank_1": 57,
+    "top_3": 63,
+    "right_cosine": {
+     "min": 0.7795,
+     "median": 0.8688,
+     "max": 0.9193
+    }
+   },
+   "zh_mixed": {
+    "prompts": 24,
+    "rank_1": 22,
+    "top_3": 23,
+    "right_cosine": {
+     "min": 0.7893,
+     "median": 0.8663,
+     "max": 0.8847
+    }
+   },
+   "zh_pure": {
+    "prompts": 46,
+    "rank_1": 22,
+    "top_3": 35,
+    "right_cosine": {
+     "min": 0.7566,
+     "median": 0.8269,
+     "max": 0.8935
+    }
+   }
+  }
+ },
+ "nomic-v2-moe": {
+  "split": "holdout",
+  "model": "nomic-v2-moe",
+  "query_prefix": "",
+  "document_prefix": "",
+  "groups": {
+   "en": {
+    "prompts": 70,
+    "rank_1": 55,
+    "top_3": 63,
+    "right_cosine": {
+     "min": 0.339,
+     "median": 0.5363,
+     "max": 0.682
+    }
+   },
+   "zh_mixed": {
+    "prompts": 24,
+    "rank_1": 19,
+    "top_3": 23,
+    "right_cosine": {
+     "min": 0.4047,
+     "median": 0.5277,
+     "max": 0.5707
+    }
+   },
+   "zh_pure": {
+    "prompts": 46,
+    "rank_1": 27,
+    "top_3": 38,
+    "right_cosine": {
+     "min": 0.3035,
+     "median": 0.443,
+     "max": 0.5795
+    }
+   }
+  }
+ },
+ "nomic-v2-moe-prefixes": {
+  "split": "holdout",
+  "model": "nomic-v2-moe",
+  "query_prefix": "search_query: ",
+  "document_prefix": "search_document: ",
+  "groups": {
+   "en": {
+    "prompts": 70,
+    "rank_1": 57,
+    "top_3": 67,
+    "right_cosine": {
+     "min": 0.3429,
+     "median": 0.5598,
+     "max": 0.6836
+    }
+   },
+   "zh_mixed": {
+    "prompts": 24,
+    "rank_1": 22,
+    "top_3": 24,
+    "right_cosine": {
+     "min": 0.4598,
+     "median": 0.5656,
+     "max": 0.6059
+    }
+   },
+   "zh_pure": {
+    "prompts": 46,
+    "rank_1": 29,
+    "top_3": 39,
+    "right_cosine": {
+     "min": 0.3334,
+     "median": 0.4719,
+     "max": 0.5904
+    }
+   }
+  }
+ },
+ "skillret-0.6b": {
+  "split": "holdout",
+  "model": "skillret-0.6b",
+  "query_prefix": "",
+  "document_prefix": "",
+  "groups": {
+   "en": {
+    "prompts": 70,
+    "rank_1": 62,
+    "top_3": 68,
+    "right_cosine": {
+     "min": 0.1933,
+     "median": 0.4206,
+     "max": 0.6069
+    }
+   },
+   "zh_mixed": {
+    "prompts": 24,
+    "rank_1": 22,
+    "top_3": 24,
+    "right_cosine": {
+     "min": 0.2841,
+     "median": 0.4193,
+     "max": 0.5746
+    }
+   },
+   "zh_pure": {
+    "prompts": 46,
+    "rank_1": 42,
+    "top_3": 43,
+    "right_cosine": {
+     "min": 0.1422,
+     "median": 0.351,
+     "max": 0.5326
+    }
+   }
+  }
+ },
+ "skillret-0.6b-instruct": {
+  "split": "holdout",
+  "model": "skillret-0.6b",
+  "query_prefix": "Instruct: Given a skill search query, retrieve relevant skills that match the query\nQuery: ",
+  "document_prefix": "",
+  "groups": {
+   "en": {
+    "prompts": 70,
+    "rank_1": 62,
+    "top_3": 68,
+    "right_cosine": {
+     "min": 0.1813,
+     "median": 0.4114,
+     "max": 0.6068
+    }
+   },
+   "zh_mixed": {
+    "prompts": 24,
+    "rank_1": 23,
+    "top_3": 24,
+    "right_cosine": {
+     "min": 0.2687,
+     "median": 0.4146,
+     "max": 0.593
+    }
+   },
+   "zh_pure": {
+    "prompts": 46,
+    "rank_1": 40,
+    "top_3": 44,
+    "right_cosine": {
+     "min": 0.1534,
+     "median": 0.3316,
+     "max": 0.5131
+    }
+   }
+  }
+ }
+}

@@ -1,0 +1,112 @@
+{
+ "asset-router-granite": {
+  "warm_up": {
+   "outcome": "ready",
+   "turns": 2,
+   "s": 145.7,
+   "host_exits": [
+    0,
+    0
+   ],
+   "gateway_sync": {
+    "schema_version": 1,
+    "enabled": true,
+    "running": false,
+    "last_outcome": "synced",
+    "last_inference": "local",
+    "missing": 92,
+    "accepted": 92,
+    "rejected": 0,
+    "files_sent": 92,
+    "consecutive_failures": 0,
+    "retry_after_ms": 0
+   }
+  },
+  "measured_selects": {
+   "ranked": 32,
+   "no_match": 8
+  }
+ },
+ "asset-router-nomic": {
+  "warm_up": {
+   "outcome": "ready",
+   "turns": 3,
+   "s": 131.4,
+   "host_exits": [
+    0,
+    0,
+    0
+   ],
+   "gateway_sync": {
+    "schema_version": 1,
+    "enabled": true,
+    "running": false,
+    "last_outcome": "nothing_missing",
+    "last_inference": "local",
+    "missing": 0,
+    "accepted": 0,
+    "rejected": 0,
+    "files_sent": 0,
+    "consecutive_failures": 0,
+    "retry_after_ms": 0
+   }
+  },
+  "measured_selects": {
+   "ranked": 23,
+   "no_match": 17
+  }
+ },
+ "asset-router-skillret-recall-min040": {
+  "warm_up": {
+   "outcome": "ready",
+   "turns": 1,
+   "s": 25.8,
+   "host_exits": [
+    0
+   ],
+   "gateway_sync": {
+    "schema_version": 1,
+    "enabled": true,
+    "running": false,
+    "last_outcome": "none",
+    "last_inference": null,
+    "missing": 0,
+    "accepted": 0,
+    "rejected": 0,
+    "files_sent": 0,
+    "consecutive_failures": 0,
+    "retry_after_ms": 0
+   }
+  },
+  "measured_selects": {
+   "ranked": 32,
+   "no_match": 8
+  }
+ },
+ "asset-router-skillret (default, stopped: no hint on the check prompts)": {
+  "warm_up": {
+   "outcome": "ready",
+   "turns": 1,
+   "s": 77.8,
+   "host_exits": [
+    0
+   ],
+   "gateway_sync": {
+    "schema_version": 1,
+    "enabled": true,
+    "running": false,
+    "last_outcome": "none",
+    "last_inference": null,
+    "missing": 0,
+    "accepted": 0,
+    "rejected": 0,
+    "files_sent": 0,
+    "consecutive_failures": 0,
+    "retry_after_ms": 0
+   }
+  },
+  "measured_selects": {
+   "no_match": 5
+  }
+ }
+}
