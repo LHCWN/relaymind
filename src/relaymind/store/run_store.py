@@ -897,6 +897,9 @@ class RunStore:
             try:
                 yield
                 self._conn.execute("COMMIT")
+                for run_id in self._transaction_evicted:
+                    self._run_started.pop(run_id, None)
+                    self._run_last_elapsed.pop(run_id, None)
                 # Only successfully committed local acquisitions notify active
                 # CPU captures. Releases cannot erase their pending observation.
                 if self._slot_started is not None and (
@@ -911,9 +914,6 @@ class RunStore:
                     onset = self.clock.monotonic()
                     self._probe_started = (self._probe_started[0], onset)
                     self.note_foreground_start(onset)
-                for run_id in self._transaction_evicted:
-                    self._run_started.pop(run_id, None)
-                    self._run_last_elapsed.pop(run_id, None)
             except BaseException as exc:
                 self._rollback()
                 self._slot_started, self._probe_started = slot_started, probe_started

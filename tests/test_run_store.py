@@ -1152,21 +1152,33 @@ def test_appending_many_deltas_uses_bounded_queries_and_near_linear_time(store, 
     run_id = store.create_run("accepted").run_id
     accept(store, run_id)
 
-    queries: list[str] = []
-    store._conn.set_trace_callback(queries.append)
-    started = time.perf_counter()
-    try:
-        for i in range(100):
-            clock.mono += 0.001
-            store.append_event(run_id, EventType.ANSWER_DELTA, "local", {"text": f"p{i}"})
-    finally:
-        store._conn.set_trace_callback(None)
-    elapsed_s = time.perf_counter() - started
+    def measure_appends(count: int, prefix: str) -> tuple[list[str], float]:
+        traced: list[str] = []
+        store._conn.set_trace_callback(traced.append)
+        started = time.perf_counter()
+        try:
+            for i in range(count):
+                clock.mono += 0.001
+                store.append_event(
+                    run_id, EventType.ANSWER_DELTA, "local", {"text": f"{prefix}{i}"}
+                )
+        finally:
+            store._conn.set_trace_callback(None)
+        return traced, time.perf_counter() - started
 
-    # No UNION ALL / full-table elapsed_ms scan per append.
-    assert not any("UNION ALL" in q for q in queries)
-    assert len(queries) <= 500, f"expected <=5 queries per append, got {len(queries)}"
-    assert elapsed_s < 1.0, f"expected bounded append time, got {elapsed_s:.3f}s"
+    queries_n, elapsed_n = measure_appends(50, "a")
+    queries_2n, elapsed_2n = measure_appends(100, "b")
+
+    # No UNION ALL / full-table elapsed_ms scan per append; query count scales linearly (2x).
+    assert not any("UNION ALL" in q for q in queries_n + queries_2n)
+    assert len(queries_n) <= 250, f"expected <=5 queries per append, got {len(queries_n)}"
+    assert len(queries_2n) == 2 * len(queries_n)
+    assert elapsed_n + elapsed_2n < 1.5, (
+        f"expected bounded append time, got {elapsed_n + elapsed_2n:.3f}s"
+    )
+    assert elapsed_2n <= max(elapsed_n * 3.5, 0.2), (
+        f"expected near-linear scaling for 2N appends: N={elapsed_n:.4f}s, 2N={elapsed_2n:.4f}s"
+    )
 
     # Batch append uses a constant number of non-INSERT SQLite statements regardless of batch size.
     batch_queries: list[str] = []
