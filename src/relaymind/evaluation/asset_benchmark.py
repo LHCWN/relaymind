@@ -10,6 +10,7 @@ import copy
 import hashlib
 import sys
 import tempfile
+import time
 import tomllib
 import uuid
 from collections.abc import Callable, Mapping
@@ -570,6 +571,7 @@ class BenchmarkSession:
     preparation: dict
     status: str
     prepared_primary: PreparedAssetSelector | None
+    setup_ms: float = 0.0
 
     async def close(self) -> None:
         if self.runtime is not None:
@@ -589,16 +591,19 @@ async def prepare_benchmark_session(
     clock: TraceClock | None = None,
     interrupted: Callable[[], bool] | None = None,
     catch_errors: bool = False,
+    use_native_runtime: bool = True,
 ) -> BenchmarkSession:
     """Set up a benchmark provider, optional native runtime, and index preparation."""
+    setup_started = time.monotonic()
     provider = LockedProjectionProvider(release, effective)
     preparation = await prepare_asset_index(normalize_preparation(None), None, [])
     status = "completed"
     prepared_primary = None
     runtime = None
+    setup_ms = 0.0
     cancel_kwargs = {"cancelled": interrupted} if interrupted is not None else {}
     try:
-        if production.asset_semantics is not None:
+        if use_native_runtime and production.asset_semantics is not None:
             runtime = await NativeBenchmarkRuntime.create(
                 production,
                 release,
@@ -608,6 +613,7 @@ async def prepare_benchmark_session(
             )
             provider = runtime.provider
             if preparation_config["mode"] == "local":
+                setup_ms = (time.monotonic() - setup_started) * 1000
                 preparation = await runtime.prepare_local(
                     preparation_config,
                     requested_kinds=requested_kinds,
@@ -621,8 +627,10 @@ async def prepare_benchmark_session(
                 # Native inference/index construction requires explicit local
                 # preparation. The ordinary lexical floor still has its cache.
                 await runtime.worker.rebuild()
+                setup_ms = (time.monotonic() - setup_started) * 1000
         else:
             await provider.publish()
+            setup_ms = (time.monotonic() - setup_started) * 1000
         if preparation_config["mode"] == "http":
             binding, catalog = http_binding(provider)
             preparation = await prepare_asset_index(
@@ -654,6 +662,7 @@ async def prepare_benchmark_session(
         preparation=preparation,
         status=status,
         prepared_primary=prepared_primary,
+        setup_ms=setup_ms,
     )
 
 
@@ -672,6 +681,7 @@ async def prepare_benchmark_index(
         preparation_config=normal["preparation"],
         http_binding=lambda provider: _offer_binding(provider, normal),
         interrupted=interrupted,
+        use_native_runtime=normal["preparation"]["mode"] == "local",
     )
     try:
         return session.preparation

@@ -3,7 +3,6 @@
 import copy
 import math
 import tempfile
-import time
 import unicodedata
 from collections import Counter
 from collections.abc import Mapping
@@ -168,7 +167,6 @@ async def run_source_benchmark(
     if not all(e["eligible"] for e in effective["eligibility"]):
         raise AssetCorpusError("catalog_source_not_enabled")
     environment = collect_benchmark_environment(production=production)
-    started = time.monotonic()
 
     def _http_binding(prov):
         offer = prov.pin(kinds)
@@ -184,7 +182,7 @@ async def run_source_benchmark(
         http_binding=_http_binding,
         clock=clock,
     )
-    preparation_ms = (time.monotonic() - started) * 1000
+    preparation_ms = session.setup_ms
     provider = session.provider
     runtime = session.runtime
     setup = session.preparation
