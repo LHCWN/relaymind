@@ -764,7 +764,8 @@ function register(api) {
     }
   });
   api.on("agent_end", async (event, ctx) => {
-    const runId = event?.runId ?? ctx?.runId;
+    // The entry was stored under the prompt hook's ctx.runId, so that key is tried first.
+    const runId = feedbackRuns.has(ctx?.runId) ? ctx.runId : event?.runId;
     const feedback = feedbackRuns.get(runId);
     if (!feedback) return;
     feedbackRuns.delete(runId);

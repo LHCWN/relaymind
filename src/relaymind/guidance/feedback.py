@@ -143,6 +143,7 @@ class GuidanceFeedback:
     async def _send(self, job: FeedbackJob) -> str:
         if not self.allow_remote:
             # Asked only when it decides something: an operator who allows remote never waits.
+            # None while a sync runs or waits after a failure: this feedback is skipped.
             inference = self._sync.inference or await self._sync.ask_inference(job.offered)
             if inference != "local":
                 return "feedback_skipped"

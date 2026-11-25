@@ -209,9 +209,9 @@ openclaw skills info <name> --json        # filePath 是该技能的 SKILL.md，
 - `used` 包含这一轮用过的所有提供的资产，无论你是否选中了它。空列表也是一种信号。
 - `loaded` 表示对该技能的 `skills_read`，或在其目录内的普通 `read`，没有出错就返回了；`executed` 表示对该工具的调用没有出错就返回了。模型是否遵循了技能的说明无法观察到，子智能体自己的运行也不计入。失败的一轮不发送任何内容。
 - 不发送提示词文本、路径或正文。你已经按 `recommendation_id` 拥有这个请求；保留什么由你决定，且只在本机保存。
-- 只有当选择器最近一次有效响应说 `"inference":"local"` 时才发送反馈，除非运维人员设置 `sync_allow_remote = true`。没有这个设置时，如果还没有同步告诉过网关，网关会先向 `sync_url` 发送一个包含该选择请求配对的 `find_missing`，只用来了解这一点，不上传任何内容。
+- 只有当选择器最近一次有效响应说 `"inference":"local"` 时才发送反馈，除非运维人员设置 `sync_allow_remote = true`。没有这个设置时，如果还没有同步告诉过网关，网关会先向 `sync_url` 发送一个包含该选择请求配对的 `find_missing`，只用来了解这一点，不上传任何内容。这个询问占用唯一的同步位置，并遵守同步的等待：同步正在运行时，或同步失败后的等待期间，这次反馈会被跳过；询问失败时，和同步失败一样开始等待。
 - 每个选择请求最多得到一次反馈。网关最多记住 1,024 个选择请求，每个最多一小时，并且同一时间只发送一个反馈；发现已有 16 个在等待的反馈会被丢弃。每次交换使用 `sync_ms`，不重试，失败不会改变任何响应。
-- `GET /relay/v1/guidance/sync` 增加了 `feedback_enabled`、`feedback_sent`、`feedback_failed` 和 `feedback_skipped`（远程推理或队列已满），从网关启动起计数。
+- `GET /relay/v1/guidance/sync` 增加了 `feedback_enabled`、`feedback_sent`、`feedback_failed` 和 `feedback_skipped`（远程推理、队列已满，或无法发送推理询问），从网关启动起计数。
 
 ### 用真实的 asset-router 检查
 

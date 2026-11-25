@@ -53,10 +53,10 @@ def client(router: Router, settings=FEEDING, clock=None):
         name="router", version="1", url=SELECT_URL, transport_factory=router.transport
     )
     sync = feedback = None
+    extra = {} if clock is None else dict(clock=clock)
     if settings.sync_url:
-        sync = GuidanceSync(settings, transport_factory=router.transport)
+        sync = GuidanceSync(settings, transport_factory=router.transport, **extra)
     if settings.feedback_url:
-        extra = {} if clock is None else dict(clock=clock)
         feedback = GuidanceFeedback(settings, sync, transport_factory=router.transport, **extra)
     install_guidance_routes(app, settings, selector=selector, sync=sync, feedback=feedback)
     return TestClient(app)
@@ -169,13 +169,40 @@ def test_an_invalid_find_missing_answer_teaches_no_inference_and_fails_the_feedb
     """A missing pair that was not offered makes the answer invalid, from a sync or a question."""
     stray = [dict(asset_id="host:skill:other", content_hash="2" * 64)]
     router = Router(outcome="not_ready", missing=lambda sent: stray)
-    http = client(router)
+    clock = Clock()
+    http = client(router, clock=clock)
     recommendation_id = ask(http)["recommendation_id"]
     assert [s["operation"] for s in router.syncs] == ["find_missing"]
+    clock.now += 31  # Past the wait the failed sync started.
     tell(http, recommendation_id, [USED_SKILL])
     assert [s["operation"] for s in router.syncs] == ["find_missing", "find_missing"]
     assert router.feedbacks == []
     assert feedback_counts(http)["feedback_failed"] == 1
+
+
+def test_the_inference_question_waits_like_a_sync_after_a_failure():
+    """Review of PR 306: the question shares the sync's one slot and its wait (spec 0.75)."""
+    router = Router(outcome="not_ready", sync_status=500)
+    clock = Clock()
+    http = client(router, clock=clock)
+    tell(http, ask(http)["recommendation_id"], [USED_SKILL])
+    # The sync failed and its wait has not ended: no question, and the feedback is skipped.
+    assert [s["operation"] for s in router.syncs] == ["find_missing"]
+    assert feedback_counts(http)["feedback_skipped"] == 1
+
+
+def test_a_failed_inference_question_starts_the_wait():
+    router = Router(sync_status=500)
+    http = client(router)
+    tell(http, ask(http)["recommendation_id"], [USED_SKILL])
+    tell(http, ask(http)["recommendation_id"], [USED_SKILL])
+    assert [s["operation"] for s in router.syncs] == ["find_missing"]
+    counts = feedback_counts(http)
+    assert counts["feedback_failed"] == 1 and counts["feedback_skipped"] == 1
+    body = status(http)
+    assert body["consecutive_failures"] == 1 and body["retry_after_ms"] > 0
+    # A question is not a sync, so the sync counts stay those of no sync.
+    assert body["last_outcome"] == "none"
 
 
 def test_with_remote_allowed_the_inference_is_not_asked():

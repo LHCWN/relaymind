@@ -313,12 +313,15 @@ Answer `{"schema_version":1,"operation":"feedback","inference":"local","missing"
   choose, on this machine.
 - Feedback goes only to a selector whose last valid answer said `"inference":"local"`, unless the operator sets
   `sync_allow_remote = true`. Without that setting, if no sync has told the gateway yet, it first sends a
-  `find_missing` with that select's pairs to `sync_url` only to learn this, and uploads nothing.
+  `find_missing` with that select's pairs to `sync_url` only to learn this, and uploads nothing. That question
+  takes the one sync slot and keeps the sync's wait: while a sync runs, or after a failed sync, the feedback is
+  skipped, and a failed question starts the wait like a failed sync.
 - Each select gets at most one feedback. The gateway remembers a select for at most one hour, at most 1,024 of
   them, and sends one feedback at a time; a feedback that finds 16 others waiting is dropped. Each exchange gets
   `sync_ms`, there is no retry, and a failure changes no answer.
 - `GET /relay/v1/guidance/sync` adds `feedback_enabled`, `feedback_sent`, `feedback_failed` and `feedback_skipped`
-  (remote inference or a full queue), counted since the gateway started.
+  (remote inference, a full queue, or an inference question that could not be sent), counted since the gateway
+  started.
 
 ### Check against the real asset-router
 

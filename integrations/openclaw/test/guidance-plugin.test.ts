@@ -1337,6 +1337,12 @@ describe("selector feedback (spec 0.75; RM48; AC43)", () => {
     expect(ok.sent()).toHaveLength(1);
   });
 
+  it("finds the run by the hook context's run ID, as the prompt hook stored it (review of PR 306)", async () => {
+    const { handlers, sent } = await turn(withId(["chosen"]));
+    await handlers.agent_end({ messages: [], success: true }, RUN);
+    expect(sent()).toHaveLength(1);
+  });
+
   it("sends nothing when the answer has no recommendation_id", async () => {
     const { used, end, sent } = await turn(picks(["chosen"]));
     used("skills_read", { name: "chosen" });

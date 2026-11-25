@@ -136,11 +136,22 @@ class GuidanceSync:
         finally:
             self._running, self._current = False, None
 
-    async def ask_inference(self, pairs: list[dict]) -> str:
+    async def ask_inference(self, pairs: list[dict]) -> str | None:
         """Learn the selector's inference with a find_missing of these pairs, uploading nothing.
 
-        Feedback needs it before it sends anything (spec 0.75; RM48). Raises on any failure."""
-        _, inference = await self._find_missing(pairs)
+        Feedback needs it before it sends anything (spec 0.75; RM48). The question takes the one
+        sync slot and keeps the wait after a failure, so it is None while a sync runs or that wait
+        lasts; a failed question starts the wait like a failed sync, and raises."""
+        if self._running or self._clock() < self._not_before:
+            return None
+        self._running = True
+        try:
+            _, inference = await self._find_missing(pairs)
+        except Exception:
+            self._wait()
+            raise
+        finally:
+            self._running = False
         return inference
 
     async def _find_missing(self, pairs: list[dict]) -> tuple[set[tuple[str, str]], str]:
