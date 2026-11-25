@@ -832,13 +832,19 @@ class StatementGate:
         self._resumed_observation = False
 
     def _piece_safe(self, stop: int) -> bool:
-        """Incrementally check safety for the newly closed unit [self.offset:stop]."""
+        """Incrementally check safety for the newly closed unit [self.offset:stop].
+
+        Every safety predicate is statement-local across _STATEMENT_END boundaries;
+        for health_checklist_separated, completion_parts excludes the draft checklist
+        lines between _DRAFT_CHECKLIST_LABEL and _OBSERVATION_HEADING and applies
+        health_status_preserved outside that region.
+        """
         if self.predicate_id == "health_checklist_separated":
             assert self._draft_label_end is not None
             if self.offset == 0:
                 safe, _ = completion_parts(self.predicate_id, self.raw[:stop], self.results)
                 self._resumed_observation = (
-                    _OBSERVATION_HEADING.search(self.raw, self._draft_label_end, stop) is not None
+                    _OBSERVATION_HEADING.search(self.raw[self._draft_label_end : stop]) is not None
                 )
                 return safe
             piece = self.raw[self.offset : stop]

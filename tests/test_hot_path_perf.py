@@ -5,6 +5,8 @@ import json
 import threading
 from datetime import timedelta
 
+import pytest
+
 from helpers import FakeClock
 from relaymind.assets.catalog import validate_asset_record
 from relaymind.canonical import canonical_digest
@@ -238,12 +240,15 @@ def test_adaptation_stage_reuses_snapshot_when_unchanged(tmp_path, monkeypatch):
             req = request_for(service, catalog)
 
             snapshot_calls = 0
+            observed_records: list[dict] = []
             real_snap = app.state.feedback_store.correction_snapshot
 
             def counted_snap(*args, **kwargs):
                 nonlocal snapshot_calls
                 snapshot_calls += 1
-                return real_snap(*args, **kwargs)
+                snap = real_snap(*args, **kwargs)
+                observed_records.extend(snap.records)
+                return snap
 
             monkeypatch.setattr(app.state.feedback_store, "correction_snapshot", counted_snap)
             outcome = await stage.apply(
@@ -256,8 +261,89 @@ def test_adaptation_stage_reuses_snapshot_when_unchanged(tmp_path, monkeypatch):
             outcome.close()
             stage.close()
             assert snapshot_calls == 1, f"expected 1 correction_snapshot call, got {snapshot_calls}"
+            assert len(observed_records) == 1
+            assert observed_records[0]["feedback"]["kind"] == "correction"
+            assert isinstance(observed_records[0]["retain_until"], str)
 
     asyncio.run(exercise())
+
+
+def _tool_result(tool_name: str, data: dict) -> ToolResult:
+    return ToolResult(
+        tool_name=tool_name,
+        operation_id="op-1",
+        status=ToolStatus.SUCCEEDED,
+        data=data,
+        error=None,
+        observed_at="2026-04-01T00:00:00Z",
+        duration_ms=1,
+        source_ref="sandbox",
+        truncated=False,
+    )
+
+
+def test_statement_gate_matches_completion_parts_for_checklist_and_other_predicates():
+    """RM32, #295: incremental StatementGate enforces the exact safety rules of completion_parts."""
+    health_result = [
+        _tool_result(
+            "get_service_health",
+            {
+                "service": "billing-api",
+                "status": "degraded",
+                "checked_at": "2026-04-01T00:00:00Z",
+            },
+        )
+    ]
+
+    # Contradicting status after Observation: heading is rejected even after multi-line checklist.
+    gate = predicates.StatementGate("health_checklist_separated", health_result)
+    out = gate.feed(
+        "Observation: billing-api is degraded at 2026-04-01T00:00:00Z.\n"
+        "Diagnostic checklist (draft, not log-backed)\n"
+        "- Check if billing-api is healthy after restart.\n"
+        "- Check upstream timeouts.\n"
+    )
+    assert "Diagnostic checklist" in out
+    with pytest.raises(predicates.StatementRejected):
+        gate.feed("Observation: billing-api is healthy.\n")
+
+    # Same-line Observation: right after draft label resumes observation checks immediately.
+    same_line = predicates.StatementGate("health_checklist_separated", health_result)
+    with pytest.raises(predicates.StatementRejected):
+        same_line.feed(
+            "Diagnostic checklist (draft, not log-backed) Observation: billing-api is healthy.\n"
+        )
+
+    # Contradicting status in a later sentence is rejected for deployment/incident/deletion.
+    dep_gate = predicates.StatementGate(
+        "deployment_reported",
+        [
+            _tool_result(
+                "get_latest_deployment",
+                {
+                    "service": "billing-api",
+                    "deployment_id": "dep-101",
+                    "deployed_at": "2026-04-01T00:00:00Z",
+                },
+            )
+        ],
+    )
+    assert dep_gate.feed("Latest deployment for billing-api is dep-101. ")
+    with pytest.raises(predicates.StatementRejected):
+        dep_gate.feed("Previous deployment dep-999 failed. ")
+
+    del_gate = predicates.StatementGate(
+        "deletion_outcome_reported",
+        [
+            _tool_result(
+                "delete_demo_database",
+                {"database_id": "demo-alpha-db", "deleted": True},
+            )
+        ],
+    )
+    assert del_gate.feed("Deleted demo-alpha-db. ")
+    with pytest.raises(predicates.StatementRejected):
+        del_gate.feed("Actually it was not deleted. ")
 
 
 def test_statement_gate_is_incremental_and_caches_id_mention(monkeypatch):
