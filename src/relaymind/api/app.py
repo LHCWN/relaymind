@@ -260,11 +260,10 @@ def create_app(
         else:
             # A duplicate: answered from the stored run, so no model or tool runs.
             # An expired wait ends first, so it is never answered as unfinished.
-            def _replay_chat() -> tuple[ChatResult, Any]:
-                sweep_expired_waits(orchestrator)
-                return stored_chat_result(orchestrator.store, stored.run_id, stream=chat.stream)
-
-            result, ended = await run_in_threadpool(_replay_chat)
+            sweep_expired_waits(orchestrator)
+            result, ended = await run_in_threadpool(
+                stored_chat_result, orchestrator.store, stored.run_id, stream=chat.stream
+            )
             created = int(ended.timestamp())
             headers = {RUN_ID_HEADER: result.run_id, REPLAYED_HEADER: "true"}
         if chat.stream:
@@ -305,12 +304,9 @@ def create_app(
 
         # A duplicate: the existing run's reference, with its current state.
         # An expired wait ends first, so a run is never shown waiting past its limit.
-        def _existing_run() -> StartedRun:
-            sweep_expired_waits(orchestrator)
-            record = orchestrator.store.get_run(stored.run_id)
-            return StartedRun(record.run_id, record.state, record.version)
-
-        existing = await run_in_threadpool(_existing_run)
+        sweep_expired_waits(orchestrator)
+        record = await run_in_threadpool(orchestrator.store.get_run, stored.run_id)
+        existing = StartedRun(record.run_id, record.state, record.version)
         return _accepted(existing, {REPLAYED_HEADER: "true"})
 
     @app.get("/relay/v1/runs/{run_id}")
@@ -318,12 +314,8 @@ def create_app(
     async def get_run(request: Request) -> Response:
         require_bearer_token(request.headers.get("authorization"), token)
         run_id = request.path_params["run_id"]
-
-        def _read_run() -> dict[str, Any]:
-            sweep_expired_waits(orchestrator)
-            return run_view(orchestrator, run_id, reveal_token=True)
-
-        view = await run_in_threadpool(_read_run)
+        sweep_expired_waits(orchestrator)
+        view = await run_in_threadpool(run_view, orchestrator, run_id, reveal_token=True)
         return JSONResponse(view, headers={"Cache-Control": "no-store"})
 
     @app.get("/relay/v1/runs/{run_id}/events")

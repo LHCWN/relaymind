@@ -303,23 +303,20 @@ async def event_stream(
     next_sweep = loop.time()
     cursor = after_seq
 
-    def _poll_store(should_sweep: bool, after: int) -> tuple[RunState, list[TraceEvent], bool]:
+    def _poll_store(after: int) -> tuple[RunState, list[TraceEvent]]:
         state = RunState(store.get_run(run_id).state)
-        swept = False
-        if state in WAITING_STATES and should_sweep:
-            swept = True
-            sweep_expired_waits(orchestrator)
-            state = RunState(store.get_run(run_id).state)
-        return state, store.events(run_id, after_seq=after), swept
+        return state, store.events(run_id, after_seq=after)
 
     while True:
         try:
-            due = loop.time() >= next_sweep
-            state, events, swept = await run_in_threadpool(_poll_store, due, cursor)
-            if swept:
+            state, events = await run_in_threadpool(_poll_store, cursor)
+            if state in WAITING_STATES and loop.time() >= next_sweep:
                 # Only a waiting run can expire, and not faster than the
                 # sweep interval: an open stream does not keep the store busy.
+                # Keep wait expiry on the event loop that owns orchestrator._waiting.
                 next_sweep = loop.time() + settings.sweep_seconds
+                sweep_expired_waits(orchestrator)
+                state, events = await run_in_threadpool(_poll_store, cursor)
         except RunNotFoundError:
             return
         for event in events:

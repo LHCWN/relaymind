@@ -443,9 +443,9 @@ MIGRATIONS: tuple[str, ...] = (
     """,
     # #294: indexed elapsed_ms lookups and typed event queries (RM22, RM25).
     """
-    CREATE INDEX events_run_elapsed ON events(run_id, elapsed_ms);
-    CREATE INDEX events_run_type_seq ON events(run_id, event_type, seq);
-    CREATE INDEX state_intervals_run_elapsed ON state_intervals(run_id, elapsed_ms);
+    CREATE INDEX IF NOT EXISTS events_run_elapsed ON events(run_id, elapsed_ms);
+    CREATE INDEX IF NOT EXISTS events_run_type_seq ON events(run_id, event_type, seq);
+    CREATE INDEX IF NOT EXISTS state_intervals_run_elapsed ON state_intervals(run_id, elapsed_ms);
     """,
 )
 
