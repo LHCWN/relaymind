@@ -341,6 +341,14 @@ def test_a_platform_row_that_fell_back_counts_as_failed(attempts):
     assert compare.metrics(rows)["degraded"] == 1
 
 
+def test_a_degraded_partial_platform_answer_counts_as_failed():
+    """Review of PR 306: the reference selector writes `_degraded:partial`; the suffix is read
+    under the :partial label (spec 0.75; RM47, AC42)."""
+    attempts = [dict(outcome="ranked", mechanism="guidance_word_match_degraded:partial")]
+    rows, _ = compare.read_report(_platform([_platform_row("c", ["x"], attempts=attempts)]))
+    assert rows[0]["degraded"] is True and rows[0]["partial"] is True
+
+
 def test_a_platform_report_shows_no_asked_share():
     """Selection v2 has no choose, so the share is unknown, not 0%."""
     rows, _ = compare.read_report(_platform([_platform_row("c", ["x"])]))

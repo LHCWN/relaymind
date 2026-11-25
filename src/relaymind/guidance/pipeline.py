@@ -744,15 +744,19 @@ async def _third_party(
         validate_against_offer(
             parsed, v2, SelectorIdentity(settings.name, settings.version), http=True
         )
+        outcome = parsed.data["outcome"]
         # The selector got this request and answered it: the host may say what the turn used.
-        if on_selected is not None:
+        # Only these answers count; `unavailable` is not one (spec 0.75).
+        if on_selected is not None and outcome in ("ranked", "no_match", "not_ready"):
             on_selected(
                 v2.data["recommendation_id"], v2.data["catalog_revision"], v2.data["catalog"]
             )
             run.recommendation_id = v2.data["recommendation_id"]
-        not_ready = parsed.data["outcome"] == "not_ready"
+        not_ready = outcome == "not_ready"
         # A partial answer stands, and the pairs it could not rank still need a sync (spec 0.75).
-        if on_sync is not None and (not_ready or is_partial(parsed.data["mechanism"])):
+        # Only a ranked or no_match answer can be partial.
+        partial = outcome in ("ranked", "no_match") and is_partial(parsed.data["mechanism"])
+        if on_sync is not None and (not_ready or partial):
             # Only what a sync sends: the offered records, and each skill file's path and size.
             files = {
                 asset_id: dict(path=item["path"], size_bytes=item["size_bytes"])

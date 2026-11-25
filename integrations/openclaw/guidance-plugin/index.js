@@ -697,6 +697,9 @@ function register(api) {
   };
   // Per run whose answer asked for feedback (spec 0.75): its ID, its offer and what it used.
   const feedbackRuns = new Map();
+  // The run key of a hook: the prompt hook stored the entry under ctx.runId, so that comes first,
+  // and every hook falls back to the event's run ID the same way.
+  const feedbackKey = (event, ctx) => (feedbackRuns.has(ctx?.runId) ? ctx.runId : event?.runId);
   api.on("before_prompt_build", async (event, ctx) => {
     if (typeof ctx?.runId === "string") feedbackRuns.delete(ctx.runId);
     const state = strict && ctx?.sessionKey ? session(ctx.sessionKey) : null;
@@ -732,7 +735,8 @@ function register(api) {
       // Nothing selected is not a reason to refuse: the model can still search.
       if (state && picks.length) state.limit = newLimit(state.offer, picks, state.loaded);
       // The gateway takes feedback about this select: what this run uses of the offer (spec 0.75).
-      if (typeof answer.recommendation_id === "string" && typeof ctx?.runId === "string") {
+      // An empty ID would be refused by the gateway, so it asks for no feedback.
+      if (typeof answer.recommendation_id === "string" && answer.recommendation_id && typeof ctx?.runId === "string") {
         const offer = state?.offer ?? newOffer(snapshot, assets, ctx?.workspaceDir);
         feedbackRuns.set(ctx.runId, { id: answer.recommendation_id, offer, used: new Map() });
         if (feedbackRuns.size > MAX_SESSIONS) feedbackRuns.delete(feedbackRuns.keys().next().value);
@@ -756,7 +760,7 @@ function register(api) {
       api.logger.debug?.(`relaymind-guidance did not record a call: ${error?.name ?? "error"}`);
     }
     try {
-      const feedback = feedbackRuns.get(ctx?.runId);
+      const feedback = feedbackRuns.get(feedbackKey(event, ctx));
       const used = feedback && usedOffered(event?.toolName, event?.params, feedback.offer, ctx);
       if (used && feedback.used.size < MAX_USED) feedback.used.set(`${used.kind}:${used.name}`, used);
     } catch (error) {
@@ -764,8 +768,7 @@ function register(api) {
     }
   });
   api.on("agent_end", async (event, ctx) => {
-    // The entry was stored under the prompt hook's ctx.runId, so that key is tried first.
-    const runId = feedbackRuns.has(ctx?.runId) ? ctx.runId : event?.runId;
+    const runId = feedbackKey(event, ctx);
     const feedback = feedbackRuns.get(runId);
     if (!feedback) return;
     feedbackRuns.delete(runId);

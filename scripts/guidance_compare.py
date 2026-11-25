@@ -123,9 +123,11 @@ def _fell_back(row: dict) -> bool:
     if row["status"] not in ("ready", "ranked", "no_match") or len(attempts) > 1:
         return True
     first = attempts[0] if attempts else {}
-    return first.get("outcome", "ranked") not in ("ranked", "no_match") or str(
-        first.get("mechanism", "")
-    ).endswith("_degraded")
+    # A label for an early or partial answer comes after `_degraded` (spec 0.73 and 0.75).
+    mechanism = str(first.get("mechanism", "")).removesuffix(":partial").removesuffix(":early")
+    return first.get("outcome", "ranked") not in ("ranked", "no_match") or mechanism.endswith(
+        "_degraded"
+    )
 
 
 def _first_mechanism(row: dict) -> object:

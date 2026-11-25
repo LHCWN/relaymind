@@ -1343,6 +1343,20 @@ describe("selector feedback (spec 0.75; RM48; AC43)", () => {
     expect(sent()).toHaveLength(1);
   });
 
+  it("records a use by the event's run ID when the hook context has none, like agent_end (review of PR 306)", async () => {
+    const { handlers, end, sent } = await turn(withId(["chosen"]));
+    handlers.after_tool_call({ toolName: "skills_read", params: { name: "chosen" }, runId: "run-1" }, { ...CTX });
+    await end();
+    expect(JSON.parse(String(sent()[0]![1].body)).used).toEqual([{ name: "chosen", kind: "skill", signal: "loaded" }]);
+  });
+
+  it("tracks nothing for an empty recommendation_id, which the gateway would refuse (review of PR 306)", async () => {
+    const { used, end, sent } = await turn({ ...picks(["chosen"], "third_party"), recommendation_id: "" });
+    used("skills_read", { name: "chosen" });
+    await end();
+    expect(sent()).toHaveLength(0);
+  });
+
   it("sends nothing when the answer has no recommendation_id", async () => {
     const { used, end, sent } = await turn(picks(["chosen"]));
     used("skills_read", { name: "chosen" });

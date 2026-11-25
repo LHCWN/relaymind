@@ -74,6 +74,8 @@ class GuidanceFeedback:
         # Per remembered select: its offer and when it is forgotten.
         self._ids: OrderedDict[str, tuple[int, float]] = OrderedDict()
         self._lock = asyncio.Lock()
+        # Feedbacks waiting for the lock: counted until each takes it, so the count holds also
+        # between a release and the next waiter taking the lock, when the lock reads as free.
         self._waiting = 0
         self._counts = dict(feedback_sent=0, feedback_failed=0, feedback_skipped=0)
 
@@ -124,7 +126,7 @@ class GuidanceFeedback:
 
     async def send(self, job: FeedbackJob) -> None:
         """Send one feedback after the answer, one at a time. Never raises (a cancellation does)."""
-        if self._waiting >= MAX_WAITING and self._lock.locked():
+        if self._waiting >= MAX_WAITING:  # A feedback that finds 16 others waiting is dropped.
             self._counts["feedback_skipped"] += 1
             return
         self._waiting += 1

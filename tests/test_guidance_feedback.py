@@ -460,3 +460,65 @@ def test_the_launched_gateway_sends_feedback_to_the_reference_selector(tmp_path)
     assert told == dict(schema_version=1, queued=True)
     assert counts["feedback_enabled"] is True and counts["feedback_sent"] == 1
     assert index.feedbacks == [(result["recommendation_id"], ["host:mcp_tool:weather"])]
+
+
+def test_an_unavailable_answer_has_no_id_and_starts_no_sync_even_labelled_partial():
+    """Review of PR 306: only ranked, no_match and not_ready get an ID, and only ranked or no_match
+    can be partial (spec 0.75)."""
+    router = Router(outcome="unavailable", mechanism="router:partial")
+    answer = ask(client(router))
+    assert "recommendation_id" not in answer
+    assert router.syncs == []
+
+
+def test_a_feedback_arriving_as_the_lock_passes_on_still_finds_the_queue_full():
+    """Review of PR 306: between a release and the next waiter taking the lock, the lock reads as
+    free, yet 16 still wait; a new feedback then is dropped too."""
+    release_all = asyncio.Event()
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        await release_all.wait()
+        return reply(
+            dict(
+                schema_version=1,
+                operation=body["operation"],
+                inference="local",
+                missing=[] if body["operation"] == "find_missing" else None,
+                results=None,
+            )
+        )
+
+    async def scenario():
+        transport = lambda: httpx.MockTransport(handler)  # noqa: E731
+        sync = GuidanceSync(FEEDING, transport_factory=transport)
+        sync.inference = "local"
+        feedback = GuidanceFeedback(FEEDING, sync, transport_factory=transport)
+        catalog = [
+            dict(asset_id="host:skill:a", kind="skill", content_hash=SKILL_HASH, description="a")
+        ]
+
+        def job(i):
+            feedback.remember(f"id-{i}", 1, catalog)
+            return feedback.take(dict(schema_version=1, recommendation_id=f"id-{i}", used=[]))
+
+        late = []
+        real_release = feedback._lock.release
+
+        def release():
+            if not late:  # Queued before the waiter that this release wakes.
+                late.append(asyncio.create_task(feedback.send(job("late"))))
+            real_release()
+
+        feedback._lock.release = release
+        tasks = [asyncio.create_task(feedback.send(job(i))) for i in range(MAX + 1)]
+        for _ in range(20):
+            await asyncio.sleep(0)
+        release_all.set()
+        await asyncio.gather(*tasks)
+        await asyncio.gather(*late)
+        return feedback.status()
+
+    MAX = feedback_module.MAX_WAITING
+    counts = asyncio.run(scenario())
+    assert counts["feedback_skipped"] == 1 and counts["feedback_sent"] == MAX + 1
