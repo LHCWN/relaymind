@@ -234,32 +234,51 @@ class AssetCatalogStore:
             ]
         return meta, sources, assets
 
-    def _documents(self, rows: list[dict]) -> tuple[SearchDocument, ...]:
-        """Committed rows, validated once; integrity is the stored projection digest."""
-        documents = []
+    def _document(self, row: Mapping) -> SearchDocument:
+        """Validate one committed asset row and verify its projection digest."""
         try:
-            for row in rows:
-                record = validate_asset_record(json.loads(row["record_json"]))
-                search = json.loads(row["search_json"])
-                if set(search) != {"body", "projection_digest"}:
-                    raise ValueError
-                body = search["body"]
-                if body is not None:
-                    # The stored body keeps the instruction-body rules it was
-                    # admitted under, not the offered-field ones (spec 0.66 4.6).
-                    text(body, 262144, body=True)
-                digest = projection_digest(record, body)
-                if (
-                    row["asset_id"] != record.asset_id
-                    or row["source_id"] != record.source_id
-                    or digest != row["projection_digest"]
-                    or digest != search["projection_digest"]
-                ):
-                    raise ValueError
-                documents.append(SearchDocument(record, body, digest))
+            record = validate_asset_record(json.loads(row["record_json"]))
+            search = json.loads(row["search_json"])
+            if set(search) != {"body", "projection_digest"}:
+                raise ValueError
+            body = search["body"]
+            if body is not None:
+                # The stored body keeps the instruction-body rules it was
+                # admitted under, not the offered-field ones (spec 0.66 4.6).
+                text(body, 262144, body=True)
+            digest = projection_digest(record, body)
+            if (
+                row["asset_id"] != record.asset_id
+                or row["source_id"] != record.source_id
+                or digest != row["projection_digest"]
+                or digest != search["projection_digest"]
+            ):
+                raise ValueError
+            return SearchDocument(record, body, digest)
         except (ValueError, KeyError, TypeError, RecursionError):
             raise CatalogUnavailable("catalog_corrupt") from None
-        return tuple(documents)
+
+    def _documents(self, rows: list[dict]) -> tuple[SearchDocument, ...]:
+        """Committed rows, validated once; integrity is the stored projection digest."""
+        return tuple(self._document(row) for row in rows)
+
+    def get_asset(self, asset_id: str) -> AssetRecord | None:
+        """Read and validate one current catalog asset by primary key."""
+        with self.store.sql_read() as connection:
+            row = connection.execute(
+                "SELECT a.*, s.stale AS source_stale FROM asset_catalog_assets a "
+                "JOIN asset_catalog_sources s ON s.source_id = a.source_id "
+                "WHERE a.asset_id = ?",
+                (asset_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        row_dict = dict(row)
+        document = self._document(row_dict)
+        _require_projection(
+            (document,), (row_dict,), {row_dict["source_id"]: bool(row["source_stale"])}
+        )
+        return document.record
 
     def snapshot(self) -> CatalogSnapshot:
         meta, source_rows, asset_rows = self._state()

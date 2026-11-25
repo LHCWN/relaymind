@@ -1,6 +1,7 @@
 """Fail-closed private similarity stage over one coherent feedback snapshot (RM42)."""
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from relaymind.assets.embedding_backends import EmbeddingFailure
 from relaymind.assets.embeddings import EmbeddingError, cosine, represent_query
@@ -44,6 +45,7 @@ class AdaptationStage:
         snapshot = None
         metadata = None
         feedback_revision = None
+        earliest_expiry: datetime | None = None
         config = self.config.data
 
         def signature(value):
@@ -66,8 +68,21 @@ class AdaptationStage:
             current = current_catalog()
             if current.catalog_revision != req["catalog_revision"]:
                 raise AdaptationFailure("recommendation_unavailable", "stale_result", observations)
+            now = budget.clock.utc_now()
+            rev_fn = getattr(self.feedback, "scope_revision", None)
+            if (
+                callable(rev_fn)
+                and (earliest_expiry is None or earliest_expiry > now)
+                and rev_fn(req["scope"]) == feedback_revision
+            ):
+                if lease.fenced:
+                    raise AdaptationFailure(
+                        "recommendation_unavailable", "selector_unavailable", observations
+                    )
+                budget.check()
+                return
             current_snapshot = self.feedback.correction_snapshot(
-                req["scope"], current, now=budget.clock.utc_now(), check=budget.check
+                req["scope"], current, now=now, check=budget.check
             )
             if (
                 lease.fenced
@@ -89,6 +104,13 @@ class AdaptationStage:
             lease.check()
             metadata = signature(snapshot)
             feedback_revision = snapshot.feedback_revision
+            earliest_expiry = min(
+                (
+                    datetime.fromisoformat(r["retain_until"].replace("Z", "+00:00"))
+                    for r in snapshot.records
+                ),
+                default=None,
+            )
             history = lease.register(list(snapshot.records))
             snapshot = None
             matches = set()

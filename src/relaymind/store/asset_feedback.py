@@ -681,26 +681,35 @@ class AssetFeedbackStore:
 
         return remove
 
-    def correction_snapshot(self, scope, current_catalog, *, now, check=lambda: None):
-        """One store-owned revision/history read; filter before retaining latest20.
+    def scope_revision(self, scope: Mapping) -> int:
+        """Read the current feedback revision for scope via one indexed PK lookup."""
+        with self.store.sql_read() as db:
+            return self._scope_revision(db, scope)
 
-        Stream historical rows under the caller's unchanged total deadline; do
-        not allocate an unbounded list or silently stop at a favorable prefix.
+    def correction_snapshot(self, scope, current_catalog, *, now, check=lambda: None):
+        """One store-owned revision/history read; filter before retaining latest 20.
+
+        Filters kind and retention in SQL and streams newest-first under the
+        caller's unchanged total deadline so expired/non-correction rows are
+        never decoded and scanning stops once 20 eligible records are found.
         """
         self.maintain_scope(scope, now=now)
         self.recommendations._observe_scope_expiry(scope, now=now)
         current = {asset.asset_id: asset for asset in current_catalog.assets}
         binding_fields = ("asset_id", *IDENTITY_FIELDS)
+        now_iso = utc_iso(now)
         result = []
 
         with self.store.sql_read() as db:
             check()
             revision = self._scope_revision(db, scope)
             rows = db.execute(
-                "SELECT r.record_json,b.asset_json FROM feedback_records r "
-                "JOIN feedback_bindings b USING(feedback_id) WHERE r.user_id=? "
-                "AND r.workspace_id=?",
-                (scope["user_id"], scope["workspace_id"]),
+                "SELECT r.record_json, b.asset_json FROM feedback_records r "
+                "JOIN feedback_bindings b USING(feedback_id) "
+                "WHERE r.user_id=? AND r.workspace_id=? AND r.retain_until>? "
+                "AND json_extract(r.record_json, '$.feedback.kind')='correction' "
+                "ORDER BY json_extract(r.record_json, '$.recorded_at') DESC, r.feedback_id DESC",
+                (scope["user_id"], scope["workspace_id"], now_iso),
             )
             for row in rows:
                 check()
@@ -716,8 +725,8 @@ class AssetFeedbackStore:
                 if any(binding[field] != raw[field] for field in binding_fields):
                     continue
                 bisect.insort(result, validate_feedback_record(record), key=correction_order)
-                if len(result) > 20:
-                    del result[0]
+                if len(result) >= 20:
+                    break
             check()
         return CorrectionSnapshot(revision, current_catalog.catalog_revision, tuple(result))
 

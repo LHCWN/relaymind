@@ -1491,6 +1491,20 @@ class RunStore:
             ).fetchone()
         return None if row is None else _model_timing(row)
 
+    def model_timing_summary_key(
+        self, *, model: str, purpose: str, actor: str
+    ) -> tuple[int, int, str | None]:
+        """Indexed cache key (count, latest sample_id, oldest recorded_at) for retained samples."""
+        with self._lock:
+            self._check_open()
+            row = self._conn.execute(
+                "SELECT COUNT(*), COALESCE(MAX(sample_id), 0), MIN(recorded_at)"
+                " FROM model_timings"
+                " WHERE recorded_at > ? AND model = ? AND purpose = ? AND actor = ?",
+                (self._retention_cutoff(), model, purpose, actor),
+            ).fetchone()
+        return int(row[0]), int(row[1]), row[2]
+
     def timing_estimate(self, model: str, purpose: str, *, actor: str = "local") -> TimingEstimate:
         """Read measured prediction inputs without inference or run/event-history scans."""
         return timing_estimate(

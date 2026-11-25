@@ -20,6 +20,7 @@ The criteria values come only from schema-typed result fields, never from
 free text (RM12).
 """
 
+import functools
 import re
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from copy import deepcopy
@@ -238,6 +239,7 @@ _DEMO_DATABASE_ID = re.compile(
 )
 
 
+@functools.lru_cache(maxsize=256)
 def _id_mention(resource_id: str) -> re.Pattern[str]:
     """A mention of a lowercase resource ID, in any case (RM05, section 9).
 
@@ -826,6 +828,31 @@ class StatementGate:
         self.offset = 0
         self.hold = hold
         self.rejected = False
+        self._draft_label_end: int | None = None
+        self._resumed_observation = False
+
+    def _piece_safe(self, stop: int) -> bool:
+        """Incrementally check safety for the newly closed unit [self.offset:stop]."""
+        if self.predicate_id == "health_checklist_separated":
+            assert self._draft_label_end is not None
+            if self.offset == 0:
+                safe, _ = completion_parts(self.predicate_id, self.raw[:stop], self.results)
+                self._resumed_observation = (
+                    _OBSERVATION_HEADING.search(self.raw, self._draft_label_end, stop) is not None
+                )
+                return safe
+            piece = self.raw[self.offset : stop]
+            if not self._resumed_observation:
+                resume = _OBSERVATION_HEADING.search(piece)
+                if resume is None:
+                    return True
+                self._resumed_observation = True
+                piece = piece[resume.start() :]
+            safe, _ = completion_parts("health_status_preserved", piece, self.results)
+            return safe
+        piece = self.raw[self.offset : stop]
+        safe, _ = completion_parts(self.predicate_id, piece, self.results)
+        return safe
 
     def push(self, text: str) -> Iterator[str]:
         """Yield stable verified units in order, even within one provider delta."""
@@ -834,19 +861,20 @@ class StatementGate:
         self.raw += text
         if self.hold:
             return
-        label = None
-        if self.predicate_id == "health_checklist_separated":
+        if self.predicate_id == "health_checklist_separated" and self._draft_label_end is None:
             label = _DRAFT_CHECKLIST_LABEL.search(self.raw)
             if label is None:
                 return
+            self._draft_label_end = label.end()
         for end in _STATEMENT_END.finditer(self.raw, self.offset):
             stop = end.end()
             if end.group() in ".!?" and stop == len(self.raw):
                 continue
-            if label is not None and (stop <= label.end() or end.group() != "\n"):
+            if self._draft_label_end is not None and (
+                stop <= self._draft_label_end or end.group() != "\n"
+            ):
                 continue
-            safe, _ = completion_parts(self.predicate_id, self.raw[:stop], self.results)
-            if not safe:
+            if not self._piece_safe(stop):
                 self.rejected = True
                 raise StatementRejected
             piece = self.raw[self.offset : stop]

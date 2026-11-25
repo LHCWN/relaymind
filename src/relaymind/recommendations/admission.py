@@ -24,6 +24,9 @@ def current_asset(catalog, asset_id: str):
     """The current catalog record for asset_id, or None when it is gone."""
     if catalog is None:
         raise RuntimeError("asset admission needs the current catalog")
+    lookup = getattr(catalog, "get_asset", None)
+    if callable(lookup) and "snapshot" not in getattr(catalog, "__dict__", ()):
+        return lookup(asset_id)
     return next((asset for asset in catalog.snapshot().assets if asset.asset_id == asset_id), None)
 
 
