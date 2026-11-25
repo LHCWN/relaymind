@@ -904,3 +904,76 @@ def test_start_confirmation_releases_issued_token_before_continuation_completes(
             await started.task
 
     asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("caller", ["resume", "cancel"])
+def test_external_active_transition_with_stale_version_releases_issued_token(tmp_path, caller):
+    """RM11, #299: a 409 after an external move to an active state still drops the token."""
+    gateway, waiting, _ = waiting_gateway(tmp_path)
+    assert waiting.run_id in gateway.orchestrator._issued
+    stale_version = gateway.store.get_run(waiting.run_id).version
+    gateway.orchestrator.machine.resume(waiting.run_id, stale_version)
+
+    with pytest.raises(StaleVersionError):
+        if caller == "resume":
+            decide(gateway, waiting, version=stale_version)
+        else:
+            asyncio.run(gateway.orchestrator.cancel(waiting.run_id, stale_version))
+
+    assert waiting.run_id not in gateway.orchestrator._waiting
+    assert gateway.orchestrator._issued == {}
+    assert gateway.orchestrator.reveal_confirmation(waiting.run_id) is None
+
+
+def test_transient_read_error_after_confirmation_decision_still_releases_issued_token(
+    tmp_path, monkeypatch
+):
+    """RM11, #299: a read error after begin_decision succeeded never retains _issued."""
+    gateway, waiting, _ = waiting_gateway(tmp_path, *APPROVED_TAIL)
+    assert waiting.run_id in gateway.orchestrator._issued
+    version = gateway.store.get_run(waiting.run_id).version
+    request = waiting.confirmation
+
+    def unreadable(_run_id, *, default=False):
+        return default
+
+    monkeypatch.setattr(gateway.orchestrator, "_still_waiting", unreadable)
+
+    async def exercise():
+        started = gateway.orchestrator.start_confirmation(
+            waiting.run_id,
+            version,
+            approval_id=request.approval_id,
+            token=request.token,
+            approve=True,
+        )
+        assert gateway.orchestrator._issued == {}
+        assert waiting.run_id not in gateway.orchestrator._waiting
+        if started.task is not None:
+            await started.task
+
+    asyncio.run(exercise())
+
+
+def test_concurrent_external_cancel_during_cancel_waiting_releases_issued_token(
+    tmp_path, monkeypatch
+):
+    """RM11, #299: a racing transition during cancel_waiting still drops _waiting and _issued."""
+    gateway, waiting, _ = waiting_gateway(tmp_path)
+    assert waiting.run_id in gateway.orchestrator._issued
+    version = gateway.store.get_run(waiting.run_id).version
+    run = gateway.orchestrator._waiting[waiting.run_id]
+    real_cancel = run.cancel_waiting
+
+    def racing_cancel(expected_version):
+        gateway.orchestrator.machine.cancel(waiting.run_id, expected_version)
+        return real_cancel(expected_version)
+
+    monkeypatch.setattr(run, "cancel_waiting", racing_cancel)
+
+    with pytest.raises(StaleVersionError):
+        asyncio.run(gateway.orchestrator.cancel(waiting.run_id, version))
+
+    assert waiting.run_id not in gateway.orchestrator._waiting
+    assert gateway.orchestrator._issued == {}
+    assert gateway.orchestrator.reveal_confirmation(waiting.run_id) is None
