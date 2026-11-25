@@ -66,7 +66,7 @@ def test_source_setup_failure_disposes_real_owner_before_query_loop(
     fixture_root = tmp_path / "native"
     fixture_root.mkdir()
     production, _, _ = native_fixture(fixture_root)
-    monkeypatch.setattr(asset_diagnostic_runner, "_load_production_config", lambda p: production)
+    monkeypatch.setattr(asset_diagnostic_runner, "load_production_config", lambda p: production)
 
     def fail_setup(runtime):
         rebuild = runtime.worker.rebuild
@@ -114,7 +114,7 @@ def test_source_failed_native_setup_keeps_planned_rows_and_actual_job_evidence(
     fixture_root = tmp_path / "native"
     fixture_root.mkdir()
     production, _, _ = native_fixture(fixture_root)
-    monkeypatch.setattr(asset_diagnostic_runner, "_load_production_config", lambda p: production)
+    monkeypatch.setattr(asset_diagnostic_runner, "load_production_config", lambda p: production)
 
     def fail_load(artifact):
         raise RuntimeError("controlled_native_constructor_failure")
@@ -154,7 +154,7 @@ def test_source_cancelled_setup_stays_interrupted_after_catalog_change(
     fixture_root = tmp_path / "native"
     fixture_root.mkdir()
     production, _, _ = native_fixture(fixture_root)
-    monkeypatch.setattr(asset_diagnostic_runner, "_load_production_config", lambda p: production)
+    monkeypatch.setattr(asset_diagnostic_runner, "load_production_config", lambda p: production)
     started, release_native = threading.Event(), threading.Event()
     native = NativeDouble()
     stage = {}

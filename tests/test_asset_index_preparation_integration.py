@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from fixture_benchmark_helpers import refresh_fixture_benchmark_config
 from relaymind.selection.asset_contract import SelectorContext, parse_asset_request
 from relaymind.selection.asset_http import HttpAssetSelector
 from test_asset_preparation import inputs
@@ -110,7 +111,6 @@ def test_none_runner_record_is_explicit_and_comparison_is_self_contained(tmp_pat
 def test_failed_preparation_preserves_all_planned_slots_without_query(tmp_path, indexed_server):
     from relaymind.evaluation.asset_benchmark import (
         load_benchmark_config,
-        refresh_fixture_benchmark_config,
         run_asset_benchmark,
     )
 
@@ -148,7 +148,6 @@ def test_prepared_primary_failure_remains_visible_when_gateway_floor_succeeds(
 ):
     from relaymind.evaluation.asset_benchmark import (
         load_benchmark_config,
-        refresh_fixture_benchmark_config,
         run_asset_benchmark,
     )
 
@@ -240,7 +239,6 @@ def test_offline_report_rejects_self_consistent_wrong_prepared_catalog(tmp_path,
     from relaymind.evaluation.asset_benchmark import (
         load_asset_benchmark_report,
         load_benchmark_config,
-        refresh_fixture_benchmark_config,
         run_asset_benchmark,
         write_asset_benchmark_report,
     )
@@ -274,7 +272,6 @@ def test_explicit_fixture_authoring_binds_foreign_unicode_to_actual_runtime(tmp_
     from relaymind.canonical import canonical_digest
     from relaymind.evaluation.asset_benchmark import (
         load_benchmark_config,
-        refresh_fixture_benchmark_config,
     )
 
     config = fixture_config(tmp_path)
@@ -296,7 +293,6 @@ def test_explicit_fixture_authoring_binds_foreign_unicode_to_actual_runtime(tmp_
 @pytest.mark.parametrize("boundary", ["genuine", "frozen", "corrupt"])
 def test_fixture_unicode_authoring_cannot_rewrite_real_frozen_or_corrupt_lock(tmp_path, boundary):
     from relaymind.canonical import canonical_digest
-    from relaymind.evaluation.asset_benchmark import refresh_fixture_benchmark_config
 
     config = fixture_config(tmp_path)
     lock_path = config.path.parent / "lock.json"
@@ -346,7 +342,6 @@ def test_cold_reuse_profiles_are_incompatible_in_both_comparison_modes(tmp_path,
     from relaymind.evaluation.asset_benchmark import (
         load_asset_benchmark_report,
         load_benchmark_config,
-        refresh_fixture_benchmark_config,
         run_asset_benchmark,
         write_asset_benchmark_report,
     )

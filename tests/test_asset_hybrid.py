@@ -15,6 +15,16 @@ def api():
     return asset_hybrid
 
 
+def rank_hybrid(request, config, index, query_vector, *, publication=None) -> dict:
+    """Test-only synchronous driver over the cooperative hybrid ranking kernel (#296)."""
+    steps = api()._rank_steps(request, config, index, query_vector, publication=publication)
+    while True:
+        try:
+            next(steps)
+        except StopIteration as done:
+            return done.value
+
+
 def setup(tmp_path, *, minimum=0.5):
     from relaymind.assets.embedding_config import load_hybrid_config
     from relaymind.assets.embedding_manifest import load_embedding_manifest
@@ -40,8 +50,7 @@ def test_metadata_same_content_and_scope_cannot_reuse_an_old_vector(tmp_path):
     foreign = api().HybridIndex(config, {"user_id": "other", "workspace_id": "w"})
     assert foreign.key(original) != index.key(original)
     assert (
-        api().rank_hybrid(request(catalog=[changed]), config, index, (1.0, 0.0))["outcome"]
-        == "not_ready"
+        rank_hybrid(request(catalog=[changed]), config, index, (1.0, 0.0))["outcome"] == "not_ready"
     )
     index.reconcile([changed])
     assert index.compatible(original) is None
@@ -56,14 +65,14 @@ def test_partial_coverage_requires_choice_and_zero_coverage_reports_not_ready(tm
         asset_id="b", description="English", identity={"package_id": "B", "package_version": None}
     )
     req = request(task_text="任务", catalog=[a, b])
-    assert api().rank_hybrid(req, config, index, (1.0, 0.0))["outcome"] == "not_ready"
+    assert rank_hybrid(req, config, index, (1.0, 0.0))["outcome"] == "not_ready"
     index.publish_batch([a], [(1.0, 0.0)])
-    partial = api().rank_hybrid(req, config, index, (1.0, 0.0))
+    partial = rank_hybrid(req, config, index, (1.0, 0.0))
     assert partial["decision"] == "choice_required"
     index.publish_batch([b], [(0.0, 1.0)])
-    assert api().rank_hybrid(req, config, index, (1.0, 0.0))["decision"] == "confident"
+    assert rank_hybrid(req, config, index, (1.0, 0.0))["decision"] == "confident"
     index.reconcile([])
-    assert api().rank_hybrid(req, config, index, (1.0, 0.0))["outcome"] == "not_ready"
+    assert rank_hybrid(req, config, index, (1.0, 0.0))["outcome"] == "not_ready"
 
 
 def test_exact_semantic_and_lexical_evidence_membership(tmp_path):
@@ -79,7 +88,7 @@ def test_exact_semantic_and_lexical_evidence_membership(tmp_path):
         identity={"package_id": "different", "package_version": None},
     )
     index.publish_batch([lexical, semantic], [(-1.0, 0.0), (1.0, 0.0)])
-    result = api().rank_hybrid(
+    result = rank_hybrid(
         request(task_text="search", catalog=[lexical, semantic]), config, index, (1.0, 0.0)
     )
     assert [c["asset_id"] for c in result["candidates"]] == ["semantic", "lexical"]
@@ -101,13 +110,9 @@ def test_pool_is_ten_ties_are_asset_id_order_and_unsupported_union_is_no_match(t
         for i in reversed(range(12))
     ]
     index.publish_batch(records, [(1.0, 0.0)] * 12)
-    result = api().rank_hybrid(
-        request(task_text="none", catalog=records), config, index, (1.0, 0.0)
-    )
+    result = rank_hybrid(request(task_text="none", catalog=records), config, index, (1.0, 0.0))
     assert [c["asset_id"] for c in result["candidates"]] == [f"a{i:02}" for i in range(10)]
-    result = api().rank_hybrid(
-        request(task_text="none", catalog=records), config, index, (-1.0, 0.0)
-    )
+    result = rank_hybrid(request(task_text="none", catalog=records), config, index, (-1.0, 0.0))
     assert result["outcome"] == "no_match" and result["candidates"] == []
 
 
@@ -354,8 +359,8 @@ def test_cooperative_cached_and_unprepared_paths_preserve_exact_rrf_and_evidence
     req = parse_asset_request(request(catalog=records, task_text="search"))
     pinned = index.pin()
     uncached = (pinned[0], pinned[1], {})
-    expected = api().rank_hybrid(req, config, index, (1.0, 0.0), publication=pinned)
-    assert expected == api().rank_hybrid(req, config, index, (1.0, 0.0), publication=uncached)
+    expected = rank_hybrid(req, config, index, (1.0, 0.0), publication=pinned)
+    assert expected == rank_hybrid(req, config, index, (1.0, 0.0), publication=uncached)
 
     async def run():
         context = SelectorContext(lambda: 0, lambda: None)

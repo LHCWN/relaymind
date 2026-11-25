@@ -615,7 +615,7 @@ def test_unavailable_predispatch_has_no_invented_attempt_or_zero_cost(tmp_path, 
 
         raise RecommendationError("recommendation_unavailable")
 
-    monkeypatch.setattr(api._LockedProjectionProvider, "pin", unavailable)
+    monkeypatch.setattr(api.LockedProjectionProvider, "pin", unavailable)
     report = asyncio.run(api.run_asset_benchmark(config))
     row = report.data["results"][0]
     assert row["status"] == "failed" and row["attempts"] == [] and row["observed_costs"] == []
@@ -648,7 +648,9 @@ def test_async_cancel_keeps_current_attempt_and_marks_rest_not_run(tmp_path, htt
 def test_fixture_config_refresh_only_authors_explicit_fixture_inputs(tmp_path):
     api = module("asset_benchmark")
     config = fixture_config(tmp_path, repetitions=1, warmups=0)
-    api.refresh_fixture_benchmark_config(config.path)
+    from fixture_benchmark_helpers import refresh_fixture_benchmark_config
+
+    refresh_fixture_benchmark_config(config.path)
     refreshed = api.load_benchmark_config(config.path)
     assert refreshed.data["lock_digest"] == config.data["lock_digest"]
     assert refreshed.release.lock["purpose"] == "fixture"
@@ -736,7 +738,7 @@ def test_infrastructure_failure_preserves_full_plan_as_blocked_rows(tmp_path, mo
     def unavailable(self, kinds):
         raise RuntimeError("private infrastructure detail")
 
-    monkeypatch.setattr(api._LockedProjectionProvider, "pin", unavailable)
+    monkeypatch.setattr(api.LockedProjectionProvider, "pin", unavailable)
     report = asyncio.run(api.run_asset_benchmark(config))
     assert report.data["status"] == "blocked"
     assert [r["status"] for r in report.data["results"]] == ["failed", "not_run", "not_run"]
@@ -821,7 +823,9 @@ def test_single_kind_diagnostic_cohort_preserves_locked_request_envelope(tmp_pat
     write(config.path.parent, "cases", cases)
     relock(config.path.parent)
     config.path.write_text(config.path.read_text().replace('"development"', '"diagnostic"'))
-    api.refresh_fixture_benchmark_config(config.path)
+    from fixture_benchmark_helpers import refresh_fixture_benchmark_config
+
+    refresh_fixture_benchmark_config(config.path)
     loaded = api.load_benchmark_config(config.path)
     report = asyncio.run(api.run_asset_benchmark(loaded))
     assert report.data["config"]["requested_kinds"] == ["skill"]

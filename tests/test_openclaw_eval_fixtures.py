@@ -24,10 +24,23 @@ from relaymind.evaluation.openclaw import (
     argument_matches,
     check_lock,
     load_tasks,
-    lock_document,
     parse_tasks,
     sampling_order,
 )
+
+
+def lock_document(tasks, name: str) -> dict:
+    """Test-only helper for building expected OpenClaw task lock documents (#296)."""
+    return {
+        "tasks": name,
+        "version": tasks.document["version"],
+        "sha256": tasks.digest,
+        "order_sha256": canonical_digest(
+            [[s.repeat, s.task_id, s.arm] for s in sampling_order(tasks)]
+        ),
+        "frozen_on": tasks.document["frozen_on"],
+    }
+
 
 REPO = Path(__file__).resolve().parent.parent
 TASKS = REPO / "evaluation" / "openclaw_tasks.v1.json"

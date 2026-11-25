@@ -348,7 +348,7 @@ def test_rm40_cancellation_conserves_planned_slots_and_consumed_attempts(
     # Windows the operating system queries alone can take seconds, and the
     # 2 s guards below bound only dispatch and cancellation.
     environment = api().collect_benchmark_environment(
-        production=api()._load_production_config(production(development_input))
+        production=api().load_production_config(production(development_input))
     )
     monkeypatch.setattr(
         api(), "collect_benchmark_environment", lambda *, production: copy.deepcopy(environment)

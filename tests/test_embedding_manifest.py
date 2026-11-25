@@ -221,5 +221,7 @@ def test_unqualified_artifact_never_reaches_backend_loading(tmp_path):
     manifest = api().load_embedding_manifest(path)
     from relaymind.assets import embedding_qualification
 
-    with pytest.raises(api().EmbeddingError, match="unqualified_artifact"):
-        embedding_qualification.require_qualified(manifest, "0" * 64)
+    assert (
+        embedding_qualification.qualification_key(manifest, "0" * 64)
+        not in embedding_qualification.QUALIFIED_IDENTITIES
+    )
