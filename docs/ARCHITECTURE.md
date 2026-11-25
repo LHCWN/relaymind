@@ -106,8 +106,9 @@ api ──► orchestrator ──► skills ──► tools ──► store
 
 The core execution stack is strictly layered from top to bottom:
 `api` (with sibling `ui`), `orchestrator`, `skills`, `tools`, then core `store`
-(`run_store.py`, `trace_event.py`, `model_timings.py`) and `adapters` side by
-side, then the leaf modules (`canonical.py`, `schema_util.py`, `redaction.py`).
+(`run_store.py`, `trace_event.py`, `model_timings.py`, `outcomes.py`) and
+`adapters` side by side, then the leaf modules (`canonical.py`, `schema_util.py`,
+`redaction.py`).
 These dependency rules are enforced by `tests/test_architecture_imports.py`.
 
 Core stack rules:
