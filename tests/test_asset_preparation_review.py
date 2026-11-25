@@ -335,7 +335,11 @@ def test_genuine_main_outcomes_and_reported_claims_stay_valid(ending):
         for e in record["exchanges"]
         if e["response"] is not None
     ]
-    assert claims == list(range(1, len(claims) + 1))
+    # A poll cut off by the total time can reach the selector and still record no response, so
+    # its reported count may be missing here; every count that was recorded stays as reported,
+    # in order, and names a request the selector really got.
+    assert claims == sorted(set(claims))
+    assert all(1 <= claim <= len(requests) for claim in claims)
 
 
 def test_real_cli_keeps_valid_ready_setup_with_unknown_costs(prepared_bundle, tmp_path):
