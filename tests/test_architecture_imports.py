@@ -100,7 +100,33 @@ ALLOWED_PACKAGE_EDGES: dict[str, frozenset[str]] = {
 }
 
 
-def _imported_modules(path: Path, source: str | None = None) -> set[str]:
+def _is_type_checking_if(node: ast.AST) -> bool:
+    if not isinstance(node, ast.If):
+        return False
+    test = node.test
+    return (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
+        isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
+    )
+
+
+def _walk_imports(node: ast.AST, *, include_type_checking: bool) -> list[ast.AST]:
+    collected: list[ast.AST] = []
+    stack: list[ast.AST] = [node]
+    while stack:
+        current = stack.pop()
+        if not include_type_checking and _is_type_checking_if(current):
+            # Walk orelse branch if present, skip the TYPE_CHECKING body.
+            assert isinstance(current, ast.If)
+            stack.extend(current.orelse)
+            continue
+        collected.append(current)
+        stack.extend(ast.iter_child_nodes(current))
+    return collected
+
+
+def _imported_modules(
+    path: Path, source: str | None = None, *, include_type_checking: bool = True
+) -> set[str]:
     """Return every relaymind.* module path imported by a Python source file.
 
     Resolves relative imports against ``path`` and expands ``from relaymind.<pkg> import <name>``
@@ -111,7 +137,7 @@ def _imported_modules(path: Path, source: str | None = None) -> set[str]:
     rel = path.relative_to(SRC)
     pkg_parts = ["relaymind", *rel.parts[:-1]]
     found: set[str] = set()
-    for node in ast.walk(tree):
+    for node in _walk_imports(tree, include_type_checking=include_type_checking):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 if alias.name == "relaymind" or alias.name.startswith("relaymind."):
@@ -154,6 +180,7 @@ def _package_of(path: Path) -> str:
 ALLOWED_MODULE_EDGES: dict[tuple[str, str], frozenset[str]] = {
     ("skills", "tools"): frozenset({"relaymind.tools.registry"}),
     ("recommendations", "api"): frozenset({"relaymind.api.errors"}),
+    ("identifiers", "tools"): frozenset({"relaymind.tools.registry"}),
 }
 
 
@@ -230,27 +257,10 @@ def test_documented_module_level_layer_restrictions():
                 )
     # identifiers.py may only reference tools under TYPE_CHECKING, never at runtime.
     id_path = SRC / "identifiers.py"
-    tree = ast.parse(id_path.read_text("utf-8"), filename=str(id_path))
-    for node in tree.body:
-        if (
-            isinstance(node, ast.If)
-            and isinstance(node.test, ast.Name)
-            and node.test.id == "TYPE_CHECKING"
-        ):
-            continue
-        for sub in ast.walk(node):
-            if (
-                isinstance(sub, ast.ImportFrom)
-                and sub.module
-                and sub.module.startswith("relaymind.tools")
-            ):
-                violations.append(f"src/relaymind/identifiers.py imports {sub.module} at runtime")
-            if isinstance(sub, ast.Import):
-                for alias in sub.names:
-                    if alias.name.startswith("relaymind.tools"):
-                        violations.append(
-                            f"src/relaymind/identifiers.py imports {alias.name} at runtime"
-                        )
+    for mod in sorted(_imported_modules(id_path, include_type_checking=False)):
+        parts = mod.split(".")
+        if len(parts) >= 2 and parts[1] == "tools":
+            violations.append(f"src/relaymind/identifiers.py imports {mod} at runtime")
     assert not violations, "Module-level layering violations:\n" + "\n".join(violations)
 
 
@@ -346,3 +356,14 @@ def test_import_scanner_resolves_relative_and_package_level_imports():
     )
     assert "relaymind.orchestrator.router" in sel_found
     assert "relaymind.orchestrator" in sel_found
+
+    id_path = SRC / "identifiers.py"
+    id_source = (
+        "from typing import TYPE_CHECKING\n"
+        "from relaymind import tools\n"
+        "if TYPE_CHECKING:\n"
+        "    from relaymind.tools.registry import ToolResult\n"
+    )
+    runtime_only = _imported_modules(id_path, id_source, include_type_checking=False)
+    assert "relaymind.tools" in runtime_only
+    assert "relaymind.tools.registry" not in runtime_only
