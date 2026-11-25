@@ -1257,7 +1257,7 @@ describe("tool_call arguments, as the pinned host reads them", () => {
   });
 });
 
-describe("selector feedback (spec 0.75; RM48)", () => {
+describe("selector feedback (spec 0.75; RM48; AC43)", () => {
   const RUN = { ...CTX, runId: "run-1" };
   const withId = (names: string[]) => ({ ...picks(names, "third_party"), recommendation_id: "rec-1" });
 
@@ -1350,6 +1350,15 @@ describe("selector feedback (spec 0.75; RM48)", () => {
     used("skills_read", { name: "chosen" });
     await end();
     expect(JSON.parse(String(sent()[0]![1].body)).used).toEqual([{ name: "chosen", kind: "skill", signal: "loaded" }]);
+  });
+
+  it("reports at most 1,000 assets, the gateway's limit", async () => {
+    const tools = join(dir, "many.json");
+    writeFileSync(tools, JSON.stringify(Array.from({ length: 1001 }, (_, i) => ({ name: `t${i}`, description: "T" }))));
+    const { used, end, sent } = await turn(withId(["chosen"]), { toolsFile: tools });
+    for (let i = 0; i < 1001; i += 1) used(`t${i}`, {});
+    await end();
+    expect(JSON.parse(String(sent()[0]![1].body)).used).toHaveLength(1000);
   });
 
   it("stays quiet when the feedback request fails", async () => {

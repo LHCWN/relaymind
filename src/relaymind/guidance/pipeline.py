@@ -745,9 +745,10 @@ async def _third_party(
             parsed, v2, SelectorIdentity(settings.name, settings.version), http=True
         )
         # The selector got this request and answered it: the host may say what the turn used.
-        if on_selected is not None and on_selected(
-            v2.data["recommendation_id"], v2.data["catalog_revision"], v2.data["catalog"]
-        ):
+        if on_selected is not None:
+            on_selected(
+                v2.data["recommendation_id"], v2.data["catalog_revision"], v2.data["catalog"]
+            )
             run.recommendation_id = v2.data["recommendation_id"]
         not_ready = parsed.data["outcome"] == "not_ready"
         # A partial answer stands, and the pairs it could not rank still need a sync (spec 0.75).
@@ -782,14 +783,14 @@ async def run_guidance(
     redact: Callable[[str], str] = lambda text: text,
     clock: Callable[[], float] = time.monotonic,
     on_sync: Callable[[Sequence[Mapping], dict], None] | None = None,
-    on_selected: Callable[[str, int, Sequence[Mapping]], bool] | None = None,
+    on_selected: Callable[[str, int, Sequence[Mapping]], None] | None = None,
 ) -> dict:
     """The stages of section 7.7, or the third-party selector with word match as its fallback.
 
     `on_sync(catalog, files)` hears a valid `not_ready` or partial answer, with the offered records
     and the skill files by asset ID, so the caller can sync after it answers (RM47).
-    `on_selected(recommendation_id, catalog_revision, catalog)` hears every valid selector answer;
-    when it returns True the result carries that `recommendation_id` for feedback (RM48).
+    `on_selected(recommendation_id, catalog_revision, catalog)` hears every valid selector answer,
+    and the result then carries that `recommendation_id` for feedback (RM48).
     """
     run = _Run(settings, clock, redact)
     assets = request["assets"]

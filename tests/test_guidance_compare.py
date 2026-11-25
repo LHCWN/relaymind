@@ -402,8 +402,8 @@ def test_rows_without_a_mechanism_have_no_early_answer():
 
 
 def test_a_partial_selector_answer_is_counted_apart_from_early_and_is_not_a_failure():
-    """Spec 0.75 section 7.7: a mechanism ending in :partial ranked an offer the selector had only
-    partly indexed, so it is not the selector's full ranking either."""
+    """Spec 0.75 section 7.7 (RM47, AC42): a mechanism ending in :partial ranked an offer the
+    selector had only partly indexed, so it is not the selector's full ranking either."""
     row = dict(lane="en", text="t", expected=["x"], picks=["x"], decision="picks", degraded=False)
     mechanisms = ["router:partial", "router:early", "router"]
     report = dict(

@@ -311,9 +311,9 @@ Answer `{"schema_version":1,"operation":"feedback","inference":"local","missing"
   and a subagent's own run is not counted. A turn that fails sends nothing.
 - No prompt text, path or body is sent. You already have the request under its `recommendation_id`; keep what you
   choose, on this machine.
-- Feedback goes only to a selector whose last answer said `"inference":"local"`, unless the operator sets
-  `sync_allow_remote = true`. If no sync has told the gateway yet, it first sends a `find_missing` with that
-  select's pairs to `sync_url` only to learn this, and uploads nothing.
+- Feedback goes only to a selector whose last valid answer said `"inference":"local"`, unless the operator sets
+  `sync_allow_remote = true`. Without that setting, if no sync has told the gateway yet, it first sends a
+  `find_missing` with that select's pairs to `sync_url` only to learn this, and uploads nothing.
 - Each select gets at most one feedback. The gateway remembers a select for at most one hour, at most 1,024 of
   them, and sends one feedback at a time; a feedback that finds 16 others waiting is dropped. Each exchange gets
   `sync_ms`, there is no retry, and a failure changes no answer.

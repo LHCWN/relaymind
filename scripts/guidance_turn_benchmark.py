@@ -697,19 +697,19 @@ class SelectorProxy:
             outcome = str(result.get("outcome"))
             mechanism = str(result.get("mechanism") or "")
             # Neither an early nor a partial answer is the selector's full ranking (spec 0.75).
-            stage = next((s for s in ("early", "partial") if mechanism.endswith(f":{s}")), None)
+            label = next((s for s in ("early", "partial") if mechanism.endswith(f":{s}")), None)
         except (ValueError, AttributeError):
-            outcome, stage = "invalid", None
+            outcome, label = "invalid", None
         with self._lock:
-            self.outcomes.append((outcome, stage))
+            self.outcomes.append((outcome, label))
 
     def ready(self) -> bool:
         """The last select was the full ranking: ranked or no_match, neither early nor partial."""
         with self._lock:
             if not self.outcomes:
                 return False
-            outcome, stage = self.outcomes[-1]
-        return outcome in ("ranked", "no_match") and stage is None
+            outcome, label = self.outcomes[-1]
+        return outcome in ("ranked", "no_match") and label is None
 
     def mark(self) -> int:
         with self._lock:
@@ -720,7 +720,7 @@ class SelectorProxy:
         "partial", not "ranked"."""
         with self._lock:
             seen = self.outcomes[since:]
-        return dict(Counter(stage or outcome for outcome, stage in seen))
+        return dict(Counter(label or outcome for outcome, label in seen))
 
     def close(self):
         self.server.shutdown()

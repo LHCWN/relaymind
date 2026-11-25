@@ -105,8 +105,8 @@ def read_report(report: dict) -> tuple[list[dict], int | None]:
                 # Selection v2 has no "choose", so whether it asked is unknown, not "no".
                 decision=None,
                 degraded=_fell_back(r),
-                early=_early(((r.get("attempts") or [{}])[0]).get("mechanism")),
-                partial=_partial(((r.get("attempts") or [{}])[0]).get("mechanism")),
+                early=_early(_first_mechanism(r)),
+                partial=_partial(_first_mechanism(r)),
                 ms=r["observed_ms"],
             )
             for r in report["rows"]
@@ -126,6 +126,11 @@ def _fell_back(row: dict) -> bool:
     return first.get("outcome", "ranked") not in ("ranked", "no_match") or str(
         first.get("mechanism", "")
     ).endswith("_degraded")
+
+
+def _first_mechanism(row: dict) -> object:
+    """The mechanism of a platform row's first attempt: the configured selector's own answer."""
+    return ((row.get("attempts") or [{}])[0]).get("mechanism")
 
 
 def _early(mechanism: object) -> bool:

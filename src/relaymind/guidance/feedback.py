@@ -18,6 +18,7 @@ import httpx
 from relaymind.schema_util import StrictValidator, first_schema_error, load_packaged_schema
 from relaymind.selection.http import validate_url
 
+from .pipeline import GuidanceSettings
 from .sync import FEEDER_ID, GuidanceSync, exchange
 
 # Remembered selects, the oldest dropped first, each for at most TTL_S (spec 0.75).
@@ -56,7 +57,7 @@ class FeedbackJob:
 class GuidanceFeedback:
     def __init__(
         self,
-        settings,
+        settings: GuidanceSettings,
         sync: GuidanceSync,
         *,
         transport_factory: Callable[[], httpx.AsyncBaseTransport] | None = None,
@@ -80,7 +81,7 @@ class GuidanceFeedback:
         """The feedback fields of GuidanceSyncStatusV1: counts since start, no asset or text."""
         return dict(feedback_enabled=True, **self._counts)
 
-    def remember(self, recommendation_id: str, revision: int, catalog: Sequence[Mapping]) -> bool:
+    def remember(self, recommendation_id: str, revision: int, catalog: Sequence[Mapping]) -> None:
         """Keep the offered pairs of a select the selector answered (spec 0.75)."""
         if revision in self._offers:
             self._offers.move_to_end(revision)
@@ -94,7 +95,6 @@ class GuidanceFeedback:
         self._ids.move_to_end(recommendation_id)
         while len(self._ids) > MAX_IDS:
             self._ids.popitem(last=False)
-        return True
 
     def take(self, request: Mapping) -> FeedbackJob | None:
         """The job for a parsed GuidanceFeedbackV1, or None when its select is not remembered.
@@ -141,11 +141,11 @@ class GuidanceFeedback:
         self._counts[outcome] += 1
 
     async def _send(self, job: FeedbackJob) -> str:
-        inference = self._sync.inference
-        if inference is None:
-            inference = await self._sync.ask_inference(job.offered)
-        if inference != "local" and not self.allow_remote:
-            return "feedback_skipped"
+        if not self.allow_remote:
+            # Asked only when it decides something: an operator who allows remote never waits.
+            inference = self._sync.inference or await self._sync.ask_inference(job.offered)
+            if inference != "local":
+                return "feedback_skipped"
         answer = await exchange(
             self.url,
             dict(

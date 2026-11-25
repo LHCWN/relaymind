@@ -1379,7 +1379,7 @@ def test_the_selector_proxy_passes_exchanges_on_and_sees_when_the_selector_is_re
 
 
 def test_the_selector_proxy_does_not_take_a_partial_answer_for_the_full_ranking():
-    """Spec 0.75 section 7.7: a mechanism ending in :partial is counted as partial, not ranked."""
+    """Spec 0.75 section 7.7 (RM47, AC42): a :partial mechanism counts as partial, not ranked."""
     import httpx
 
     selector = _selector([("ranked", "router:partial"), ("no_match", "router:partial")])

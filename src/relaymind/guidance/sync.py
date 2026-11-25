@@ -140,7 +140,21 @@ class GuidanceSync:
         """Learn the selector's inference with a find_missing of these pairs, uploading nothing.
 
         Feedback needs it before it sends anything (spec 0.75; RM48). Raises on any failure."""
-        return (await self._exchange("find_missing", pairs))["inference"]
+        _, inference = await self._find_missing(pairs)
+        return inference
+
+    async def _find_missing(self, pairs: list[dict]) -> tuple[set[tuple[str, str]], str]:
+        """The missing pairs and the inference of a valid find_missing answer, else an error.
+
+        Only a valid answer, whose missing pairs were offered and do not repeat, teaches the
+        inference (spec 0.75)."""
+        found = await self._exchange("find_missing", pairs)
+        missing = [_key(pair) for pair in found["missing"]]
+        chosen = set(missing)
+        if len(chosen) != len(missing) or not chosen <= {_key(pair) for pair in pairs}:
+            raise ValueError("invalid_sync_response")
+        self.inference = found["inference"]
+        return chosen, found["inference"]
 
     @staticmethod
     def _nothing() -> dict:
@@ -161,19 +175,13 @@ class GuidanceSync:
     async def _sync(self, catalog: Sequence[Mapping], files: Mapping[str, Mapping]) -> bool:
         """One sync; False when it made no progress (spec 0.72): every record it uploaded is the
         current target of its asset ID, or every missing pair was rejected before."""
-        offered = {_key(record) for record in catalog}
-        found = await self._exchange(
-            "find_missing",
-            [dict(asset_id=r["asset_id"], content_hash=r["content_hash"]) for r in catalog],
+        chosen, inference = await self._find_missing(
+            [dict(asset_id=r["asset_id"], content_hash=r["content_hash"]) for r in catalog]
         )
-        missing = [_key(pair) for pair in found["missing"]]
-        chosen = set(missing)
-        if len(chosen) != len(missing) or not chosen <= offered:
-            raise ValueError("invalid_sync_response")
         known = chosen & self._rejected.keys()
         self._current = current = dict(
             last_outcome="nothing_missing" if not chosen else "synced",
-            last_inference=found["inference"],
+            last_inference=inference,
             missing=len(chosen),
             accepted=0,
             rejected=len(known),
@@ -189,7 +197,7 @@ class GuidanceSync:
         # return to an earlier one included (hashes A, B, A), and that is progress.
         progress = any(self._targets.get(r["asset_id"]) != _target(r) for r in records)
         # A selector that sends text to remote inference gets no file unless the operator allows it.
-        send_files = found["inference"] == "local" or self.allow_remote
+        send_files = inference == "local" or self.allow_remote
         uploads = [
             dict(
                 record=record,
@@ -245,13 +253,10 @@ class GuidanceSync:
 
     async def _exchange(self, operation: str, assets: list) -> dict:
         document = dict(schema_version=1, operation=operation, feeder_id=FEEDER_ID, assets=assets)
-        answer = await exchange(
+        return await exchange(
             self.url,
             document,
             seconds=self.exchange_s,
             clock=self._clock,
             transport_factory=self._transport_factory,
         )
-        if operation == "find_missing":
-            self.inference = answer["inference"]
-        return answer

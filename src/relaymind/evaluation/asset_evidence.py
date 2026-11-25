@@ -191,6 +191,9 @@ _GENERATOR_ANCHORS = {
     ),
     "docs/SPECIFICATION.md": frozenset(
         {
+            # 0.75 selector feedback and partial answers (RM47, RM48, AC42, AC43; #301); subject to
+            # the owner's review.
+            ("5f2715e517b55fb781a5c94ca2598521b8539a15272ff56b7055a9e31fc5a22f", 686920),
             # 0.74 macro precision and recall for comparing selectors (RM45, RM47); subject to the
             # owner's review.
             ("26a303034e3274df0a6c6c5739e54b7d19c49c4ac2672105bec779186f11fc0f", 678907),

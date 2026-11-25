@@ -1,4 +1,4 @@
-// Optional per-prompt guidance for OpenClaw (RM45 to RM48, AC39, AC40, AC43; spec 0.69/0.72/0.75 section 7.7).
+// Optional per-prompt guidance for OpenClaw (RM45 to RM48, AC39, AC40, AC43; spec 0.69 to 0.75, 7.7).
 //
 // A before_prompt_build hook reads the session's own skill snapshot, asks the gateway which few
 // assets this prompt needs, and adds one labeled hint to the turn. With limit = "strict" a
@@ -15,6 +15,8 @@ import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 
 const ENDPOINT = "/relay/v1/guidance";
 const FEEDBACK_ENDPOINT = "/relay/v1/guidance/feedback";
+// The gateway takes at most this many used assets in one feedback (spec 0.75).
+const MAX_USED = 1000;
 const DEFAULT_TIMEOUT_MS = 13_000;
 const MAX_TIMEOUT_MS = 14_000; // Below the host's 15 s limit for this hook.
 const MAX_TASK_BYTES = 8192;
@@ -523,8 +525,9 @@ function recordUse(rawName, rawParams, state, ctx) {
 }
 
 /**
- * The offered asset a call that worked used, as selector feedback names it (spec 0.75): a skill
- * loaded by skills_read or a plain read inside its folder, or an offered tool executed. Else null.
+ * Which offered asset a successful call used, as selector feedback names it (spec 0.75): a skill
+ * loaded with skills_read or with a plain read inside its folder, or an offered tool that ran.
+ * Null when the call used no offered asset.
  */
 function usedOffered(rawName, rawParams, offer, ctx) {
   const params = argsOf(rawParams);
@@ -755,7 +758,7 @@ function register(api) {
     try {
       const feedback = feedbackRuns.get(ctx?.runId);
       const used = feedback && usedOffered(event?.toolName, event?.params, feedback.offer, ctx);
-      if (used) feedback.used.set(`${used.kind}:${used.name}`, used);
+      if (used && feedback.used.size < MAX_USED) feedback.used.set(`${used.kind}:${used.name}`, used);
     } catch (error) {
       api.logger.debug?.(`relaymind-guidance did not record a use: ${error?.name ?? "error"}`);
     }

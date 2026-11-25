@@ -20,8 +20,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
     OpenClaw guidance plugin reports, through the new `POST /relay/v1/guidance/feedback`, which offered skills the
     run loaded and which offered tools it called without error, picked or not. The gateway sends them to the selector
     as pairs of that select (`operation:feedback`), with no prompt text or path, and only to a selector that
-    reported local inference unless `sync_allow_remote` is set; when the inference is not known yet it first asks
-    with a `find_missing` that uploads nothing. A failed run sends nothing. The gateway remembers at most 1,024
+    reported local inference unless `sync_allow_remote` is set; without that setting, when the inference is not
+    known yet, it first asks with a `find_missing` that uploads nothing. The plugin reports at most 1,000 assets.
+  - `docs/SPECIFICATION.md` 0.75 is a new reviewed anchor in `src/relaymind/evaluation/asset_evidence.py`, as
+    earlier revisions were; it is subject to the owner's review. A failed run sends nothing. The gateway remembers at most 1,024
     selects for at most one hour, sends one feedback at a time, and counts sent, failed and skipped feedback in
     `GET /relay/v1/guidance/sync`. `scripts/guidance_selector_server.py` serves `/feedback` too.
 - Specification 0.74 (RM45; RM47; section 7.7): macro precision and macro recall are the main metrics for

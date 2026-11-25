@@ -165,6 +165,26 @@ def test_an_unknown_inference_is_asked_with_find_missing_that_uploads_nothing():
     assert status(http)["last_outcome"] == "none"
 
 
+def test_an_invalid_find_missing_answer_teaches_no_inference_and_fails_the_feedback():
+    """A missing pair that was not offered makes the answer invalid, from a sync or a question."""
+    stray = [dict(asset_id="host:skill:other", content_hash="2" * 64)]
+    router = Router(outcome="not_ready", missing=lambda sent: stray)
+    http = client(router)
+    recommendation_id = ask(http)["recommendation_id"]
+    assert [s["operation"] for s in router.syncs] == ["find_missing"]
+    tell(http, recommendation_id, [USED_SKILL])
+    assert [s["operation"] for s in router.syncs] == ["find_missing", "find_missing"]
+    assert router.feedbacks == []
+    assert feedback_counts(http)["feedback_failed"] == 1
+
+
+def test_with_remote_allowed_the_inference_is_not_asked():
+    router = Router(inference="remote")
+    http = client(router, replace(FEEDING, sync_allow_remote=True))
+    tell(http, ask(http)["recommendation_id"], [USED_SKILL])
+    assert router.syncs == [] and len(router.feedbacks) == 1
+
+
 def test_a_known_inference_is_not_asked_again():
     router = Router()
     http = client(router)
