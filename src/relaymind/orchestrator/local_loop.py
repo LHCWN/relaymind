@@ -1416,20 +1416,33 @@ class LocalOrchestrator:
                 event=(EventType.RUN_CANCELLED, GATEWAY_ACTOR, payload),
             )
 
-    def reveal_confirmation(self, run_id: str) -> ConfirmationRequest | None:
+    def reveal_confirmation(
+        self,
+        run_id: str,
+        *,
+        approval_id: str | None = None,
+        verify_store: bool = True,
+    ) -> ConfirmationRequest | None:
         """The pending confirmation with its token, the first time it is asked for (RM11).
 
         Later calls return None, and so does a run with nothing pending:
         the plaintext token is shown once and never stored (spec 0.17
-        section 7.4).
+        section 7.4). When approval_id is supplied, a newer issued token
+        with a different approval_id is left untouched.
         """
-        held = self._issued.pop(run_id, None)
+        held = self._issued.get(run_id)
         if held is None or run_id not in self._waiting:
+            if run_id not in self._waiting:
+                self._issued.pop(run_id, None)
             return None
-        pending = self.store.get_pending_approval(run_id)
-        if pending is None or pending["approval_id"] != held.approval_id:
+        if approval_id is not None and held.approval_id != approval_id:
             return None
-        return held
+        if verify_store:
+            pending = self.store.get_pending_approval(run_id)
+            if pending is None or pending["approval_id"] != held.approval_id:
+                self._issued.pop(run_id, None)
+                return None
+        return self._issued.pop(run_id, None)
 
     def _start(self, run: "_Run", step: "_Step") -> StartedRun:
         """Drive a prepared step in a background task, or report an ended run."""

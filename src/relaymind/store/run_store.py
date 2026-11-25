@@ -776,6 +776,7 @@ class RunStore:
         # drops them, so a refused run leaves nothing behind in this process.
         self._transaction_clocks: set[str] = set()
         self._transaction_elapsed: dict[str, int | None] = {}
+        self._transaction_evicted: set[str] = set()
         self._path = str(path)
         self._in_memory = self._path in (":memory:", "")
         self._closed = False
@@ -910,6 +911,9 @@ class RunStore:
                     onset = self.clock.monotonic()
                     self._probe_started = (self._probe_started[0], onset)
                     self.note_foreground_start(onset)
+                for run_id in self._transaction_evicted:
+                    self._run_started.pop(run_id, None)
+                    self._run_last_elapsed.pop(run_id, None)
             except BaseException as exc:
                 self._rollback()
                 self._slot_started, self._probe_started = slot_started, probe_started
@@ -937,6 +941,7 @@ class RunStore:
                 self._depth = 0
                 self._transaction_clocks.clear()
                 self._transaction_elapsed.clear()
+                self._transaction_evicted.clear()
 
     def foreground_window(
         self, *, monotonic: Callable[[], float] | None = None
@@ -1403,8 +1408,7 @@ class RunStore:
             with self._write():
                 self._require_run(run_id)
                 self._conn.execute("DELETE FROM runs WHERE run_id = ?", (run_id,))
-            self._run_started.pop(run_id, None)
-            self._run_last_elapsed.pop(run_id, None)
+                self._transaction_evicted.add(run_id)
 
     def _retention_cutoff(self) -> str:
         """Runs created at or before this time are past retention (section 5)."""
@@ -1426,10 +1430,8 @@ class RunStore:
                 rows = self._conn.execute(
                     "DELETE FROM runs WHERE created_at <= ? RETURNING run_id", (cutoff,)
                 ).fetchall()
-            run_ids = sorted(row["run_id"] for row in rows)
-            for run_id in run_ids:
-                self._run_started.pop(run_id, None)
-                self._run_last_elapsed.pop(run_id, None)
+                run_ids = sorted(row["run_id"] for row in rows)
+                self._transaction_evicted.update(run_ids)
         return run_ids
 
     # -- measured model calls and terminal skill outcomes (RM27) ----------

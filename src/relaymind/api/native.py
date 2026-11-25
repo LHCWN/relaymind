@@ -199,6 +199,8 @@ def run_view(
     orchestrator hands it out once, to the first reader that asks.
     All store reads run under one store lock critical section so
     background-thread callers never observe a torn state/events view.
+    Callers running in a worker thread must pass reveal_token=False and
+    invoke orchestrator.reveal_confirmation on the event loop thread.
     """
     store = orchestrator.store
     with store.sql_read():
@@ -219,8 +221,10 @@ def run_view(
         pending_approval = _pending_approval(orchestrator, run_id, state)
         metrics = _metrics(orchestrator, run_id, state)
     if reveal_token and pending_approval is not None:
-        revealed = orchestrator.reveal_confirmation(run_id)
-        if revealed is not None and revealed.approval_id == pending_approval["approval_id"]:
+        revealed = orchestrator.reveal_confirmation(
+            run_id, approval_id=pending_approval["approval_id"], verify_store=False
+        )
+        if revealed is not None:
             pending_approval["token"] = revealed.token
     return {
         "run_id": run_id,

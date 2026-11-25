@@ -1191,6 +1191,59 @@ def test_appending_many_deltas_uses_bounded_queries_and_near_linear_time(store, 
     ]
     assert any("events_run_elapsed" in step for step in plan), plan
 
+    # Exercise in-memory fast path (self._in_memory is True) and verify zero MAX queries.
+    mem_clock = FakeClock()
+    mem_store = RunStore(":memory:", clock=mem_clock)
+    try:
+        mem_run = mem_store.create_run("accepted").run_id
+        accept(mem_store, mem_run)
+        mem_queries: list[str] = []
+        mem_store._conn.set_trace_callback(mem_queries.append)
+        try:
+            for i in range(50):
+                mem_clock.mono += 0.002
+                mem_store.append_event(mem_run, EventType.ANSWER_DELTA, "local", {"text": f"m{i}"})
+        finally:
+            mem_store._conn.set_trace_callback(None)
+        assert not any("MAX(elapsed_ms)" in q for q in mem_queries)
+        assert mem_store.elapsed_ms(mem_run) == 100
+    finally:
+        mem_store.close()
+
+    # Cross-store monotonicity on a shared file-backed database (RM25).
+    peer_clock = FakeClock()
+    peer_store = RunStore(store._path, clock=peer_clock)
+    try:
+        before = store.elapsed_ms(run_id)
+        peer_store.start_run_clock(run_id)
+        peer_clock.mono += 0.05
+        peer_event = peer_store.append_event(run_id, EventType.ANSWER_DELTA, "local", {"text": "p"})
+        assert peer_event.elapsed_ms >= before
+        # Original store's subsequent append also never moves backwards past peer_event.
+        store_event = store.append_event(run_id, EventType.ANSWER_DELTA, "local", {"text": "q"})
+        assert store_event.elapsed_ms >= peer_event.elapsed_ms
+    finally:
+        peer_store.close()
+
+
+def test_delete_run_rollback_preserves_cached_elapsed_baseline(tmp_path):
+    """RM17, #294: rolling back delete_run inside an outer transaction keeps cached elapsed_ms."""
+    clock = FakeClock()
+    store = RunStore(tmp_path / "rollback.sqlite3", clock=clock)
+    try:
+        run_id = store.create_run("accepted").run_id
+        accept(store, run_id)
+        clock.mono += 0.25
+        store.append_event(run_id, EventType.ANSWER_DELTA, "local", {"text": "a"})
+        assert store._run_last_elapsed[run_id] == 250
+        with pytest.raises(RuntimeError, match="abort"), store.transaction():
+            store.delete_run(run_id)
+            raise RuntimeError("abort")
+        assert run_id in store._run_started
+        assert store._run_last_elapsed[run_id] == 250
+    finally:
+        store.close()
+
 
 def test_run_view_and_idempotency_use_latest_event_helper(tmp_path, monkeypatch):
     """RM21, #294: run_view and idempotent replay use indexed latest_event lookups."""

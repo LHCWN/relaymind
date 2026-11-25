@@ -318,8 +318,10 @@ def create_app(
         view = await run_in_threadpool(run_view, orchestrator, run_id, reveal_token=False)
         approval = view.get("pending_approval")
         if approval is not None:
-            revealed = orchestrator.reveal_confirmation(run_id)
-            if revealed is not None and revealed.approval_id == approval["approval_id"]:
+            revealed = orchestrator.reveal_confirmation(
+                run_id, approval_id=approval["approval_id"], verify_store=False
+            )
+            if revealed is not None:
                 approval["token"] = revealed.token
         return JSONResponse(view, headers={"Cache-Control": "no-store"})
 
