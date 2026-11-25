@@ -41,11 +41,9 @@ RECONNECT = "openclaw models auth paste-api-key --provider relaymind"
 
 @pytest.fixture(autouse=True)
 def node_dependencies():
-    reason = _missing()
-    if reason is not None:
-        if REQUIRED:
-            pytest.fail(f"RELAYMIND_OPENCLAW_NODE=1 but {reason}")
-        pytest.skip(reason)
+    from openclaw_helpers import require_node_dependencies
+
+    require_node_dependencies(_missing, required=REQUIRED)
 
 
 def driver_env(base_url, token):

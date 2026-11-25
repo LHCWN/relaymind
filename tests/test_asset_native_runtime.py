@@ -114,16 +114,13 @@ def test_locked_bootstrap_requires_fresh_store_and_rolls_back_cancelled_install(
 
     from relaymind.assets.catalog import project_asset, validate_asset_record
     from relaymind.assets.sources import SourceFailure, source_config_digest
-    from relaymind.redaction import Redactor
     from relaymind.store.asset_catalog import AssetCatalogStore, CatalogConflict
 
     production, release, effective = native_fixture(tmp_path)
     runs = RunStore(tmp_path / "bootstrap.sqlite")
     store = AssetCatalogStore(runs)
     documents = tuple(
-        project_asset(
-            validate_asset_record(asset["record"]), body=None, redactor=Redactor(), secrets=()
-        )
+        project_asset(validate_asset_record(asset["record"]), body=None, secrets=())
         for asset in release.catalog["assets"]
     )
     digests = {
@@ -155,16 +152,13 @@ def test_locked_bootstrap_refuses_unbound_or_malformed_source_configuration(tmp_
     import pytest
 
     from relaymind.assets.catalog import AssetValidationError, project_asset, validate_asset_record
-    from relaymind.redaction import Redactor
     from relaymind.store.asset_catalog import AssetCatalogStore
 
     production, release, effective = native_fixture(tmp_path)
     runs = RunStore(tmp_path / "invalid-bootstrap.sqlite")
     store = AssetCatalogStore(runs)
     documents = tuple(
-        project_asset(
-            validate_asset_record(asset["record"]), body=None, redactor=Redactor(), secrets=()
-        )
+        project_asset(validate_asset_record(asset["record"]), body=None, secrets=())
         for asset in release.catalog["assets"]
     )
     try:

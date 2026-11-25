@@ -346,16 +346,6 @@ class SandboxDataService:
     def service_health(self, service: str) -> dict[str, Any]:
         return self._observe("get_service_health", {"service": service})
 
-    def latest_deployment(self, service: str) -> dict[str, Any]:
-        return self._observe("get_latest_deployment", {"service": service})
-
-    def incident_counts(self, service: str, window_minutes: int) -> dict[str, Any]:
-        args = {"service": service, "window_minutes": window_minutes}
-        return self._observe("get_incident_counts", args)
-
-    def metrics(self, service: str, window_minutes: int) -> dict[str, Any]:
-        return self._observe("get_metrics", {"service": service, "window_minutes": window_minutes})
-
     def recent_logs(self, service: str, limit: int) -> dict[str, Any]:
         return self._observe("get_recent_logs", {"service": service, "limit": limit})
 

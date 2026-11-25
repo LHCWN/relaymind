@@ -45,11 +45,9 @@ def drive_actions(app, driver: str, output, *, timeout: float, env=None, package
 
 @pytest.fixture(autouse=True)
 def node_dependencies():
-    reason = _missing()
-    if reason:
-        if REQUIRED:
-            pytest.fail(reason)
-        pytest.skip(reason)
+    from openclaw_helpers import require_node_dependencies
+
+    require_node_dependencies(_missing, required=REQUIRED, fail_prefix="")
 
 
 def test_dormant_client_routes_and_explicit_fixture_actions(tmp_path):

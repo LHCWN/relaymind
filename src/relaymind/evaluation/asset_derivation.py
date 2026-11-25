@@ -4,7 +4,6 @@ Input is the normative four-document release, not a downloader manifest. Already
 locked exclusions remain unchanged. Invalid input fails without a partial export.
 """
 
-import hashlib
 import shutil
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -20,13 +19,11 @@ from relaymind.evaluation.asset_corpus_io import (
     relative_path,
 )
 from relaymind.evaluation.asset_qualification import QualificationAssessment
-from relaymind.schema_util import freeze_json
 
 
 @dataclass(frozen=True)
 class DerivationResult:
     output_paths: tuple[Path, ...]
-    digests: Mapping[str, str]
     lock_digest: str
     exclusions: tuple[Mapping, ...]
     assessment: QualificationAssessment
@@ -89,7 +86,6 @@ def _derive_export(
     try:
         output_root.mkdir(mode=0o700)
         created = True
-        digests = {}
         for relative, limit in sorted(paths.items()):
             payload = read_local(input_root, relative, limit)
             destination = output_root / relative
@@ -97,7 +93,6 @@ def _derive_export(
             with destination.open("xb") as file:
                 file.write(payload)
             destination.chmod(0o600)
-            digests[relative] = hashlib.sha256(payload).hexdigest()
         # Input changes between validation and copying never produce a valid
         # output claim. Recheck the copied closure before exposing its result.
         copied = load_asset_release(
@@ -108,7 +103,6 @@ def _derive_export(
         succeeded = True
         return DerivationResult(
             tuple(output_root / relative for relative in sorted(paths)),
-            freeze_json(digests),
             copied.lock["digest"],
             tuple(copied.catalog["exclusions"]),
             assess_asset_release(copied),

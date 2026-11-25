@@ -59,8 +59,11 @@ RECOMMENDATION_FIELDS = frozenset(RecommendationSettings.__dataclass_fields__)
 
 
 def _closed(value: object, fields: frozenset[str], label: str) -> Mapping[str, Any]:
-    if not isinstance(value, Mapping) or set(value) - fields:
+    from relaymind.schema_util import is_closed_mapping
+
+    if not is_closed_mapping(value, fields, exact=False):
         raise ValueError(f"{label}: unknown fields or invalid table")
+    assert isinstance(value, Mapping)
     return value
 
 

@@ -478,7 +478,9 @@ def install_plugin(
 
 
 def _closed(value, keys: set) -> bool:
-    return isinstance(value, Mapping) and set(value) == keys
+    from relaymind.schema_util import is_closed_mapping
+
+    return is_closed_mapping(value, keys)
 
 
 def _release_shape(release) -> bool:

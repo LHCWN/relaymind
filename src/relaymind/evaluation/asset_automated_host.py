@@ -21,7 +21,9 @@ class AutomatedHostRejected(ValueError):
 
 
 def _closed(value, keys):
-    if not isinstance(value, Mapping) or set(value) != set(keys.split()):
+    from relaymind.schema_util import is_closed_mapping
+
+    if not is_closed_mapping(value, keys.split()):
         raise AutomatedHostRejected("fields")
 
 

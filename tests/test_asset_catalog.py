@@ -8,7 +8,6 @@ import pytest
 
 from relaymind.assets import catalog
 from relaymind.canonical import canonical_digest
-from relaymind.redaction import Redactor
 
 
 def record(**changes):
@@ -103,7 +102,7 @@ def test_mcp_schema_hash_and_offline_reference_boundary():
     value = record(kind="mcp_tool", identity=identity)
     got = catalog.validate_asset_record(value)
     assert got.identity["server_id"] == "real-server"
-    assert catalog.project_asset(got, body=None, redactor=Redactor(), secrets=()).record == got
+    assert catalog.project_asset(got, body=None, secrets=()).record == got
     identity["schema_hash"] = "0" * 64
     with pytest.raises(catalog.AssetValidationError):
         catalog.validate_asset_record(value)
@@ -124,7 +123,6 @@ def test_projection_normalizes_redacts_and_preserves_original_hash():
     doc = catalog.project_asset(
         catalog.validate_asset_record(value),
         body="Use credential-987\nCafe\u0301",
-        redactor=Redactor(),
         secrets={"credential-987"},
     )
     assert doc.record.description == "Café [redacted]"
@@ -137,14 +135,12 @@ def test_projection_normalizes_redacts_and_preserves_original_hash():
         catalog.project_asset(
             catalog.validate_asset_record(record(asset_id="credential-987")),
             body=None,
-            redactor=Redactor(),
             secrets={"credential-987"},
         )
     with pytest.raises(catalog.AssetValidationError):
         catalog.project_asset(
             catalog.validate_asset_record(record()),
             body="x" * (256 * 1024 + 1),
-            redactor=Redactor(),
             secrets=(),
         )
 
@@ -226,7 +222,6 @@ def test_schema_text_is_safe_and_secret_property_names_never_persist(schema, sec
         catalog.project_asset(
             catalog.validate_asset_record(record(kind="mcp_tool", identity=identity)),
             body=None,
-            redactor=Redactor(),
             secrets=secrets,
         )
 
@@ -238,7 +233,6 @@ def test_nfc_repetition_exact_utf8_boundaries_and_nonfinite_schema():
         catalog.project_asset(
             catalog.validate_asset_record(record()),
             body="one\n\n\n\n two\n",
-            redactor=Redactor(),
             secrets=(),
         ).body
         == "one\n\n\n\n two\n"
@@ -250,7 +244,6 @@ def test_nfc_repetition_exact_utf8_boundaries_and_nonfinite_schema():
         catalog.project_asset(
             catalog.validate_asset_record(record()),
             body="é\ne\u0301\né\ne\u0301 <id>",
-            redactor=Redactor(),
             secrets=(),
         ).body
         == "é\né\né\né <id>"
@@ -259,7 +252,6 @@ def test_nfc_repetition_exact_utf8_boundaries_and_nonfinite_schema():
         catalog.project_asset(
             catalog.validate_asset_record(record()),
             body="control \x01",
-            redactor=Redactor(),
             secrets=(),
         )
     schema = {"type": "number", "minimum": float("inf")}

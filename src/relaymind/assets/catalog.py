@@ -17,7 +17,7 @@ from jsonschema import SchemaError
 from jsonschema.protocols import Validator
 
 from relaymind.canonical import canonical_digest, canonical_json
-from relaymind.redaction import Redactor, redact_text, scrub
+from relaymind.redaction import redact_text, scrub
 from relaymind.schema_util import StrictValidator, freeze_json, load_packaged_schema
 from relaymind.tools.registry import check_parameters_schema
 
@@ -324,7 +324,7 @@ def _safe_free_text(value: str, limit: int, secrets: Collection[str], *, body: b
 
 
 def project_asset(
-    record: AssetRecord, *, body: str | None, redactor: Redactor, secrets: Collection[str]
+    record: AssetRecord, *, body: str | None, secrets: Collection[str]
 ) -> SearchDocument:
     # Match both original and NFC forms. Normalization must never make a
     # known acquisition secret invisible to subsequent scrubbing.

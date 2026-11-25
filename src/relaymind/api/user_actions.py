@@ -19,6 +19,7 @@ from relaymind.recommendations.limits import (
     MAX_EVENTS_PAGE,
     MAX_SEQUENCE,
 )
+from relaymind.schema_util import is_closed_mapping
 from relaymind.selection.asset_http import strict_json
 from relaymind.store.recommendations import RecommendationClaim
 
@@ -60,7 +61,7 @@ async def _body(request: Request) -> bytes:
 
 
 def _closed(value, fields):
-    if type(value) is not dict or set(value) != set(fields):
+    if type(value) is not dict or not is_closed_mapping(value, fields):
         raise RecommendationError("invalid_request")
 
 

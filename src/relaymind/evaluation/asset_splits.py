@@ -64,7 +64,6 @@ def _schema_strings(value):
 @dataclass(frozen=True)
 class LatinOverlap:
     unicode_version: str
-    query_tokens: tuple[str, ...]
     token_intersections: Mapping[str, tuple[str, ...]]
     all_targets_disjoint: bool
 
@@ -91,7 +90,6 @@ def classify_latin_overlap(
         intersections[record.asset_id] = tuple(sorted(query & latin_tokens(" ".join(strings))))
     return LatinOverlap(
         unicode_version,
-        tuple(sorted(query)),
         MappingProxyType(intersections),
         not any(intersections.values()),
     )

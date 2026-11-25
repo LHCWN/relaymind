@@ -101,8 +101,6 @@ class ThroughputEstimate:
     recorded_at: datetime | None
     prefill_tokens_per_ms: float | None
     decode_tokens_per_ms: float | None
-    prefill_sample_count: int
-    decode_sample_count: int
 
 
 @dataclass(frozen=True)
@@ -117,7 +115,6 @@ class TimingEstimate:
     latest_cache_class: CacheClass
     median_duration_ms: float | None
     median_output_tokens: float | None
-    median_first_token_ms: float | None
     warm: ThroughputEstimate
     cold: ThroughputEstimate
 
@@ -165,8 +162,6 @@ def _throughput(samples: Sequence[ModelTiming]) -> ThroughputEstimate:
         samples[-1].recorded_at if samples else None,
         _median(prefill),
         _median(decode),
-        len(prefill),
-        len(decode),
     )
 
 
@@ -188,9 +183,6 @@ def timing_estimate(
         median_duration_ms=_median([s.duration_ms for s in successful]),
         median_output_tokens=_median(
             [s.output_tokens for s in successful if s.output_tokens is not None]
-        ),
-        median_first_token_ms=_median(
-            [s.first_token_ms for s in successful if s.first_token_ms is not None]
         ),
         warm=_throughput([s for s in successful if cache_class(s) == "warm"]),
         cold=_throughput([s for s in successful if cache_class(s) == "cold"]),

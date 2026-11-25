@@ -145,11 +145,9 @@ def test_node_is_found_on_path_as_the_harness_finds_it(monkeypatch, tmp_path):
 
 @pytest.fixture(autouse=True)
 def node_dependencies():
-    reason = _missing()
-    if reason is not None:
-        if REQUIRED:
-            pytest.fail(f"RELAYMIND_OPENCLAW_NODE=1 but {reason}")
-        pytest.skip(reason)
+    from openclaw_helpers import require_node_dependencies
+
+    require_node_dependencies(_missing, required=REQUIRED)
 
 
 def drive(running, app, tmp_path, token=None, **scenario):
