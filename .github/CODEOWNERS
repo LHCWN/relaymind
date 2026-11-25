@@ -1,7 +1,9 @@
 # Code owners for RelayMind.
-# GitHub requests a review from the relaymind team, every member of the
-# Last-Humans-Coding-Under-White-Nights organization, on every pull request.
-# The master ruleset requires one approving review from any member before a
-# merge; a code owner approval is not required. Authors cannot approve their
+# GitHub requests a review from the @LHCWN/relaymind team on every pull
+# request. Team membership is managed by hand and is not the organization
+# roster.
+# The master ruleset requires one approving review from any member of the
+# Last-Humans-Coding-Under-White-Nights organization with write access before
+# a merge; a code owner approval is not required. Authors cannot approve their
 # own pull requests.
 * @LHCWN/relaymind
