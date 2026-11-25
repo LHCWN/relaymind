@@ -264,15 +264,27 @@ class AssetCatalogStore:
 
     def get_asset(self, asset_id: str) -> AssetRecord | None:
         """Read and validate one current catalog asset by primary key."""
-        with self.store.sql_read() as connection:
-            row = connection.execute(
-                "SELECT a.*, s.stale AS source_stale FROM asset_catalog_assets a "
-                "JOIN asset_catalog_sources s ON s.source_id = a.source_id "
-                "WHERE a.asset_id = ?",
-                (asset_id,),
-            ).fetchone()
+        try:
+            with self.store.sql_read() as connection:
+                meta = connection.execute(
+                    "SELECT revision, published_at FROM asset_catalog_meta"
+                ).fetchone()
+                if meta is None or type(meta["revision"]) is not int or meta["revision"] < 0:
+                    raise CatalogUnavailable("catalog_corrupt")
+                if connection.execute(f"SELECT 1 {_STALE_MISMATCH} LIMIT 1").fetchone() is not None:
+                    raise CatalogUnavailable("catalog_projection_unavailable")
+                row = connection.execute(
+                    "SELECT a.*, s.stale AS source_stale FROM asset_catalog_assets a "
+                    "LEFT JOIN asset_catalog_sources s ON s.source_id = a.source_id "
+                    "WHERE a.asset_id = ?",
+                    (asset_id,),
+                ).fetchone()
+        except sqlite3.Error as exc:
+            raise CatalogUnavailable("catalog_corrupt") from exc
         if row is None:
             return None
+        if row["source_stale"] is None:
+            raise CatalogUnavailable("catalog_corrupt")
         row_dict = dict(row)
         document = self._document(row_dict)
         _require_projection(

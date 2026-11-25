@@ -447,6 +447,11 @@ MIGRATIONS: tuple[str, ...] = (
     CREATE INDEX IF NOT EXISTS events_run_type_seq ON events(run_id, event_type, seq);
     CREATE INDEX IF NOT EXISTS state_intervals_run_elapsed ON state_intervals(run_id, elapsed_ms);
     """,
+    # #295: indexed model_timings cache-key and lookup queries (RM27).
+    """
+    CREATE INDEX IF NOT EXISTS model_timings_actor_lookup
+        ON model_timings(model, actor, purpose, recorded_at, sample_id);
+    """,
 )
 
 

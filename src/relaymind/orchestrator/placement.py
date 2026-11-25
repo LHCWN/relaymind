@@ -1,6 +1,8 @@
 """Measured per-generation placement (RM27; specification 0.39 section 14.2)."""
 
+import contextlib
 import math
+import threading
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from statistics import median
@@ -85,34 +87,41 @@ class Placement:
     def __init__(self, store: RunStore, settings: PlacementSettings | None = None) -> None:
         self.store = store
         self.settings = settings or PlacementSettings()
+        self._timing_lock = threading.Lock()
         self._timing_cache: dict[
-            tuple[str, str], tuple[tuple[int, int, str | None], TimingEstimate, float | None]
+            tuple[str, str], tuple[tuple[int, int, str | None], TimingEstimate, int | float | None]
         ] = {}
 
     def _local_timing_summary(
         self, model: str, purpose: str
-    ) -> tuple[TimingEstimate, float | None]:
+    ) -> tuple[TimingEstimate, int | float | None]:
         """Fetch local timing samples once and cache while unchanged."""
         key_fn = getattr(self.store, "model_timing_summary_key", None)
+        sql_read = getattr(self.store, "sql_read", None)
         cache_key = (model, purpose)
-        summary_key = (
-            key_fn(model=model, purpose=purpose, actor="local") if callable(key_fn) else None
-        )
-        if summary_key is not None:
-            cached = self._timing_cache.get(cache_key)
-            if cached is not None and cached[0] == summary_key:
-                return cached[1], cached[2]
-        samples = self.store.model_timings(model=model, purpose=purpose, actor="local")
-        estimate = timing_estimate(model, purpose, "local", samples)
-        outputs = [
-            s.output_tokens
-            for s in samples
-            if s.succeeded and s.kind == "run" and s.output_tokens is not None
-        ]
-        output_median = float(median(outputs)) if outputs else None
-        if summary_key is not None:
-            self._timing_cache[cache_key] = (summary_key, estimate, output_median)
-        return estimate, output_median
+        with self._timing_lock:
+            read_ctx = sql_read() if callable(sql_read) else contextlib.nullcontext()
+            with read_ctx:
+                summary_key = (
+                    key_fn(model=model, purpose=purpose, actor="local")
+                    if callable(key_fn)
+                    else None
+                )
+                if summary_key is not None:
+                    cached = self._timing_cache.get(cache_key)
+                    if cached is not None and cached[0] == summary_key:
+                        return cached[1], cached[2]
+                samples = self.store.model_timings(model=model, purpose=purpose, actor="local")
+            estimate = timing_estimate(model, purpose, "local", samples)
+            outputs = [
+                s.output_tokens
+                for s in samples
+                if s.succeeded and s.kind == "run" and s.output_tokens is not None
+            ]
+            output_median = median(outputs) if outputs else None
+            if summary_key is not None:
+                self._timing_cache[cache_key] = (summary_key, estimate, output_median)
+            return estimate, output_median
 
     def predict(
         self,

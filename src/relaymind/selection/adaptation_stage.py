@@ -70,17 +70,23 @@ class AdaptationStage:
                 raise AdaptationFailure("recommendation_unavailable", "stale_result", observations)
             now = budget.clock.utc_now()
             rev_fn = getattr(self.feedback, "scope_revision", None)
-            if (
-                callable(rev_fn)
-                and (earliest_expiry is None or earliest_expiry > now)
-                and rev_fn(req["scope"]) == feedback_revision
-            ):
-                if lease.fenced:
-                    raise AdaptationFailure(
-                        "recommendation_unavailable", "selector_unavailable", observations
-                    )
-                budget.check()
-                return
+            if callable(rev_fn):
+                maintain = getattr(self.feedback, "maintain_scope", None)
+                if callable(maintain):
+                    maintain(req["scope"], now=now)
+                recs = getattr(self.feedback, "recommendations", None)
+                observe_expiry = getattr(recs, "_observe_scope_expiry", None)
+                if callable(observe_expiry):
+                    observe_expiry(req["scope"], now=now)
+                if (earliest_expiry is None or earliest_expiry > now) and rev_fn(
+                    req["scope"]
+                ) == feedback_revision:
+                    if lease.fenced:
+                        raise AdaptationFailure(
+                            "recommendation_unavailable", "selector_unavailable", observations
+                        )
+                    budget.check()
+                    return
             current_snapshot = self.feedback.correction_snapshot(
                 req["scope"], current, now=now, check=budget.check
             )

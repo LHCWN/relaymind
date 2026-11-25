@@ -43,8 +43,10 @@ def _skill_record(index: int) -> dict:
     }
 
 
-def test_current_asset_performs_one_indexed_row_read(tmp_path):
+def test_current_asset_performs_one_indexed_row_read(tmp_path, monkeypatch):
     """RM37, #295: recommendation admission reads one asset row instead of the full catalog."""
+    from relaymind.assets.catalog import CatalogUnavailable
+
     store = RunStore(":memory:", clock=FakeClock())
     try:
         catalog = AssetCatalogStore(store)
@@ -55,7 +57,6 @@ def test_current_asset_performs_one_indexed_row_read(tmp_path):
                 " VALUES ('src', 0, 1)"
             )
             for rec in records:
-                search_json = json.dumps({"body": None, "projection_digest": ""})
                 from relaymind.assets.catalog import projection_digest
 
                 digest = projection_digest(rec, None)
@@ -73,6 +74,16 @@ def test_current_asset_performs_one_indexed_row_read(tmp_path):
                     ),
                 )
 
+        doc_calls = 0
+        real_document = catalog._document
+
+        def counted_document(row):
+            nonlocal doc_calls
+            doc_calls += 1
+            return real_document(row)
+
+        monkeypatch.setattr(catalog, "_document", counted_document)
+
         queries: list[str] = []
         store._conn.set_trace_callback(queries.append)
         try:
@@ -83,9 +94,37 @@ def test_current_asset_performs_one_indexed_row_read(tmp_path):
 
         assert found is not None and found.asset_id == "src:skill:s-5"
         assert missing is None
+        assert doc_calls == 1, f"expected 1 decoded asset row, got {doc_calls}"
         selects = [q for q in queries if q.lstrip().upper().startswith("SELECT")]
-        assert len(selects) == 2, f"expected one SELECT per lookup, got {selects}"
-        assert all("WHERE a.asset_id" in q for q in selects), selects
+        row_selects = [q for q in selects if "WHERE a.asset_id" in q]
+        assert len(row_selects) == 2, f"expected one keyed asset SELECT per lookup, got {selects}"
+        assert not any("SELECT * FROM asset_catalog_assets" in q for q in selects), selects
+
+        # Subclass overriding snapshot() must still route through snapshot().
+        class SubclassCatalog(AssetCatalogStore):
+            snapshot_calls = 0
+
+            def snapshot(self):
+                self.snapshot_calls += 1
+                return super().snapshot()
+
+        sub = SubclassCatalog(store)
+        with store.sql_transaction() as db:
+            db.execute(
+                "UPDATE asset_catalog_sources SET source_version='v1', content_hash=?,"
+                " captured_at='2026-10-20T00:00:00Z', last_success_at='2026-10-20T00:00:00Z',"
+                " accepted_count=10, rejected_count=0, exclusions_json='[]'"
+                " WHERE source_id='src'",
+                (canonical_digest({"src": "v1"}),),
+            )
+        assert current_asset(sub, "src:skill:s-5") is not None
+        assert sub.snapshot_calls == 1
+
+        # Stale projection mismatch fails closed even on single-row lookup.
+        with store.sql_transaction() as db:
+            db.execute("UPDATE asset_catalog_assets SET stale = 1 WHERE asset_id = 'src:skill:s-0'")
+        with pytest.raises(CatalogUnavailable, match="catalog_projection_unavailable"):
+            current_asset(catalog, "src:skill:s-5")
     finally:
         store.close()
 
@@ -150,6 +189,8 @@ def test_placement_fetches_timing_samples_once_and_caches_by_latest_sample(monke
 
         first = placement.predict("local", "routing", 200, output_cap=128)
         assert calls == 1, f"expected 1 model_timings fetch, got {calls}"
+        assert first.inputs["expected_output_tokens"] == 40
+        assert type(first.inputs["expected_output_tokens"]) is int
 
         second = placement.predict("local", "routing", 200, output_cap=128)
         assert second.predicted_ms == first.predicted_ms
@@ -264,6 +305,8 @@ def test_adaptation_stage_reuses_snapshot_when_unchanged(tmp_path, monkeypatch):
             assert len(observed_records) == 1
             assert observed_records[0]["feedback"]["kind"] == "correction"
             assert isinstance(observed_records[0]["retain_until"], str)
+            assert outcome.adaptation["feedback_revision"] == 1
+            assert len(outcome.embeddings) == 1
 
     asyncio.run(exercise())
 
@@ -421,3 +464,10 @@ def test_guidance_named_in_prompt_runs_off_thread_for_large_asset_lists(monkeypa
         assert threads and all(tid != loop_thread for tid in threads)
 
     asyncio.run(exercise())
+
+
+def test_guidance_named_in_prompt_handles_trailing_newline_asset_name():
+    """RM45, #295: simple-token fast path does not match asset names with trailing newlines."""
+    assets = [{"name": "foo-bar\n", "kind": "skill", "description": "newline name"}]
+    matched = guidance_pipeline._named_in_prompt(assets, "please use foo-bar\n now")
+    assert len(matched) == 1 and matched[0]["name"] == "foo-bar\n"

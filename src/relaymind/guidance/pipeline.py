@@ -373,7 +373,7 @@ def _word_count(text: str) -> int:
 
 
 _HAS_NAME_SEP = re.compile(r"[-_.:]")
-_SIMPLE_ASCII_NAME = re.compile(r"^[a-z0-9_-]+$")
+_SIMPLE_ASCII_NAME = re.compile(r"^[a-z0-9_-]+\Z")
 _SIMPLE_ASCII_TOKEN = re.compile(r"[a-z0-9_-]+")
 
 
