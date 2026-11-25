@@ -78,7 +78,8 @@ def test_specification_section_8_1_shipped_schemas_exist():
     """#298: every schema row marked Shipped in docs/SPECIFICATION.md section 8.1 exists on disk."""
     spec = (REPO / "docs" / "SPECIFICATION.md").read_text("utf-8")
     start = spec.index("### 8.1 ")
-    section = spec[start : start + 4000]
+    end = spec.find("\n### ", start + 1)
+    section = spec[start:] if end == -1 else spec[start:end]
     checked = 0
     missing: list[str] = []
     for line in section.splitlines():
