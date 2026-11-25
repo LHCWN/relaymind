@@ -8,6 +8,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Specification 0.75 (RM47; RM48; AC42; AC43; section 7.7; #301): two optional additions for a third-party guidance
+  selector. Neither changes selection v2 or selector sync for a selector that does not use them.
+  - **Partial answer.** While some offered pairs are not indexed, a selector may answer `ranked` or `no_match` over
+    the whole offer with a `mechanism` ending in `:partial`, ranking the part it has not indexed from the select
+    itself. The gateway passes it on with `degraded` false, adds no word match of its own, and still runs the sync
+    it would run after `not_ready`. `scripts/guidance_compare.py` counts such answers in a new `Partial` column, and
+    the benchmark warm-ups wait for the full ranking. `scripts/guidance_selector_server.py --partial` shows it.
+  - **Selector feedback (new RM48, AC43).** With `guidance.feedback_url`, which needs `sync_url`, an answer whose
+    select the selector answered validly carries that select's `recommendation_id`. After a successful run the
+    OpenClaw guidance plugin reports, through the new `POST /relay/v1/guidance/feedback`, which offered skills the
+    run loaded and which offered tools it called without error, picked or not. The gateway sends them to the selector
+    as pairs of that select (`operation:feedback`), with no prompt text or path, and only to a selector that
+    reported local inference unless `sync_allow_remote` is set; when the inference is not known yet it first asks
+    with a `find_missing` that uploads nothing. A failed run sends nothing. The gateway remembers at most 1,024
+    selects for at most one hour, sends one feedback at a time, and counts sent, failed and skipped feedback in
+    `GET /relay/v1/guidance/sync`. `scripts/guidance_selector_server.py` serves `/feedback` too.
 - Specification 0.74 (RM45; RM47; section 7.7): macro precision and macro recall are the main metrics for
   comparing selectors. They cover one-skill prompts and big workflows. Every pick counts, and a prompt with no pick
   scores 0 for precision. For a one-skill prompt, recall is 1 when any acceptable asset was picked; for a workflow,

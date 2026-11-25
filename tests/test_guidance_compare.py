@@ -401,6 +401,26 @@ def test_rows_without_a_mechanism_have_no_early_answer():
     assert compare.metrics(ROWS)["early"] == 0
 
 
+def test_a_partial_selector_answer_is_counted_apart_from_early_and_is_not_a_failure():
+    """Spec 0.75 section 7.7: a mechanism ending in :partial ranked an offer the selector had only
+    partly indexed, so it is not the selector's full ranking either."""
+    row = dict(lane="en", text="t", expected=["x"], picks=["x"], decision="picks", degraded=False)
+    mechanisms = ["router:partial", "router:early", "router"]
+    report = dict(
+        kind="guidance_similar",
+        tokens={},
+        rows=[dict(row, case=str(i), ms=3, mechanism=m) for i, m in enumerate(mechanisms)],
+    )
+    rows, _ = compare.read_report(report)
+    assert [r["partial"] for r in rows] == [True, False, False]
+    m = compare.metrics(rows)
+    assert m["partial"] == 1 and m["early"] == 1 and m["degraded"] == 0
+    assert "| Partial |" in compare.table({"arm": {"metrics": m}})
+    platform = [dict(outcome="ranked", mechanism="router:partial")]
+    rows, _ = compare.read_report(_platform([_platform_row("c", ["x"], attempts=platform)]))
+    assert rows[0]["partial"] is True and rows[0]["degraded"] is False
+
+
 # Spec 0.74 section 7.7: macro precision and macro recall are the main metrics (RM45, RM47).
 
 

@@ -695,29 +695,32 @@ class SelectorProxy:
         try:
             result = response.json()
             outcome = str(result.get("outcome"))
-            early = str(result.get("mechanism") or "").endswith(":early")
+            mechanism = str(result.get("mechanism") or "")
+            # Neither an early nor a partial answer is the selector's full ranking (spec 0.75).
+            stage = next((s for s in ("early", "partial") if mechanism.endswith(f":{s}")), None)
         except (ValueError, AttributeError):
-            outcome, early = "invalid", False
+            outcome, stage = "invalid", None
         with self._lock:
-            self.outcomes.append((outcome, early))
+            self.outcomes.append((outcome, stage))
 
     def ready(self) -> bool:
-        """The last select was the selector's full ranking: ranked or no_match, and not early."""
+        """The last select was the full ranking: ranked or no_match, neither early nor partial."""
         with self._lock:
             if not self.outcomes:
                 return False
-            outcome, early = self.outcomes[-1]
-        return outcome in ("ranked", "no_match") and not early
+            outcome, stage = self.outcomes[-1]
+        return outcome in ("ranked", "no_match") and stage is None
 
     def mark(self) -> int:
         with self._lock:
             return len(self.outcomes)
 
     def counts(self, since=0) -> dict:
-        """Select outcomes from `since` on; an early answer counts as "early", not "ranked"."""
+        """Select outcomes from `since` on; an early or partial answer counts as "early" or
+        "partial", not "ranked"."""
         with self._lock:
             seen = self.outcomes[since:]
-        return dict(Counter("early" if early else outcome for outcome, early in seen))
+        return dict(Counter(stage or outcome for outcome, stage in seen))
 
     def close(self):
         self.server.shutdown()

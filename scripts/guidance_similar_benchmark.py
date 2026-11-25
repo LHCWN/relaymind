@@ -256,7 +256,8 @@ async def sync_selector(
     """Sync a third-party selector with the offered assets before any case runs (spec 0.73 7.7).
 
     It offers the assets as every case will and syncs after each not_ready, as the gateway does.
-    It stops when the selector answers with its full ranking, not an early one, or after wait_s.
+    It stops when the selector answers with its full ranking, not an early or partial one, or
+    after wait_s.
     The time is setup, never part of a case's latency."""
     request = parse_guidance_request(dict(schema_version=1, task_text=WARM_UP_TASK, assets=assets))
     started, selects = clock(), 0
@@ -266,14 +267,15 @@ async def sync_selector(
             request,
             settings,
             selector=selector,
-            on_not_ready=lambda catalog, files, heard=heard: heard.append((catalog, files)),
+            on_sync=lambda catalog, files, heard=heard: heard.append((catalog, files)),
         )
         selects += 1
         # The selector's own answer, ranked or no_match: a no_match has chosen_by none.
         answered = {"stage": "third_party", "outcome": "ok"} in [
             dict(stage=s["stage"], outcome=s["outcome"]) for s in answer["stages"]
         ]
-        ready = answered and not answer["mechanism"].endswith(":early")
+        # An early or partial answer is not the full ranking yet (spec 0.73 and 0.75).
+        ready = answered and not answer["mechanism"].endswith((":early", ":partial"))
         if ready or clock() - started >= wait_s:
             break
         if heard:

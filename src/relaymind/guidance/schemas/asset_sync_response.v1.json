@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://relaymind.local/schemas/asset_sync_response.v1.json",
-  "description": "AssetSyncResponseV1 (spec 0.72 section 7.7; RM47). find_missing answers missing pairs; upload answers one result per uploaded pair.",
+  "description": "AssetSyncResponseV1 (spec 0.72 section 7.7; RM47; feedback spec 0.75, RM48). find_missing answers missing pairs; upload answers one result per uploaded pair; feedback answers only the selector's inference.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "operation", "inference", "missing", "results"],
   "properties": {
     "schema_version": {"const": 1},
-    "operation": {"enum": ["find_missing", "upload"]},
+    "operation": {"enum": ["find_missing", "upload", "feedback"]},
     "inference": {"enum": ["local", "remote"]},
     "missing": {
       "oneOf": [
@@ -22,9 +22,20 @@
       ]
     }
   },
-  "if": {"properties": {"operation": {"const": "upload"}}},
-  "then": {"properties": {"missing": {"type": "null"}, "results": {"type": "array"}}},
-  "else": {"properties": {"missing": {"type": "array"}, "results": {"type": "null"}}},
+  "allOf": [
+    {
+      "if": {"properties": {"operation": {"const": "upload"}}},
+      "then": {"properties": {"missing": {"type": "null"}, "results": {"type": "array"}}}
+    },
+    {
+      "if": {"properties": {"operation": {"const": "find_missing"}}},
+      "then": {"properties": {"missing": {"type": "array"}, "results": {"type": "null"}}}
+    },
+    {
+      "if": {"properties": {"operation": {"const": "feedback"}}},
+      "then": {"properties": {"missing": {"type": "null"}, "results": {"type": "null"}}}
+    }
+  ],
   "$defs": {
     "pair": {
       "type": "object",

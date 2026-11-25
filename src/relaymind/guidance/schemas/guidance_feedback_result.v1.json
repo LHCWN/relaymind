@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://relaymind.local/schemas/guidance_feedback_result.v1.json",
+  "description": "GuidanceFeedbackResultV1 (spec 0.75 section 7.7; RM48). Whether the gateway took the feedback to send.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "queued"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "queued": {
+      "type": "boolean"
+    }
+  }
+}

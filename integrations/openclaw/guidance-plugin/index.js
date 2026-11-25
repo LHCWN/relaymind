@@ -1,8 +1,9 @@
-// Optional per-prompt guidance for OpenClaw (RM45 to RM47, AC39, AC40; spec 0.69/0.72 section 7.7).
+// Optional per-prompt guidance for OpenClaw (RM45 to RM48, AC39, AC40, AC43; spec 0.69/0.72/0.75 section 7.7).
 //
 // A before_prompt_build hook reads the session's own skill snapshot, asks the gateway which few
 // assets this prompt needs, and adds one labeled hint to the turn. With limit = "strict" a
-// before_tool_call hook also refuses what was offered and not selected. It changes no host list or
+// before_tool_call hook also refuses what was offered and not selected. When the gateway asks for
+// feedback, after_tool_call and agent_end tell it which offered assets a successful run used. It changes no host list or
 // permission, and any failure adds no hint and no limit. It is separate from the provider plugin,
 // whose built bytes the native qualification pins. Plain JavaScript, so the host loads it without a
 // build.
@@ -13,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 
 const ENDPOINT = "/relay/v1/guidance";
+const FEEDBACK_ENDPOINT = "/relay/v1/guidance/feedback";
 const DEFAULT_TIMEOUT_MS = 13_000;
 const MAX_TIMEOUT_MS = 14_000; // Below the host's 15 s limit for this hook.
 const MAX_TASK_BYTES = 8192;
@@ -340,9 +342,10 @@ export function newOffer(snapshot, assets, workspaceDir) {
       const folder = skillFolder(entry);
       if (folder && typeof entry.name === "string" && offeredSkills.has(entry.name)) folders.set(entry.name, realPath(folder));
     }
-    // The host lowercases a tool name before its hooks see it, so names are kept lowercased.
-    const offeredTools = new Set(assets.filter((a) => a.kind === "mcp_tool").map((a) => a.name.toLowerCase()));
-    shared = { folders, offeredTools };
+    // The host lowercases a tool name before its hooks see it, so names are kept lowercased, each
+    // with its offered name for feedback.
+    const offeredTools = new Map(assets.filter((a) => a.kind === "mcp_tool").map((a) => [a.name.toLowerCase(), a.name]));
+    shared = { folders, offeredTools, offeredSkills };
   }
   offers.set(key, shared);
   if (offers.size > MAX_OFFERS) offers.delete(offers.keys().next().value);
@@ -519,6 +522,38 @@ function recordUse(rawName, rawParams, state, ctx) {
   }
 }
 
+/**
+ * The offered asset a call that worked used, as selector feedback names it (spec 0.75): a skill
+ * loaded by skills_read or a plain read inside its folder, or an offered tool executed. Else null.
+ */
+function usedOffered(rawName, rawParams, offer, ctx) {
+  const params = argsOf(rawParams);
+  const toolName = lower(rawName);
+  if (toolName === "tool_call") return usedOffered(...unwrapToolCall(params, offer.offeredTools), offer, ctx);
+  if (toolName === "skills_read") {
+    const name = trimmed(params?.name);
+    return offer.offeredSkills.has(name) ? { name, kind: "skill", signal: "loaded" } : null;
+  }
+  if (toolName === "read") {
+    const name = skillOfPath(params?.path ?? params?.file_path, offer, ctx);
+    return name ? { name, kind: "skill", signal: "loaded" } : null;
+  }
+  const tool = offer.offeredTools.get(toolName);
+  return tool ? { name: tool, kind: "mcp_tool", signal: "executed" } : null;
+}
+
+/** Tell the gateway what one run used of what it offered. The gateway answers at once. */
+async function report(config, token, feedback) {
+  const response = await fetch(config.origin + FEEDBACK_ENDPOINT, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ schema_version: 1, recommendation_id: feedback.id, used: [...feedback.used.values()] }),
+    redirect: "manual",
+    signal: AbortSignal.timeout(config.timeoutMs),
+  });
+  await response.body?.cancel().catch(() => {});
+}
+
 let toolsCache = null;
 
 /** The toolsFile's list, read again only when the file changes. */
@@ -657,7 +692,10 @@ function register(api) {
     if (sessions.size > MAX_SESSIONS) sessions.delete(sessions.keys().next().value);
     return state;
   };
+  // Per run whose answer asked for feedback (spec 0.75): its ID, its offer and what it used.
+  const feedbackRuns = new Map();
   api.on("before_prompt_build", async (event, ctx) => {
+    if (typeof ctx?.runId === "string") feedbackRuns.delete(ctx.runId);
     const state = strict && ctx?.sessionKey ? session(ctx.sessionKey) : null;
     // A failure, or a turn the user did not start, has no limit.
     if (state) state.limit = null;
@@ -690,12 +728,50 @@ function register(api) {
         .slice(0, config.maxPicks ?? Infinity);
       // Nothing selected is not a reason to refuse: the model can still search.
       if (state && picks.length) state.limit = newLimit(state.offer, picks, state.loaded);
+      // The gateway takes feedback about this select: what this run uses of the offer (spec 0.75).
+      if (typeof answer.recommendation_id === "string" && typeof ctx?.runId === "string") {
+        const offer = state?.offer ?? newOffer(snapshot, assets, ctx?.workspaceDir);
+        feedbackRuns.set(ctx.runId, { id: answer.recommendation_id, offer, used: new Map() });
+        if (feedbackRuns.size > MAX_SESSIONS) feedbackRuns.delete(feedbackRuns.keys().next().value);
+      }
       const hint = buildHint(picks, { decision: answer.decision, strict });
       return hint ? { prependContext: hint } : {};
     } catch (error) {
       // No hint, and the turn goes on. The message holds no prompt, token or response text.
       api.logger.debug?.(`relaymind-guidance added no hint: ${error?.name ?? "error"}`);
       return {};
+    }
+  });
+  // One hook after each call: a skill or tool the session used stays usable under a strict limit,
+  // and an offered one the run used goes into its feedback (spec 0.75).
+  api.on("after_tool_call", (event, ctx) => {
+    if (event?.error) return;
+    try {
+      const state = strict ? stateOf(ctx) : null;
+      if (state) recordUse(event?.toolName, event?.params, state, ctx);
+    } catch (error) {
+      api.logger.debug?.(`relaymind-guidance did not record a call: ${error?.name ?? "error"}`);
+    }
+    try {
+      const feedback = feedbackRuns.get(ctx?.runId);
+      const used = feedback && usedOffered(event?.toolName, event?.params, feedback.offer, ctx);
+      if (used) feedback.used.set(`${used.kind}:${used.name}`, used);
+    } catch (error) {
+      api.logger.debug?.(`relaymind-guidance did not record a use: ${error?.name ?? "error"}`);
+    }
+  });
+  api.on("agent_end", async (event, ctx) => {
+    const runId = event?.runId ?? ctx?.runId;
+    const feedback = feedbackRuns.get(runId);
+    if (!feedback) return;
+    feedbackRuns.delete(runId);
+    // A run that stopped without success does not show what the request needed (spec 0.75).
+    const token = process.env[config.tokenEnv];
+    if (event?.success !== true || !token) return;
+    try {
+      await report(config, token, feedback);
+    } catch (error) {
+      api.logger.debug?.(`relaymind-guidance sent no feedback: ${error?.name ?? "error"}`);
     }
   });
   if (!strict) return;
@@ -707,14 +783,6 @@ function register(api) {
     } catch (error) {
       api.logger.debug?.(`relaymind-guidance did not check a call: ${error?.name ?? "error"}`);
       return undefined;
-    }
-  });
-  api.on("after_tool_call", (event, ctx) => {
-    try {
-      const state = stateOf(ctx);
-      if (state && !event?.error) recordUse(event?.toolName, event?.params, state, ctx);
-    } catch (error) {
-      api.logger.debug?.(`relaymind-guidance did not record a call: ${error?.name ?? "error"}`);
     }
   });
 }

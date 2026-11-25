@@ -2795,6 +2795,15 @@ itself and records nothing, the proxy in front of the selector passes `/select` 
 ranking, and an arm whose selector never gets ready is skipped before any measured turn while the other arms
 still run. A warm-up turn whose host exits non-zero stops the run at once, because the plugin never ran.
 
+Partial answers and selector feedback (spec 0.75; RM47, RM48, AC42, AC43): `tests/test_guidance_sync.py` checks that
+a `:partial` answer is passed on with `degraded` false and still syncs, through the fake router and through the
+launched gateway with `scripts/guidance_selector_server.py --partial`; the compare and benchmark tests count such
+answers apart from the full ranking. `tests/test_guidance_feedback.py` drives `POST /relay/v1/guidance/feedback`
+against a fake router: the pairs sent, the inference rule, the memory and queue limits, failures, and once the
+launched gateway against the reference selector's `/feedback`. In `integrations/openclaw`,
+`test/guidance-plugin.test.ts` checks what the plugin reports after a run, and that it reports nothing after a
+failed run or without a `recommendation_id`.
+
 Interop with asset-router (RM47, AC42). This checks that the guidance gateway and the real asset-router work
 together. Inference is a deterministic double, so a pass says nothing about ranking quality.
 

@@ -23,6 +23,7 @@
     "chosen_by": {"enum": ["word_match", "external_model", "third_party", "none"]},
     "mechanism": {"type": "string", "minLength": 1},
     "degraded": {"type": "boolean"},
+    "recommendation_id": {"type": "string", "minLength": 1, "maxLength": 128},
     "offered": {"type": "integer", "minimum": 0},
     "shortlist": {"type": "integer", "minimum": 0},
     "stages": {

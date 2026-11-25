@@ -62,7 +62,8 @@ class Router:
 
     `missing` picks which offered pairs find_missing reports; `inference` is what it says it uses;
     `reject(item)` gives an upload item's rejection reason, or None to accept it; a `sync_status`
-    other than 200 fails every sync exchange.
+    other than 200 fails every sync exchange, and a `feedback_status` other than 200 every feedback
+    (spec 0.75; RM48). `select_status` other than 200 fails every select.
     """
 
     def __init__(
@@ -72,17 +73,38 @@ class Router:
         inference="local",
         reject=lambda item: None,
         sync_status=200,
+        mechanism="router.hybrid-bm25",
+        feedback_status=200,
+        select_status=200,
     ):
         self.outcome, self.missing, self.inference = outcome, missing, inference
-        self.reject, self.sync_status = reject, sync_status
+        self.reject, self.sync_status, self.mechanism = reject, sync_status, mechanism
+        self.feedback_status, self.select_status = feedback_status, select_status
         self.selects: list[dict] = []
         self.syncs: list[dict] = []
+        self.feedbacks: list[dict] = []
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
         if request.url.path == "/select":
             self.selects.append(body)
+            if self.select_status != 200:
+                return httpx.Response(self.select_status)
             return reply(self.answer(body))
+        if request.url.path == "/feedback":
+            assert first_schema_error(SYNC_REQUEST, body) is None
+            self.feedbacks.append(body)
+            if self.feedback_status != 200:
+                return httpx.Response(self.feedback_status)
+            return reply(
+                dict(
+                    schema_version=1,
+                    operation="feedback",
+                    inference=self.inference,
+                    missing=None,
+                    results=None,
+                )
+            )
         if request.url.path == "/sync":
             # Every sync request the gateway sends must match the published schema.
             assert first_schema_error(SYNC_REQUEST, body) is None
@@ -128,9 +150,9 @@ class Router:
             catalog_revision=request["catalog_revision"],
             host_snapshot_revision=request["host_snapshot_revision"],
             selector=dict(name="router", version="1"),
-            mechanism="router.hybrid-bm25",
+            mechanism=self.mechanism,
             outcome=self.outcome,
-            decision="confident" if ranked else None,
+            decision="confident" if ranked else "no_match" if self.outcome == "no_match" else None,
             candidates=[candidate] if ranked else [],
             index_revision="r1" if ranked else None,
             elapsed_ms=1,
@@ -299,6 +321,26 @@ def test_without_a_sync_url_not_ready_still_falls_back_and_nothing_is_synced():
     assert router.syncs == []
 
 
+@pytest.mark.parametrize("outcome", ["ranked", "no_match"])
+def test_a_partial_answer_is_passed_on_and_still_starts_the_sync(outcome):
+    """Spec 0.75 section 7.7 (RM47, AC42): a selector that has not indexed every offered pair may
+    answer over the whole offer with a mechanism ending in :partial; the gateway syncs after it."""
+    router = Router(outcome=outcome, mechanism="router.hybrid-bm25:partial", missing=lambda s: s)
+    answer = client(router, SYNCING).post("/relay/v1/guidance", json=BODY, headers=AUTH)
+    body = answer.json()
+    assert body["mechanism"] == "router.hybrid-bm25:partial" and body["degraded"] is False
+    assert body["chosen_by"] == ("third_party" if outcome == "ranked" else "none")
+    # No word match of the gateway's own is added to the selector's answer.
+    assert [s["stage"] for s in body["stages"]] == ["third_party"]
+    assert [s["operation"] for s in router.syncs] == ["find_missing", "upload"]
+
+
+def test_an_answer_that_only_mentions_partial_is_not_partial():
+    router = Router(mechanism="router.partial-index")
+    client(router, SYNCING).post("/relay/v1/guidance", json=BODY, headers=AUTH)
+    assert router.syncs == []
+
+
 def test_a_ranked_answer_starts_no_sync():
     router = Router()
     client(router, SYNCING).post("/relay/v1/guidance", json=BODY, headers=AUTH)
@@ -449,6 +491,10 @@ def test_the_status_route_counts_the_last_sync_and_names_no_asset():
         files_sent=1,
         consecutive_failures=0,
         retry_after_ms=0,
+        feedback_enabled=False,
+        feedback_sent=0,
+        feedback_failed=0,
+        feedback_skipped=0,
     )
     text = json.dumps(body)
     assert "pdf-merge" not in text and "weather" not in text and "/home" not in text
@@ -911,6 +957,44 @@ def test_the_launched_gateway_syncs_the_reference_selector_until_it_ranks(tmp_pa
     assert synced["accepted"] == 2 and synced["rejected"] == 0
     assert second["chosen_by"] == "third_party" and second["degraded"] is False
     assert [p["name"] for p in second["picks"]] == ["pdf-merge"]
+
+
+def test_the_launched_gateway_passes_on_a_partial_answer_and_still_syncs(tmp_path):
+    """AC42 spec 0.75: the reference selector started with partial answers over the whole offer
+    while a pair is missing; the gateway passes that on and syncs, and the next answer is full."""
+    server = reference_server()
+    body = dict(BODY, assets=[skill_file(tmp_path / "skills"), TOOL])
+    index = server.SyncIndex([tmp_path / "skills"])
+    settings = GuidanceSettings(enabled=True)
+    operations = []
+
+    def answer(value):
+        return asyncio.run(
+            server.select(value, settings, name="router", version="1", index=index, partial=True)
+        )
+
+    def sync(value):
+        operations.append(value["operation"])
+        return index.handle(value)
+
+    http_server = ThreadingHTTPServer(("127.0.0.1", 0), server.make_handler(answer, sync))
+    threading.Thread(target=http_server.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{http_server.server_port}"
+    try:
+        config = load_config(
+            write_config(tmp_path, http_table(base) + f"sync_url = '{base}/sync'\n")
+        )
+        launched = build_app(config, local_adapter=ScriptedAdapter(turns=[]), external_adapter=None)
+        auth = {"Authorization": f"Bearer {launched.app.state.application_token}"}
+        with TestClient(launched.app) as http:
+            first = http.post("/relay/v1/guidance", json=body, headers=auth).json()
+            second = http.post("/relay/v1/guidance", json=body, headers=auth).json()
+    finally:
+        http_server.shutdown()
+    assert first["mechanism"].endswith(":partial") and first["chosen_by"] == "third_party"
+    assert first["degraded"] is False and [p["name"] for p in first["picks"]] == ["pdf-merge"]
+    assert operations == ["find_missing", "upload"]
+    assert not second["mechanism"].endswith(":partial") and second["chosen_by"] == "third_party"
 
 
 # --- identity, deadline and freshness (router integration review) --------------------------

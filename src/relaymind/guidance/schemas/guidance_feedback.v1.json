@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://relaymind.local/schemas/guidance_feedback.v1.json",
+  "description": "GuidanceFeedbackV1 (spec 0.75 section 7.7; RM48). What the host plugin says one turn used of the assets it offered; no text or path.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "recommendation_id",
+    "used"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "recommendation_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "used": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "kind",
+          "signal"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "enum": [
+              "skill",
+              "mcp_tool"
+            ]
+          },
+          "signal": {
+            "enum": [
+              "loaded",
+              "executed"
+            ]
+          }
+        },
+        "if": {
+          "properties": {
+            "kind": {
+              "const": "skill"
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "signal": {
+              "const": "loaded"
+            }
+          }
+        },
+        "else": {
+          "properties": {
+            "signal": {
+              "const": "executed"
+            }
+          }
+        }
+      }
+    }
+  }
+}

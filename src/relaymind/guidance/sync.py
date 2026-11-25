@@ -46,6 +46,34 @@ def _target(record: Mapping) -> str:
     return hashlib.sha256(canonical_json(record).encode()).hexdigest()
 
 
+async def exchange(
+    url: str,
+    document: Mapping,
+    *,
+    seconds: float,
+    clock: Callable[[], float],
+    transport_factory: Callable[[], httpx.AsyncBaseTransport] | None = None,
+) -> dict:
+    """One selector exchange: a valid AssetSyncResponseV1 of the same operation, or an error."""
+    if len(document.get("assets", ())) > _THREAD_ABOVE:
+        payload = (await asyncio.to_thread(canonical_json, document)).encode()
+    else:
+        payload = canonical_json(document).encode()
+    # wait_for bounds the whole exchange; the transport needs no clock of its own.
+    answer = await asyncio.wait_for(
+        post_json(
+            url, payload, SelectorContext(clock, lambda: None), transport_factory=transport_factory
+        ),
+        seconds,
+    )
+    if (
+        first_schema_error(_RESPONSE, answer) is not None
+        or answer["operation"] != document["operation"]
+    ):
+        raise ValueError("invalid_sync_response")
+    return answer
+
+
 class GuidanceSync:
     """At most one sync at a time; a sync wanted while one runs is skipped."""
 
@@ -71,6 +99,8 @@ class GuidanceSync:
         # A running sync fills `_current`; the status shows it only once that sync ends.
         self._current: dict | None = None
         self._last = self._nothing()
+        # The last inference a selector exchange reported, or None before any (spec 0.75; RM48).
+        self.inference: str | None = None
 
     def status(self) -> dict:
         """GuidanceSyncStatusV1 for `GET /relay/v1/guidance/sync`."""
@@ -105,6 +135,12 @@ class GuidanceSync:
                 self._wait()
         finally:
             self._running, self._current = False, None
+
+    async def ask_inference(self, pairs: list[dict]) -> str:
+        """Learn the selector's inference with a find_missing of these pairs, uploading nothing.
+
+        Feedback needs it before it sends anything (spec 0.75; RM48). Raises on any failure."""
+        return (await self._exchange("find_missing", pairs))["inference"]
 
     @staticmethod
     def _nothing() -> dict:
@@ -209,20 +245,13 @@ class GuidanceSync:
 
     async def _exchange(self, operation: str, assets: list) -> dict:
         document = dict(schema_version=1, operation=operation, feeder_id=FEEDER_ID, assets=assets)
-        if len(assets) > _THREAD_ABOVE:
-            payload = (await asyncio.to_thread(canonical_json, document)).encode()
-        else:
-            payload = canonical_json(document).encode()
-        # wait_for bounds the whole exchange; the transport needs no clock of its own.
-        answer = await asyncio.wait_for(
-            post_json(
-                self.url,
-                payload,
-                SelectorContext(self._clock, lambda: None),
-                transport_factory=self._transport_factory,
-            ),
-            self.exchange_s,
+        answer = await exchange(
+            self.url,
+            document,
+            seconds=self.exchange_s,
+            clock=self._clock,
+            transport_factory=self._transport_factory,
         )
-        if first_schema_error(_RESPONSE, answer) is not None or answer["operation"] != operation:
-            raise ValueError("invalid_sync_response")
+        if operation == "find_missing":
+            self.inference = answer["inference"]
         return answer

@@ -182,7 +182,8 @@ The rules:
   selector names; they are refused.
 - If nothing fits, answer `"outcome":"no_match","decision":"no_match","candidates":[]`.
 - A failure, an invalid answer or `"outcome":"not_ready"` falls back to word match with `degraded: true`,
-  unless `fallback = false`.
+  unless `fallback = false`. A partial answer, with a `mechanism` ending in `:partial`, is not a failure; see
+  [Keep your selector in sync](#keep-your-selector-in-sync).
 - A selector proposes. The gateway admits only exact offered records, and nothing runs because of a pick.
 
 Above 1,000 host assets your selector gets the best 1,000 by word match; the built-in stages take up to
@@ -248,12 +249,19 @@ shows the counts of the last sync that ended and the wait, with no asset names o
 `find_missing` failed shows `failed` with zero counts.
 
 Two costs come with this design. `not_ready` answers the whole select, so one pair you have not indexed sends every
-turn to word match until a sync gets it indexed. And a sync that hangs holds the one sync slot for up to three
+turn to word match until a sync gets it indexed, unless you give a partial answer (below). And a sync that hangs holds the one sync slot for up to three
 `sync_ms` (3 minutes by default), and every other sync is skipped meanwhile.
 
-`scripts/guidance_selector_server.py --sync-root DIR` is a reference selector for this protocol: it serves `/sync`,
-reads files only under its roots and answers `not_ready` until it has every offered pair. It still ranks by
-description, so it shows the protocol, not a better ranking.
+A selector that can rank the pairs it has not indexed from the select itself, for example by word match over their
+names and descriptions, may answer before it has indexed every offered pair (spec 0.75). Answer `ranked` or
+`no_match` over the whole offer and end your `mechanism` with `:partial`, for example `"mechanism":"my_rule:partial"`.
+The gateway passes the answer on with `degraded: false`, adds no word match of its own, and still syncs after it, as
+after `not_ready`. If you cannot rank the part you have not indexed, answer `not_ready`. Comparison runs count
+partial answers in their own column, because they are not your full ranking.
+
+`scripts/guidance_selector_server.py --sync-root DIR` is a reference selector for this protocol: it serves `/sync`
+and `/feedback`, reads files only under its roots and answers `not_ready` until it has every offered pair, or a
+`:partial` answer with `--partial`. It still ranks by description, so it shows the protocol, not a better ranking.
 
 ### What each identifier means
 
@@ -264,10 +272,11 @@ description, so it shows the protocol, not a better ranking.
   source. Keep them inside your selector; they are not part of this protocol.
 - `catalog_revision` names one offer: the exact list of one select.
 - `index_revision` in your answer names the retrieval generation you scored with.
-- "Searchable" and "every optional feature done" are different states. Answer `not_ready` while any offered pair
-  is unknown to you: the gateway syncs only after `not_ready`, so ranking a subset would leave the unknown pair
-  without a sync. Ranking before every optional feature is ready (progressive readiness), and keeping several
-  versions of one asset, are planned, not part of the contract yet.
+- "Searchable" and "every optional feature done" are different states. While any offered pair is unknown to you,
+  answer `not_ready` or a `:partial` answer: the gateway syncs only after those, so an unlabeled ranking of a subset
+  would leave the unknown pair without a sync. A pair you know and are still indexing may be ranked from the
+  features you have, with a `mechanism` and `score_kind` ending in `:early` (spec 0.73); the gateway starts no
+  sync for it. Keeping several versions of one asset is planned, not part of the contract yet.
 - The gateway does not cache your rankings. It asks you on every request, so identical requests may get a new
   answer after you publish new features.
 - Rank with the description of the current select. The same file hash can come with a description shortened or
@@ -277,6 +286,39 @@ description, so it shows the protocol, not a better ranking.
   description is progress too. A selector that keeps one version of each asset re-indexes on each such change.
 - A tool record's `input_schema` is the placeholder `{"type":"object"}` and its `schema_hash` is fixed, so it
   does not tell you when a real tool's schema changed. Real MCP schemas need a separate contract extension.
+
+### Tell your selector what a turn used
+
+A selector learns a user's own skills best from that user's real requests, and most from the turns where it missed
+one, which only the host sees (spec 0.75, RM48). Add `feedback_url = "http://127.0.0.1:8940/feedback"` next to
+`sync_url`; feedback needs sync. Each answer whose select your selector answered validly (`ranked`, `no_match` or
+`not_ready`) then carries `recommendation_id`, the ID of that select. When the turn ends with success, the plugin
+reports which offered assets it used, and after answering the plugin the gateway sends one POST to your
+`feedback_url`:
+
+```json
+{"schema_version":1,"operation":"feedback","feeder_id":"guidance",
+ "recommendation_id":"7e46678a-d704-4027-b916-2c84de864101",
+ "used":[{"asset_id":"host:skill:pdf-merge","content_hash":"<as offered>","kind":"skill","signal":"loaded"},
+         {"asset_id":"host:mcp_tool:weather","content_hash":"<as offered>","kind":"mcp_tool","signal":"executed"}]}
+```
+
+Answer `{"schema_version":1,"operation":"feedback","inference":"local","missing":null,"results":null}`.
+
+- `used` holds every offered asset the turn used, whether you picked it or not. An empty list is a signal too.
+- `loaded` means `skills_read` of the skill, or a plain `read` inside its folder, returned without error;
+  `executed` means a call of the tool returned without error. Whether the model followed the skill is not observed,
+  and a subagent's own run is not counted. A turn that fails sends nothing.
+- No prompt text, path or body is sent. You already have the request under its `recommendation_id`; keep what you
+  choose, on this machine.
+- Feedback goes only to a selector whose last answer said `"inference":"local"`, unless the operator sets
+  `sync_allow_remote = true`. If no sync has told the gateway yet, it first sends a `find_missing` with that
+  select's pairs to `sync_url` only to learn this, and uploads nothing.
+- Each select gets at most one feedback. The gateway remembers a select for at most one hour, at most 1,024 of
+  them, and sends one feedback at a time; a feedback that finds 16 others waiting is dropped. Each exchange gets
+  `sync_ms`, there is no retry, and a failure changes no answer.
+- `GET /relay/v1/guidance/sync` adds `feedback_enabled`, `feedback_sent`, `feedback_failed` and `feedback_skipped`
+  (remote inference or a full queue), counted since the gateway started.
 
 ### Check against the real asset-router
 
