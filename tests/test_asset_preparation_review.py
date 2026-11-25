@@ -330,16 +330,70 @@ def test_genuine_main_outcomes_and_reported_claims_stay_valid(ending):
     if ending == "timeout_ready_cleanup":
         assert record["exchanges"][-1]["response"]["state"] == "ready"
         assert record["index_revision"] is None
-    claims = [
-        e["response"]["usage_claims"]["value"]["calls"]
-        for e in record["exchanges"]
-        if e["response"] is not None
-    ]
-    # A poll cut off by the total time can reach the selector and still record no response, so
-    # its reported count may be missing here; every count that was recorded stays as reported,
-    # in order, and names a request the selector really got.
-    assert claims == sorted(set(claims))
-    assert all(1 <= claim <= len(requests) for claim in claims)
+    assert_claims_as_reported(record, received=len(requests))
+
+
+def assert_claims_as_reported(record, *, received):
+    """Each recorded count is the selector's own, in order (RM40).
+
+    The fake selector counts every request it receives. A poll cut off by the total time is
+    recorded with no response and may still have reached the selector, so a count may skip ahead
+    by at most the cut polls just before it; anywhere else the counts are consecutive. `received`
+    is the number of requests the selector's handler really got."""
+    last, cut = 0, 0
+    for exchange in record["exchanges"]:
+        if exchange["response"] is None:
+            cut += 1
+            continue
+        claim = exchange["response"]["usage_claims"]["value"]["calls"]
+        assert last < claim <= last + 1 + cut, (last, cut, claim)
+        last, cut = claim, 0
+    assert last <= received
+
+
+def test_a_poll_cut_off_by_the_total_time_leaves_only_its_own_gap():
+    """RM40: the race a slow runner hits, made certain: the second poll outlives the total time."""
+    import httpx
+
+    from relaymind.selection import asset_preparation as module
+    from test_asset_preparation import inputs, reply, response
+
+    _, catalog, binding, config = inputs()
+    config |= dict(total_ms=80, request_ms=60, max_polls=5)
+    requests = []
+
+    async def handler(request):
+        raw = json.loads(request.content)
+        requests.append(raw)
+        if len(requests) == 2:
+            await asyncio.sleep(0.07)
+        state = "ready" if raw["operation"] == "cancel" else "indexing"
+        claim = dict(
+            provenance="reported",
+            value=dict.fromkeys(
+                (
+                    "input_tokens",
+                    "output_tokens",
+                    "cached_tokens",
+                    "reasoning_tokens",
+                    "calls",
+                    "cpu_ms",
+                    "peak_bytes",
+                )
+            ),
+        )
+        claim["value"]["calls"] = len(requests)
+        return reply(200, json=response(raw, state=state, reason=None, usage_claims=claim))
+
+    record = asyncio.run(
+        module.prepare_asset_index(
+            config, binding, catalog, transport_factory=lambda: httpx.MockTransport(handler)
+        )
+    )
+    module.validate_preparation_record(record, config=config, binding=binding)
+    assert record["status"] == "timeout"
+    assert [e["response"] is None for e in record["exchanges"]] == [False, True, False]
+    assert_claims_as_reported(record, received=len(requests))
 
 
 def test_real_cli_keeps_valid_ready_setup_with_unknown_costs(prepared_bundle, tmp_path):
