@@ -1088,3 +1088,84 @@ def test_reveal_confirmation_mismatch_preserves_live_token_and_skips_store_read(
         )
         is None
     )
+
+
+def test_await_confirmation_commits_state_approval_and_event_atomically_for_concurrent_run_view(
+    tmp_path, monkeypatch
+):
+    """RM11, RM17, RM21: concurrent run_view never sees waiting_confirmation without approval."""
+    import threading
+
+    from relaymind.api.native import run_view
+
+    gateway = gateway_for(tmp_path)
+    observed: list[dict] = []
+    errors: list[BaseException] = []
+    readers: list[threading.Thread] = []
+    real_create = gateway.store.create_approval
+
+    def _read_view(run_id: str) -> None:
+        try:
+            observed.append(run_view(gateway.orchestrator, run_id))
+        except BaseException as exc:  # pragma: no cover - surfaced by assert not errors
+            errors.append(exc)
+
+    def intercepted_create(run_id, *args, **kwargs):
+        # Simulate GET /relay/v1/runs/{id} running run_view in a worker thread mid-transition.
+        reader = threading.Thread(target=_read_view, args=(run_id,), daemon=True)
+        readers.append(reader)
+        reader.start()
+        reader.join(timeout=0.05)
+        return real_create(run_id, *args, **kwargs)
+
+    monkeypatch.setattr(gateway.store, "create_approval", intercepted_create)
+
+    try:
+        outcome = asyncio.run(gateway.orchestrator.run_text(PROMPT))
+    finally:
+        for reader in readers:
+            reader.join(timeout=2.0)
+
+    assert all(not reader.is_alive() for reader in readers)
+    assert not errors, f"run_view thread raised: {errors}"
+    assert outcome.state is RunState.WAITING_CONFIRMATION
+    assert outcome.confirmation is not None
+    assert len(observed) == 1
+    view = observed[0]
+    assert view["state"] == "waiting_confirmation"
+    assert view["pending_approval"] is not None
+    assert view["pending_approval"]["approval_id"] == outcome.confirmation.approval_id
+
+
+def test_await_confirmation_rolls_back_state_and_approval_if_issuance_fails(tmp_path, monkeypatch):
+    """RM11, RM17: failure after approval insert rolls back both waiting_confirmation and row."""
+    from relaymind.store.trace_event import EventType
+
+    gateway = gateway_for(tmp_path)
+    real_create = gateway.store.create_approval
+    seen: list[tuple[str, int]] = []
+
+    def fail_after_approval_insert(run_id, *args, **kwargs):
+        # Execute the real INSERT INTO approvals inside the transaction, then fail before COMMIT
+        # so rollback must undo both the waiting_confirmation transition and the approval row.
+        real_create(run_id, *args, **kwargs)
+        waiting_version = kwargs["state_version"]
+        seen.append((run_id, waiting_version))
+        raise RuntimeError("injected failure after approval insert")
+
+    monkeypatch.setattr(gateway.store, "create_approval", fail_after_approval_insert)
+
+    with pytest.raises(RuntimeError, match="injected failure after approval insert"):
+        asyncio.run(gateway.orchestrator.run_text(PROMPT))
+
+    assert len(seen) == 1
+    run_id, waiting_version = seen[0]
+    record = gateway.store.get_run(run_id)
+    assert record.state == RunState.FAILED.value
+    # Without rollback, waiting_confirmation (waiting_version) -> failed would be waiting_version+1.
+    # With rollback, the run reverted to waiting_version-1 before _abort transitioned to failed at
+    # waiting_version.
+    assert record.version == waiting_version
+    assert gateway.store.get_pending_approval(run_id) is None
+    events = gateway.store.events(run_id)
+    assert not any(e.event_type == EventType.CONFIRMATION_REQUIRED for e in events)
