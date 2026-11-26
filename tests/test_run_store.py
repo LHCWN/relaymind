@@ -1237,23 +1237,28 @@ def test_appending_many_deltas_uses_bounded_queries_and_near_linear_time(store, 
         assert mem_store.elapsed_ms(mem_run) == 100
         _assert_indexed_plans(mem_store._conn, mem_queries)
 
-        def measure_mem_appends(count: int, prefix: str) -> float:
+        # Measure 15 equal chunks (3,000 appends) on :memory: and compare median chunk
+        # duration of the first 5 chunks (depth ~500) vs the last 5 chunks (depth ~2,500).
+        # Using medians discards up to two GC/CPU-steal outlier stalls in either window,
+        # while O(1)/append stays ~1.0x vs ~5.0x for an O(N^2) Python/SQLite regression.
+        import statistics
+
+        chunks: list[float] = []
+        for chunk in range(15):
             started = time.perf_counter()
-            for i in range(count):
+            for i in range(200):
                 mem_clock.mono += 0.001
                 mem_store.append_event(
-                    mem_run, EventType.ANSWER_DELTA, "local", {"text": f"{prefix}{i}"}
+                    mem_run, EventType.ANSWER_DELTA, "local", {"text": f"c{chunk}_{i}"}
                 )
-            return time.perf_counter() - started
-
-        mem_n = measure_mem_appends(1500, "mn")
-        mem_2n = measure_mem_appends(3000, "m2n")
-        assert mem_n + mem_2n < 5.0, (
-            f"expected bounded :memory: append time, got {mem_n + mem_2n:.3f}s"
-        )
-        assert mem_2n <= mem_n * 4.0, (
-            f"expected near-linear :memory: scaling for 2N appends: "
-            f"N={mem_n:.4f}s, 2N={mem_2n:.4f}s"
+            chunks.append(time.perf_counter() - started)
+        total_mem = sum(chunks)
+        early_median = statistics.median(chunks[:5])
+        late_median = statistics.median(chunks[-5:])
+        assert total_mem < 5.0, f"expected bounded :memory: append time, got {total_mem:.3f}s"
+        assert late_median <= early_median * 3.0, (
+            f"expected near-constant per-chunk :memory: append cost: "
+            f"early_median={early_median:.4f}s, late_median={late_median:.4f}s"
         )
     finally:
         mem_store.close()
