@@ -1050,3 +1050,41 @@ def test_replaced_wait_version_drops_stale_tracking_on_stale_version_error(tmp_p
     assert waiting.run_id not in gateway.orchestrator._waiting
     assert gateway.orchestrator._issued == {}
     assert gateway.orchestrator.reveal_confirmation(waiting.run_id) is None
+
+
+def test_reveal_confirmation_mismatch_preserves_live_token_and_skips_store_read(tmp_path):
+    """RM11, #294: mismatched approval_id keeps live token; verify_store=False skips SQLite."""
+    gateway, waiting, _ = waiting_gateway(tmp_path)
+    request = waiting.confirmation
+    assert request is not None
+
+    # A stale reader with a mismatched approval_id must not pop the live confirmation token.
+    assert (
+        gateway.orchestrator.reveal_confirmation(
+            waiting.run_id, approval_id="stale-approval-id", verify_store=False
+        )
+        is None
+    )
+    assert waiting.run_id in gateway.orchestrator._issued
+
+    # Matching approval_id with verify_store=False reveals once without touching SQLite.
+    queries: list[str] = []
+    gateway.store._conn.set_trace_callback(queries.append)
+    try:
+        revealed = gateway.orchestrator.reveal_confirmation(
+            waiting.run_id, approval_id=request.approval_id, verify_store=False
+        )
+    finally:
+        gateway.store._conn.set_trace_callback(None)
+
+    assert revealed is not None
+    assert revealed.approval_id == request.approval_id
+    assert revealed.token == request.token
+    assert queries == []
+    assert waiting.run_id not in gateway.orchestrator._issued
+    assert (
+        gateway.orchestrator.reveal_confirmation(
+            waiting.run_id, approval_id=request.approval_id, verify_store=False
+        )
+        is None
+    )

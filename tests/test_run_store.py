@@ -1166,17 +1166,17 @@ def test_appending_many_deltas_uses_bounded_queries_and_near_linear_time(store, 
             store._conn.set_trace_callback(None)
         return traced, time.perf_counter() - started
 
-    queries_n, elapsed_n = measure_appends(50, "a")
-    queries_2n, elapsed_2n = measure_appends(100, "b")
+    queries_n, elapsed_n = measure_appends(400, "a")
+    queries_2n, elapsed_2n = measure_appends(800, "b")
 
     # No UNION ALL / full-table elapsed_ms scan per append; query count scales linearly (2x).
     assert not any("UNION ALL" in q for q in queries_n + queries_2n)
-    assert len(queries_n) <= 250, f"expected <=5 queries per append, got {len(queries_n)}"
+    assert len(queries_n) <= 2000, f"expected <=5 queries per append, got {len(queries_n)}"
     assert len(queries_2n) == 2 * len(queries_n)
-    assert elapsed_n + elapsed_2n < 1.5, (
+    assert elapsed_n + elapsed_2n < 5.0, (
         f"expected bounded append time, got {elapsed_n + elapsed_2n:.3f}s"
     )
-    assert elapsed_2n <= max(elapsed_n * 3.5, 0.2), (
+    assert elapsed_2n <= elapsed_n * 3.5, (
         f"expected near-linear scaling for 2N appends: N={elapsed_n:.4f}s, 2N={elapsed_2n:.4f}s"
     )
 

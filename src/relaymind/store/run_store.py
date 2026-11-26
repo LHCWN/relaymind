@@ -1392,7 +1392,7 @@ class RunStore:
             )
             self._remember_elapsed(run_id, interval_elapsed)
             if event is not None:
-                self._insert_events(run_id, [event])
+                self._insert_events(run_id, [event], known_max_elapsed=interval_elapsed)
             if holds_slot:
                 onset = previous_onset if previous_holder == run_id else self.clock.monotonic()
                 self._slot_started = (
@@ -1803,7 +1803,13 @@ class RunStore:
             self._require_run(run_id)
             return self._insert_events(run_id, drafts)
 
-    def _insert_events(self, run_id: str, drafts: Sequence[EventDraft]) -> list[TraceEvent]:
+    def _insert_events(
+        self,
+        run_id: str,
+        drafts: Sequence[EventDraft],
+        *,
+        known_max_elapsed: int | None = None,
+    ) -> list[TraceEvent]:
         """Validate and insert events with the next seqs, in the caller's transaction.
 
         The caller has checked the run exists. The last seq is read once
@@ -1818,12 +1824,13 @@ class RunStore:
                 "elapsed_ms is never derived from wall-clock time"
             )
         started, offset = baseline
-        if self._in_memory:
+        if self._in_memory or known_max_elapsed is not None:
             (last,) = self._conn.execute(
                 "SELECT COALESCE(MAX(seq), 0) FROM events WHERE run_id = ?",
                 (run_id,),
             ).fetchone()
-            last_elapsed = self._run_last_elapsed.get(run_id, offset)
+            base_elapsed = offset if known_max_elapsed is None else known_max_elapsed
+            last_elapsed = max(self._run_last_elapsed.get(run_id, offset), base_elapsed)
         else:
             last, persisted_elapsed = self._conn.execute(
                 f"SELECT COALESCE((SELECT MAX(seq) FROM events WHERE run_id = ?), 0),"
