@@ -1165,8 +1165,25 @@ def _assert_indexed_plans(conn, traced_sqls: list[str]) -> None:
     assert checked_plans >= 1, "expected at least one non-empty query plan to be verified"
 
 
+def _measure_vm_steps(conn, fn) -> int:
+    """Count exact SQLite VM steps executed by fn via set_progress_handler."""
+    steps = 0
+
+    def _count() -> int:
+        nonlocal steps
+        steps += 1
+        return 0
+
+    conn.set_progress_handler(_count, 1)
+    try:
+        fn()
+    finally:
+        conn.set_progress_handler(None, 0)
+    return steps
+
+
 def test_appending_many_deltas_uses_bounded_queries_and_near_linear_time(store, clock):
-    """RM22, RM25, #294: appending N deltas uses O(1) indexed queries and near-linear CPU time."""
+    """RM22, RM25, #294: appending N deltas uses bounded SQLite VM work and near-linear CPU time."""
     import time
 
     run_id = store.create_run("accepted").run_id
@@ -1186,6 +1203,11 @@ def test_appending_many_deltas_uses_bounded_queries_and_near_linear_time(store, 
         return traced
 
     queries_n = trace_appends(200, "a")
+    clock.mono += 0.001
+    steps_shallow = _measure_vm_steps(
+        store._conn,
+        lambda: store.append_event(run_id, EventType.ANSWER_DELTA, "local", {"text": "probe_a"}),
+    )
     queries_2n = trace_appends(400, "b")
 
     # No UNION ALL / full-table elapsed_ms scan per append; query count scales linearly (2x).
@@ -1208,6 +1230,23 @@ def test_appending_many_deltas_uses_bounded_queries_and_near_linear_time(store, 
     assert len(non_insert) <= 5, f"expected <=5 non-INSERT statements, got {non_insert}"
     _assert_indexed_plans(store._conn, batch_queries)
 
+    # Grow the file-backed run to ~2,000 events (10x depth) and confirm per-append SQLite VM
+    # steps stay bounded rather than growing linearly via an O(n) index range scan.
+    store.append_events(
+        run_id,
+        [(EventType.ANSWER_DELTA, "local", {"text": f"d{i}"}) for i in range(1200)],
+    )
+    clock.mono += 0.001
+    steps_deep = _measure_vm_steps(
+        store._conn,
+        lambda: store.append_event(run_id, EventType.ANSWER_DELTA, "local", {"text": "probe_b"}),
+    )
+    assert steps_shallow > 0
+    assert steps_deep <= steps_shallow * 1.5, (
+        f"expected bounded SQLite VM steps at 10x depth on file store: "
+        f"depth~200={steps_shallow}, depth~2000={steps_deep}"
+    )
+
     # Verify the elapsed_ms index exists and is chosen by SQLite.
     plan = [
         row["detail"]
@@ -1219,7 +1258,7 @@ def test_appending_many_deltas_uses_bounded_queries_and_near_linear_time(store, 
     assert any("events_run_elapsed" in step for step in plan), plan
 
     # Exercise in-memory fast path (zero WAL/disk I/O): verify zero MAX queries, indexed plans,
-    # and near-constant per-chunk CPU cost (early vs late chunk medians <= 3.0x).
+    # bounded SQLite VM steps across depth growth, and near-constant per-chunk CPU cost.
     mem_clock = FakeClock()
     mem_store = RunStore(":memory:", clock=mem_clock)
     try:
@@ -1237,6 +1276,14 @@ def test_appending_many_deltas_uses_bounded_queries_and_near_linear_time(store, 
         assert mem_store.elapsed_ms(mem_run) == 100
         _assert_indexed_plans(mem_store._conn, mem_queries)
 
+        mem_clock.mono += 0.001
+        mem_steps_shallow = _measure_vm_steps(
+            mem_store._conn,
+            lambda: mem_store.append_event(
+                mem_run, EventType.ANSWER_DELTA, "local", {"text": "m_probe_a"}
+            ),
+        )
+
         # Measure 15 equal chunks (3,000 appends) on :memory: and compare median chunk
         # duration of the first 5 chunks (depth ~500) vs the last 5 chunks (depth ~2,500).
         # Using medians discards up to two GC/CPU-steal outlier stalls in either window,
@@ -1252,6 +1299,18 @@ def test_appending_many_deltas_uses_bounded_queries_and_near_linear_time(store, 
                     mem_run, EventType.ANSWER_DELTA, "local", {"text": f"c{chunk}_{i}"}
                 )
             chunks.append(time.perf_counter() - started)
+        mem_clock.mono += 0.001
+        mem_steps_deep = _measure_vm_steps(
+            mem_store._conn,
+            lambda: mem_store.append_event(
+                mem_run, EventType.ANSWER_DELTA, "local", {"text": "m_probe_b"}
+            ),
+        )
+        assert mem_steps_shallow > 0
+        assert mem_steps_deep <= mem_steps_shallow * 1.5, (
+            f"expected bounded SQLite VM steps at >50x depth on :memory: store: "
+            f"depth~50={mem_steps_shallow}, depth~3050={mem_steps_deep}"
+        )
         total_mem = sum(chunks)
         early_median = statistics.median(chunks[:5])
         late_median = statistics.median(chunks[-5:])
