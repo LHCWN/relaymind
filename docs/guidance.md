@@ -324,8 +324,8 @@ Answer `{"schema_version":1,"operation":"feedback","inference":"local","missing"
   `find_missing` with that select's pairs to `sync_url` only to learn this, and uploads nothing. That question
   takes the one sync slot and keeps the sync's wait: while a sync runs, or after a failed sync, the feedback is
   skipped, and a failed question starts the wait like a failed sync. If your selector said `remote`, the gateway
-  asks again once 10 minutes have passed since its last answer, so a selector restarted with local inference gets
-  feedback again.
+  asks again once 10 minutes have passed since a sync, an earlier question or a feedback answer last told it, so a
+  selector restarted with local inference gets feedback again.
 - Each select gets at most one feedback. The gateway remembers a select for at most one hour, at most 1,024 of
   them, also above 1,000 host assets, where every select is its own offer, and sends one feedback at a time; a feedback that finds 16 others waiting is dropped. Each exchange gets
   `sync_ms`, there is no retry, and a failure changes no answer.

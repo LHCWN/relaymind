@@ -91,7 +91,6 @@ class GuidanceFeedback:
         # between a release and the next waiter taking the lock, when the lock reads as free.
         self._waiting = 0
         self._counts = dict(feedback_sent=0, feedback_failed=0, feedback_skipped=0)
-        self._ask_again_at = 0.0
 
     def status(self) -> dict:
         """The feedback fields of GuidanceSyncStatusV1: counts since start, no asset or text."""
@@ -168,14 +167,14 @@ class GuidanceFeedback:
     async def _send(self, job: FeedbackJob) -> str:
         if not self.allow_remote:
             # Asked only when it decides something: an operator who allows remote never waits.
-            # A remembered remote is asked again after ASK_AGAIN_S. None while a sync runs or
-            # waits after a failure: this feedback is skipped.
+            # A remembered remote is asked again ASK_AGAIN_S after any exchange last reported it:
+            # a sync, an earlier question or a feedback answer. Only an answer counts, so a
+            # question not sent, while a sync runs or waits after a failure, leaves the next one
+            # due; this feedback is then skipped.
             inference = self._sync.inference
-            if inference is None or (inference == "remote" and self._clock() >= self._ask_again_at):
+            stale = self._clock() - self._sync.inference_at >= ASK_AGAIN_S
+            if inference is None or (inference == "remote" and stale):
                 inference = await self._sync.ask_inference(job.offered)
-                # Only an answer was learned; a question not sent leaves the next one due.
-                if inference is not None:
-                    self._ask_again_at = self._clock() + ASK_AGAIN_S
             if inference != "local":
                 return "feedback_skipped"
         answer = await exchange(
@@ -192,5 +191,5 @@ class GuidanceFeedback:
             clock=self._clock,
             transport_factory=self._transport_factory,
         )
-        self._sync.inference = answer["inference"]
+        self._sync.learn_inference(answer["inference"])
         return "feedback_sent"

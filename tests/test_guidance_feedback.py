@@ -547,6 +547,37 @@ def test_a_remote_inference_question_that_could_not_be_sent_does_not_start_the_t
     assert len(router.feedbacks) == 1
 
 
+def find_missings(router) -> int:
+    return len([s for s in router.syncs if s["operation"] == "find_missing"])
+
+
+def test_a_remote_inference_a_sync_just_reported_is_not_asked_again_at_once():
+    """Review of PR 306: the ten minutes count from the last exchange that reported it, a sync's
+    find_missing included (spec 0.75)."""
+    router = Router(outcome="not_ready", inference="remote")
+    http = client(router, clock=Clock())
+    tell(http, ask(http)["recommendation_id"], [])
+    assert find_missings(router) == 1  # Only the sync's own.
+    assert router.feedbacks == [] and feedback_counts(http)["feedback_skipped"] == 1
+
+
+def test_a_feedback_answer_saying_remote_starts_the_ten_minutes_too():
+    """Review of PR 306: an answer to the feedback itself reports the inference as well."""
+    router = Router()
+    clock = Clock()
+    http = client(router, clock=clock)
+    tell(http, ask(http)["recommendation_id"], [])  # Asked: local, and sent.
+    clock.now += 700
+    router.inference = "remote"
+    tell(http, ask(http)["recommendation_id"], [])  # Sent; its answer says remote.
+    tell(http, ask(http)["recommendation_id"], [])  # Remote, just reported: not asked again.
+    assert find_missings(router) == 1 and len(router.feedbacks) == 2
+    clock.now += 601
+    router.inference = "local"
+    tell(http, ask(http)["recommendation_id"], [])
+    assert find_missings(router) == 2 and len(router.feedbacks) == 3
+
+
 def test_feedback_counts_the_used_assets_the_select_did_not_offer():
     """Review of PR 306: it tells whether the offer limit, not the selector, lost an asset."""
     router = Router()

@@ -767,7 +767,9 @@ function register(api) {
     try {
       const feedback = feedbackRuns.get(feedbackKey(event, ctx));
       const used = feedback && usedOffered(event?.toolName, event?.params, feedback.offer, ctx);
-      if (used && feedback.used.size < MAX_USED) feedback.used.set(`${used.kind}:${used.name}`, used);
+      const key = used && `${used.kind}:${used.name}`;
+      // A use may replace an earlier refusal even when the list is full.
+      if (key && (feedback.used.has(key) || feedback.used.size < MAX_USED)) feedback.used.set(key, used);
     } catch (error) {
       api.logger.debug?.(`relaymind-guidance did not record a use: ${error?.name ?? "error"}`);
     }

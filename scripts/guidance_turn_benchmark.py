@@ -697,7 +697,12 @@ class SelectorProxy:
             outcome = str(result.get("outcome"))
             mechanism = str(result.get("mechanism") or "")
             # Neither an early nor a partial answer is the selector's full ranking (spec 0.75).
-            label = next((s for s in ("early", "partial") if mechanism.endswith(f":{s}")), None)
+            # A failure keeps its own outcome whatever its mechanism says (review of PR 306).
+            label = (
+                next((s for s in ("early", "partial") if mechanism.endswith(f":{s}")), None)
+                if outcome in ("ranked", "no_match")
+                else None
+            )
         except (ValueError, AttributeError):
             outcome, label = "invalid", None
         with self._lock:

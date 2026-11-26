@@ -1392,6 +1392,18 @@ def test_the_selector_proxy_does_not_take_a_partial_answer_for_the_full_ranking(
             ready.append(proxy.ready())
         assert ready == [False, False]
         assert proxy.counts() == {"partial": 2}
+        # Review of PR 306: a failure keeps its own outcome whatever its mechanism says.
+        failed = _selector([("not_ready", "router:partial"), ("unavailable", "router:early")])
+        failed_base = f"http://127.0.0.1:{failed.server_address[1]}"
+        failed_proxy = harness.SelectorProxy(f"{failed_base}/select", f"{failed_base}/sync")
+        try:
+            for _ in range(2):
+                httpx.post(failed_proxy.url + "/select", content=b"{}", timeout=10, trust_env=False)
+            assert failed_proxy.counts() == {"not_ready": 1, "unavailable": 1}
+        finally:
+            failed_proxy.close()
+            failed.shutdown()
+            failed.server_close()
     finally:
         proxy.close()
         selector.shutdown()

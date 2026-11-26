@@ -99,8 +99,10 @@ class GuidanceSync:
         # A running sync fills `_current`; the status shows it only once that sync ends.
         self._current: dict | None = None
         self._last = self._nothing()
-        # The last inference a selector exchange reported, or None before any (spec 0.75; RM48).
+        # The last inference a selector exchange reported, or None before any, and when it was
+        # reported (spec 0.75; RM48).
         self.inference: str | None = None
+        self.inference_at = 0.0
 
     def status(self) -> dict:
         """GuidanceSyncStatusV1 for `GET /relay/v1/guidance/sync`."""
@@ -164,8 +166,12 @@ class GuidanceSync:
         chosen = set(missing)
         if len(chosen) != len(missing) or not chosen <= {_key(pair) for pair in pairs}:
             raise ValueError("invalid_sync_response")
-        self.inference = found["inference"]
+        self.learn_inference(found["inference"])
         return chosen, found["inference"]
+
+    def learn_inference(self, inference: str) -> None:
+        """Remember what a valid selector exchange reported, and when (spec 0.75; RM48)."""
+        self.inference, self.inference_at = inference, self._clock()
 
     @staticmethod
     def _nothing() -> dict:

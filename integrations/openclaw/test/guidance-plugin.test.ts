@@ -1428,6 +1428,19 @@ describe("selector feedback (spec 0.75; RM48; AC43)", () => {
     expect(JSON.parse(String(sent()[0]![1].body)).used).toHaveLength(1000);
   });
 
+  it("lets a later use replace a refusal even with 1,000 assets recorded (review of PR 306)", async () => {
+    const tools = join(dir, "many.json");
+    writeFileSync(tools, JSON.stringify(Array.from({ length: 1001 }, (_, i) => ({ name: `t${i}`, description: "T" }))));
+    const { handlers, used, end, sent } = await turn(withId(["chosen"]), { toolsFile: tools, limit: "strict" });
+    expect(handlers.before_tool_call({ toolName: "t0", params: {} }, RUN).block).toBe(true);
+    for (let i = 1; i < 1000; i += 1) used(`t${i}`, {});
+    used("t0", {});
+    await end();
+    const reported = JSON.parse(String(sent()[0]![1].body)).used;
+    expect(reported).toHaveLength(1000);
+    expect(reported[0]).toEqual({ name: "t0", kind: "mcp_tool", signal: "executed" });
+  });
+
   it("stays quiet when the feedback request fails", async () => {
     const { end } = await turn(withId(["chosen"]));
     vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("down"); }));
