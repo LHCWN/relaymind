@@ -261,7 +261,7 @@ async def run_source_benchmark(
                     row, forced, _ = await execute_asset_slot(
                         service,
                         provider,
-                        {},
+                        None,
                         case,
                         slot,
                         label,

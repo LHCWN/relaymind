@@ -438,3 +438,37 @@ def test_rm40_compare_rejects_malformed_effective_sources_with_matching_digest(
     changed["config_digest"] = canonical_digest(changed["effective_config"])
     with pytest.raises(ValueError, match="invalid_development_report"):
         api().compare_source_benchmarks(report, changed)
+
+
+def test_source_benchmark_index_preparation_ms_excludes_index_preparation(
+    development_input, monkeypatch
+):
+    """#296: index_preparation_ms measures provider/runtime setup, excluding prepare_asset_index."""
+    from relaymind.evaluation import asset_benchmark
+
+    now = [100.0]
+    monkeypatch.setattr(asset_benchmark.time, "monotonic", lambda: now[0])
+    real_prepare = asset_benchmark.prepare_asset_index
+
+    async def slow_prepare(*args, **kwargs):
+        result = await real_prepare(*args, **kwargs)
+        # Simulate a slow index preparation step (5000ms) after provider setup.
+        if args and args[0].get("mode") == "http":
+            now[0] += 5.0
+            return dict(
+                schema_version=1,
+                mode="http",
+                status="ready",
+                profile="cold",
+                duration_ms=5000,
+                binding=args[1],
+            )
+        return result
+
+    monkeypatch.setattr(asset_benchmark, "prepare_asset_index", slow_prepare)
+    report = run(
+        development_input,
+        config=production(development_input, http=True),
+        preparation=dict(mode="http", url="http://127.0.0.1:8913/index", profile="cold"),
+    )
+    assert report["index_preparation_ms"] < 1000.0

@@ -648,7 +648,7 @@ def test_async_cancel_keeps_current_attempt_and_marks_rest_not_run(tmp_path, htt
 def test_fixture_config_refresh_only_authors_explicit_fixture_inputs(tmp_path):
     api = module("asset_benchmark")
     config = fixture_config(tmp_path, repetitions=1, warmups=0)
-    from fixture_benchmark_helpers import refresh_fixture_benchmark_config
+    from relaymind.evaluation.asset_benchmark import refresh_fixture_benchmark_config
 
     refresh_fixture_benchmark_config(config.path)
     refreshed = api.load_benchmark_config(config.path)
@@ -823,7 +823,7 @@ def test_single_kind_diagnostic_cohort_preserves_locked_request_envelope(tmp_pat
     write(config.path.parent, "cases", cases)
     relock(config.path.parent)
     config.path.write_text(config.path.read_text().replace('"development"', '"diagnostic"'))
-    from fixture_benchmark_helpers import refresh_fixture_benchmark_config
+    from relaymind.evaluation.asset_benchmark import refresh_fixture_benchmark_config
 
     refresh_fixture_benchmark_config(config.path)
     loaded = api.load_benchmark_config(config.path)

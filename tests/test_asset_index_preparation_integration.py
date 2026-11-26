@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from fixture_benchmark_helpers import refresh_fixture_benchmark_config
+from relaymind.evaluation.asset_benchmark import refresh_fixture_benchmark_config
 from relaymind.selection.asset_contract import SelectorContext, parse_asset_request
 from relaymind.selection.asset_http import HttpAssetSelector
 from test_asset_preparation import inputs
@@ -368,3 +368,48 @@ def test_cold_reuse_profiles_are_incompatible_in_both_comparison_modes(tmp_path,
         result = compare_asset_reports(*reports, quality_only=quality_only).data
         assert result["status"] == "incompatible"
         assert dict(field="/config/preparation/profile", reason="mismatch") in result["reasons"]
+
+
+def test_prepare_benchmark_index_http_mode_skips_native_runtime(
+    tmp_path, indexed_server, monkeypatch
+):
+    """#296: standalone http preparation never constructs NativeBenchmarkRuntime."""
+    from dataclasses import replace
+
+    from relaymind.evaluation import asset_benchmark
+    from relaymind.evaluation.asset_benchmark import (
+        load_benchmark_config,
+        prepare_benchmark_index,
+        prepare_benchmark_session,
+    )
+
+    _, _, url = indexed_server
+    config = fixture_config(tmp_path, primary="http", url=url + "/select", repetitions=1, warmups=0)
+    with config.path.open("a", encoding="utf-8") as out:
+        out.write('\n[preparation]\nmode="http"\nurl="' + url + '/index"\nprofile="cold"\n')
+    refresh_fixture_benchmark_config(config.path)
+    loaded = load_benchmark_config(config.path)
+    # Attach a sentinel native asset_semantics to prove http preparation ignores it.
+    loaded_with_semantics = replace(
+        loaded, production=replace(loaded.production, asset_semantics=object())
+    )
+
+    async def fail_native(*_args, **_kwargs):
+        raise AssertionError("NativeBenchmarkRuntime.create must not be called for http mode")
+
+    monkeypatch.setattr(asset_benchmark.NativeBenchmarkRuntime, "create", staticmethod(fail_native))
+    result = asyncio.run(prepare_benchmark_index(loaded_with_semantics))
+    assert result["status"] == "ready"
+
+    # mode="local" without native semantics (or with use_native_runtime=False) must fail explicitly.
+    with pytest.raises(ValueError, match="invalid_local_preparation_owner"):
+        asyncio.run(
+            prepare_benchmark_session(
+                loaded.production,
+                loaded.release,
+                loaded.effective,
+                requested_kinds=["skill"],
+                preparation_config={"mode": "local"},
+                http_binding=lambda _p: ({}, []),
+            )
+        )

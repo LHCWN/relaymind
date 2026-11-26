@@ -15,9 +15,9 @@ from test_asset_selection_benchmark import fixture_config
 
 @pytest.fixture(scope="module")
 def prepared_bundle(tmp_path_factory):
-    from fixture_benchmark_helpers import refresh_fixture_benchmark_config
     from relaymind.evaluation.asset_benchmark import (
         load_benchmark_config,
+        refresh_fixture_benchmark_config,
         run_asset_benchmark,
         write_asset_benchmark_report,
     )

@@ -8,10 +8,12 @@ transport, coordination, result validation, admission and recommendation state.
 import asyncio
 import copy
 import hashlib
+import json
 import sys
 import tempfile
 import time
 import tomllib
+import unicodedata
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -296,7 +298,7 @@ class LockedProjectionProvider:
 async def execute_asset_slot(
     service,
     provider,
-    normal,
+    normal: Mapping | None,
     case,
     slot,
     label,
@@ -321,6 +323,8 @@ async def execute_asset_slot(
     ``key`` is the idempotency claim key (default: the slot ordinal); callers
     that reuse ordinals in one store must give each invocation its own key.
     """
+    if normal is None and (request is None or candidate_limit is None):
+        raise ValueError("normal is required unless request and candidate_limit are provided")
     status = None
     cancel = None
     recommendation_id = None
@@ -594,8 +598,12 @@ async def prepare_benchmark_session(
     use_native_runtime: bool = True,
 ) -> BenchmarkSession:
     """Set up a benchmark provider, optional native runtime, and index preparation."""
+    if preparation_config["mode"] == "local" and (
+        not use_native_runtime or production.asset_semantics is None
+    ):
+        raise ValueError("invalid_local_preparation_owner")
     setup_started = time.monotonic()
-    provider = LockedProjectionProvider(release, effective)
+    provider: LockedProjectionProvider | None = None
     preparation = await prepare_asset_index(normalize_preparation(None), None, [])
     status = "completed"
     prepared_primary = None
@@ -629,6 +637,7 @@ async def prepare_benchmark_session(
                 await runtime.worker.rebuild()
                 setup_ms = (time.monotonic() - setup_started) * 1000
         else:
+            provider = LockedProjectionProvider(release, effective)
             await provider.publish()
             setup_ms = (time.monotonic() - setup_started) * 1000
         if preparation_config["mode"] == "http":
@@ -646,16 +655,19 @@ async def prepare_benchmark_session(
         if not catch_errors:
             if runtime is not None:
                 await runtime.close()
-            else:
+            elif provider is not None:
                 provider.stop()
             raise
         status = "blocked"
+        if provider is None:
+            provider = LockedProjectionProvider(release, effective)
     except BaseException:
         if runtime is not None:
             await runtime.close()
-        else:
+        elif provider is not None:
             provider.stop()
         raise
+    assert provider is not None
     return BenchmarkSession(
         provider=provider,
         runtime=runtime,
@@ -1080,3 +1092,56 @@ def load_asset_benchmark_report(
             else "evidence_unverified"
         )
     return report
+
+
+def refresh_fixture_benchmark_config(path: Path, *, reauthor_fixture_unicode: bool = False) -> None:
+    """Explicitly author fresh fixture settings/environment on the current device.
+
+    This authoring helper is never called by run or compare. It refuses genuine
+    corpus purposes and never changes source data, labels, rights or policy.
+    """
+    path = Path(path).absolute()
+    raw = tomllib.loads(read_local(path.parent, path.name, CONFIG_BYTES).decode("utf-8"))
+    validate_benchmark_document("config", raw)
+    lock_path = path.parent / raw["lock"]
+    if type(reauthor_fixture_unicode) is not bool:
+        raise AssetCorpusError("invalid_fixture_authoring")
+    if reauthor_fixture_unicode:
+        lock = document(lock_path.parent, lock_path.name, "lock")
+        committed = {key: value for key, value in lock.items() if key != "digest"}
+        if canonical_digest(committed) != lock["digest"]:
+            raise AssetCorpusError("lock_digest")
+        if lock["purpose"] != "fixture" or lock["state"] != "provisional" or lock["related_locks"]:
+            raise AssetCorpusError("fixture_authoring_only")
+        if lock["unicode_version"] != unicodedata.unidata_version:
+            committed["unicode_version"] = unicodedata.unidata_version
+            authored = committed | dict(digest=canonical_digest(committed))
+            atomic_bytes(lock_path, json_bytes(authored), limit=CONFIG_BYTES)
+    release = _load_benchmark_release(lock_path)
+    if release.lock["purpose"] != "fixture":
+        raise AssetCorpusError("fixture_authoring_only")
+    read_local(path.parent, raw["production_config"], CONFIG_BYTES)
+    production = load_production_config(path.parent / raw["production_config"])
+    inventories = benchmark_inventories()
+    effective = _effective_config(production, release, inventories, raw["split"])
+    environment = collect_benchmark_environment()
+    raw.update(
+        lock_digest=release.lock["digest"],
+        production_config_digest=canonical_digest(effective),
+        environment_lock_digest=canonical_digest(environment),
+    )
+    atomic_bytes(path.parent / raw["environment_lock"], json_bytes(environment), limit=CONFIG_BYTES)
+    lines = [
+        key + " = " + json.dumps(value, ensure_ascii=False)
+        for key, value in raw.items()
+        if key != "preparation"
+    ]
+    if "preparation" in raw:
+        lines.append("[preparation]")
+        lines.extend(
+            key + " = " + json.dumps(value, ensure_ascii=False)
+            for key, value in raw["preparation"].items()
+            if value is not None
+        )
+    payload = ("\n".join(lines) + "\n").encode("utf-8")
+    atomic_bytes(path, payload, limit=CONFIG_BYTES)
