@@ -189,16 +189,24 @@ mode = "live"
 # Proposes the few assets one prompt needs from the list the host sends. Needs no
 # index and no model. keywords: none, local (needs [local_model]) or external.
 # picker: none or external (needs [external_model]). External stages only run if set.
-# For a third-party HTTP selector, set primary = "http" with name, version, and url,
-# and optionally sync_url (RM47) and feedback_url (RM48, requires sync_url).
 # [guidance]
 # enabled = true
 # keywords = "local"
 # picker = "none"
 # total_ms = 12000
 # max_picks = 8    # The most assets to name. A big workflow can need several.
-# sync_url = "http://127.0.0.1:8913/index"
-# feedback_url = "http://127.0.0.1:8913/feedback"
+#
+# Or connect a third-party HTTP guidance selector (docs/guidance.md), optionally with
+# index sync (sync_url, RM47) and post-turn feedback (feedback_url, RM48; needs sync_url):
+# [guidance]
+# enabled = true
+# primary = "http"
+# name = "example_intent"
+# version = "1"
+# url = "http://127.0.0.1:8940/select"
+# sync_url = "http://127.0.0.1:8940/sync"
+# feedback_url = "http://127.0.0.1:8940/feedback"
+# total_ms = 12000
 
 # Independent asset discovery (#192; RM34/AC25). Disabled by default.
 # Enabling starts bounded catalog scans and the recommendation API, which is ready
