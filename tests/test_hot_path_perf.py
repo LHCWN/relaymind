@@ -99,6 +99,20 @@ def test_current_asset_performs_one_indexed_row_read(tmp_path, monkeypatch):
         row_selects = [q for q in selects if "WHERE a.asset_id" in q]
         assert len(row_selects) == 2, f"expected one keyed asset SELECT per lookup, got {selects}"
         assert not any("SELECT * FROM asset_catalog_assets" in q for q in selects), selects
+        assert not any("json_extract" in q for q in selects), selects
+
+        # Verify SQLite uses primary-key SEARCH with no full-table SCAN on asset_catalog_assets.
+        plan = [
+            row["detail"]
+            for row in store._conn.execute(
+                "EXPLAIN QUERY PLAN SELECT a.*, s.stale AS source_stale"
+                " FROM asset_catalog_assets a"
+                " LEFT JOIN asset_catalog_sources s ON s.source_id = a.source_id"
+                " WHERE a.asset_id = ?",
+                ("src:skill:s-5",),
+            ).fetchall()
+        ]
+        assert not any(step.startswith("SCAN ") for step in plan), plan
 
         # Subclass overriding snapshot() must still route through snapshot().
         class SubclassCatalog(AssetCatalogStore):
@@ -120,9 +134,9 @@ def test_current_asset_performs_one_indexed_row_read(tmp_path, monkeypatch):
         assert current_asset(sub, "src:skill:s-5") is not None
         assert sub.snapshot_calls == 1
 
-        # Stale projection mismatch fails closed even on single-row lookup.
+        # Stale projection mismatch on the target row fails closed.
         with store.sql_transaction() as db:
-            db.execute("UPDATE asset_catalog_assets SET stale = 1 WHERE asset_id = 'src:skill:s-0'")
+            db.execute("UPDATE asset_catalog_assets SET stale = 1 WHERE asset_id = 'src:skill:s-5'")
         with pytest.raises(CatalogUnavailable, match="catalog_projection_unavailable"):
             current_asset(catalog, "src:skill:s-5")
     finally:
@@ -269,7 +283,13 @@ def test_adaptation_stage_reuses_snapshot_when_unchanged(tmp_path, monkeypatch):
             catalog,
             _,
         ):
-            parent = (await client.post("/relay/v1/recommendations", json=BODY)).json()
+            parent = (
+                await client.post(
+                    "/relay/v1/recommendations",
+                    json=BODY,
+                    headers={"Idempotency-Key": "parent-2"},
+                )
+            ).json()
             await correct(client, parent, 0, "first")
             semantic = adaptation_config(tmp_path)
             stage = AdaptationStage(
@@ -471,3 +491,76 @@ def test_guidance_named_in_prompt_handles_trailing_newline_asset_name():
     assets = [{"name": "foo-bar\n", "kind": "skill", "description": "newline name"}]
     matched = guidance_pipeline._named_in_prompt(assets, "please use foo-bar\n now")
     assert len(matched) == 1 and matched[0]["name"] == "foo-bar\n"
+
+
+def test_adaptation_stage_guard_fails_closed_when_older_record_expires(tmp_path):
+    """RM42, #295: guard() fails closed when a record outside the top-20 snapshot expires."""
+    from datetime import datetime
+
+    from recommendation_helpers import BODY
+    from relaymind.assets.embedding_backends import EmbeddingEngine
+    from relaymind.selection.adaptation_stage import AdaptationFailure, AdaptationStage
+    from test_asset_adaptation_stage import config as adaptation_config
+    from test_asset_adaptation_stage import request_for
+    from test_asset_adaptation_store import correct
+    from test_asset_user_actions import action_client
+    from test_embedding_backend import NativeDouble
+
+    async def exercise():
+        clock = FakeClock()
+        async with action_client(tmp_path, clock=clock) as (
+            client,
+            app,
+            service,
+            runs,
+            catalog,
+            _,
+        ):
+            parent1 = (await client.post("/relay/v1/recommendations", json=BODY)).json()
+            # Record 1st correction on parent1 at t=0, then 20 newer corrections on parent2
+            # 60s later so the top-20 snapshot excludes the oldest record and has a later expiry.
+            await correct(client, parent1, 0, "older-0")
+            clock.advance(60)
+            parent = (
+                await client.post(
+                    "/relay/v1/recommendations",
+                    json=BODY,
+                    headers={"Idempotency-Key": "parent-2"},
+                )
+            ).json()
+            for i in range(1, 21):
+                clock.advance(1)
+                await correct(client, parent, i, f"recent-{i}")
+
+            semantic = adaptation_config(tmp_path)
+            stage = AdaptationStage(
+                app.state.feedback_store,
+                semantic,
+                EmbeddingEngine(semantic.manifest, NativeDouble()),
+            )
+            primary = parent["result"]["attempts"][0]["result"]
+            req = request_for(service, catalog)
+            outcome = await stage.apply(
+                primary,
+                req,
+                budget=service.new_budget(),
+                current_catalog=service.provider.current,
+            )
+            # Advance past the 21st (excluded) record's retain_until while top-20 stay valid.
+            with runs.sql_read() as db:
+                expiries = [
+                    r[0]
+                    for r in db.execute(
+                        "SELECT retain_until FROM feedback_records ORDER BY retain_until"
+                    ).fetchall()
+                ]
+            assert len(expiries) == 21 and expiries[0] < expiries[1]
+            oldest_exp = datetime.fromisoformat(expiries[0].replace("Z", "+00:00"))
+            # Move UTC time just past the 21st record's expiry while keeping monotonic budget alive.
+            clock.now = oldest_exp + timedelta(seconds=1)
+            with pytest.raises(AdaptationFailure):
+                outcome.guard()
+            outcome.close()
+            stage.close()
+
+    asyncio.run(exercise())

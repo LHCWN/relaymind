@@ -59,7 +59,14 @@ class AdaptationStage:
                 for r in value.records
             )
 
+        def _earliest_expiry(records):
+            return min(
+                (datetime.fromisoformat(r["retain_until"].replace("Z", "+00:00")) for r in records),
+                default=None,
+            )
+
         def guard():
+            nonlocal earliest_expiry
             budget.check()
             if lease.fenced:
                 raise AdaptationFailure(
@@ -90,6 +97,7 @@ class AdaptationStage:
             current_snapshot = self.feedback.correction_snapshot(
                 req["scope"], current, now=now, check=budget.check
             )
+            earliest_expiry = _earliest_expiry(current_snapshot.records)
             if (
                 lease.fenced
                 or current_snapshot.feedback_revision != feedback_revision
@@ -110,13 +118,7 @@ class AdaptationStage:
             lease.check()
             metadata = signature(snapshot)
             feedback_revision = snapshot.feedback_revision
-            earliest_expiry = min(
-                (
-                    datetime.fromisoformat(r["retain_until"].replace("Z", "+00:00"))
-                    for r in snapshot.records
-                ),
-                default=None,
-            )
+            earliest_expiry = _earliest_expiry(snapshot.records)
             history = lease.register(list(snapshot.records))
             snapshot = None
             matches = set()

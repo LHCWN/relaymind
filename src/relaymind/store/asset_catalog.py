@@ -263,7 +263,12 @@ class AssetCatalogStore:
         return tuple(self._document(row) for row in rows)
 
     def get_asset(self, asset_id: str) -> AssetRecord | None:
-        """Read and validate one current catalog asset by primary key."""
+        """Read and validate one current catalog asset by primary key.
+
+        Validates ``asset_catalog_meta`` and the target asset/source row
+        without scanning unrelated catalog rows; catalog-wide integrity checks
+        remain owned by ``snapshot()``, ``revision()``, and publication.
+        """
         try:
             with self.store.sql_read() as connection:
                 meta = connection.execute(
@@ -271,8 +276,6 @@ class AssetCatalogStore:
                 ).fetchone()
                 if meta is None or type(meta["revision"]) is not int or meta["revision"] < 0:
                     raise CatalogUnavailable("catalog_corrupt")
-                if connection.execute(f"SELECT 1 {_STALE_MISMATCH} LIMIT 1").fetchone() is not None:
-                    raise CatalogUnavailable("catalog_projection_unavailable")
                 row = connection.execute(
                     "SELECT a.*, s.stale AS source_stale FROM asset_catalog_assets a "
                     "LEFT JOIN asset_catalog_sources s ON s.source_id = a.source_id "
