@@ -135,50 +135,9 @@ class _GenerationMixin:
         self.meter.check_generation(purpose)
         placement = marker(external=True)
         if model.actor == "local":
-            tokens = None
-            measured = self._routing_count
-            if measured is not None and (tuple(messages), tuple(tool_schemas)) == measured[:2]:
-                tokens = measured[2]
-            else:
-                try:
-                    async with asyncio.timeout(
-                        max(self.meter.remaining_seconds(), 0.001)
-                    ) as token_timeout:
-                        tokens = await model.adapter.count_tokens(messages, tool_schemas)
-                except TimeoutError:
-                    if token_timeout.expired():
-                        raise self.meter.time_exhausted() from None
-                    # The adapter's own tokenizer timeout is an unavailable measurement,
-                    # not evidence that the gateway's active-time budget was spent.
-                    tokens = None
-                except Exception:
-                    # Counting solely for placement must not create a capability failure.
-                    tokens = None
-                else:
-                    if token_timeout.expired():
-                        # A tokenizer that suppressed cancellation still used its budget.
-                        raise self.meter.time_exhausted()
-            self.meter.check_generation(purpose)
-            prediction = self.o.placement.predict(
-                model.model_id, purpose, tokens, output_cap=options.max_output_tokens
+            placement = await self._admit_local_placement(
+                model, purpose, messages, tool_schemas, options
             )
-            placement = self.o.placement.admit(
-                prediction,
-                mode=self.mode.value,
-                external_model=None if self.o.external is None else self.o.external.model_id,
-                stage_seconds=self.o.budgets.active_seconds - self.meter.elapsed_seconds(),
-                run_seconds=self.o.budgets.run_active_seconds - self.meter.active_seconds(),
-                skill_id=None if self.skill is None else self.skill.name,
-            )
-            if purpose == "routing":
-                self.routing_placement = placement
-            if placement.role == "none":
-                if purpose == "routing":
-                    # route.selected carries a routing decline (section 14.2.2);
-                    # a later handoff or failure never does.
-                    raise PlacementDeclined(placement)
-                self.pending_placement = placement
-                raise Escalation("local_slow", "local generation declined by placement")
         self.meter.charge_generation(purpose)
         self._calls += 1
         call_id = f"{self.run_id}_gen{self._calls}_{purpose}"
