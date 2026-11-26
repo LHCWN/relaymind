@@ -191,6 +191,9 @@ _GENERATOR_ANCHORS = {
     ),
     "docs/SPECIFICATION.md": frozenset(
         {
+            # 0.75 editorial reconciliation: shipped vs planned schema/CLI status (#298); subject to
+            # the owner's review.
+            ("9b5a0ccadca137563550e65d80de7e12fc0724b2eb58c25bd2759ba746883818", 689570),
             # 0.75 selector feedback and partial answers (RM47, RM48, AC42, AC43; #301); subject to
             # the owner's review.
             ("03bdbb772f4742303a0a5388aebc0d58073457bb78ad1e27ff500d21c5ab3f36", 689274),

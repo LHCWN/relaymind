@@ -594,7 +594,7 @@ Linux. Their unit tests also run on Windows in CI, but no real benchmark run was
   payload; verification checks that digest against both the embedded value and
   the ordered case lock, in addition to checking the exact file bytes. ToolRet
   derivation and measurement share `~/.cache/relaymind/toolret` by default;
-  explicit cache flags override it. `derive_toolret.py --verify --parquet`
+  explicit cache flags override it. `benchmarks/derive_toolret.py --verify --parquet`
   checks the six supplied shards in declared source order without fetching or
   rewriting the lock. The skills track requires `--proposal none`.
 
@@ -602,9 +602,12 @@ Linux. Their unit tests also run on Windows in CI, but no real benchmark run was
   derivation suffixes colliding tool names in the order of each declaration's
   digest, so a plain name never marks a positive. `--tools-lock-version 1`
   measures `tools.v1.lock.json`, the same rows with source-order suffixes, which
-  is kept only to reproduce the runs recorded with it. `derive_skillsbench.py`
+  is kept only to reproduce the runs recorded with it. `benchmarks/derive_skillsbench.py`
   caches its archives in `~/.cache/relaymind/skillsbench` by default and refuses
   a cached, supplied, or downloaded archive whose SHA-256 differs from the lock.
+  `benchmarks/derive_matrix.py` and `benchmarks/derive_mcp_tools.py` reproduce
+  explicitly supplied same-source local Matrix and pinned local MCP benchmark
+  releases offline without acquiring or executing tools (RM40/AC31).
 
   HTTP reports distinguish the endpoint/transport from response-reported
   selector identities. A single observed identity is labeled as a response
@@ -772,6 +775,9 @@ original artifact digests and recovery time. Before recovery updates the index,
 `controller-before-<sha256>.json` preserves its exact previous bytes, including
 interrupted status and coordinator-failure timestamps. Later resumes verify this
 snapshot and controller identity. Missing retained cost evidence is refused.
+`matrix_controller.py` and `evaluation_session.py` are internal helpers shared
+by the matrix and evaluation runners for controller bootstrap, recovery
+provenance, frozen-prior startup, and durable work directories.
 
 After reviewing reconciliation, resume with the same controller, measurement root,
 output/runtime and original provider settings using `--execute`. Completed cells

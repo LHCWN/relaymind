@@ -1,7 +1,8 @@
-"""Scaffold smoke test.
+"""Package import smoke test.
 
-Keeps CI meaningful before the first feature lands. Real tests reference
-requirement IDs from docs/SPECIFICATION.md (RM01-RM32, AC01-AC23).
+Verifies the top-level package imports and exposes its version. Feature and
+acceptance tests reference requirement IDs from docs/SPECIFICATION.md
+(RM01-RM48, AC01-AC43; RM30 and AC23 retired).
 """
 
 import relaymind

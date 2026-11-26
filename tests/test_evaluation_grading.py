@@ -588,7 +588,7 @@ def test_no_local_model_has_no_local_completion_grade():
 
 
 def test_gateway_answer_is_not_a_local_completion():
-    """RM25, RM30: a gateway-rendered answer is counted apart from local completion."""
+    """RM25 (RM30 retired): a gateway-rendered answer is counted apart from local completion."""
     events = local_health_trace()
     events[-1]["payload"]["final_answer_model"] = "gateway"
     assert grade(make_case(), events).local_completion is False

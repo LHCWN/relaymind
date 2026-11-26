@@ -563,9 +563,9 @@ def _check_workflow_fields(event_type: EventType, payload: Mapping[str, Any]) ->
             )
 
 
-# Spec 0.31 section 8 (RM22, RM29, RM30): who proposed a tool call. A model's
-# proposal is the default and is left unmarked; a gateway-made call (a prefetch
-# or a workflow step) has actor gateway and model null.
+# Spec 0.31 section 8 (RM22, RM29; workflow mechanism retained from retired RM30):
+# who proposed a tool call. A model's proposal is the default and is left unmarked;
+# a gateway-made call (a prefetch or a workflow step) has actor gateway and model null.
 GATEWAY_ACTOR = "gateway"
 TOOL_MECHANISMS: tuple[str, ...] = ("model", "prefetch", "workflow")
 
@@ -608,7 +608,7 @@ def _check_tool_model(payload: Mapping[str, Any], actor: str) -> None:
 
 
 def _check_tool_mechanism(event_type: EventType, payload: Mapping[str, Any]) -> None:
-    """The optional mechanism of a tool event; a workflow proposal names its step (RM30).
+    """The optional mechanism of a tool event; a workflow proposal names its step (RM30 retired).
 
     tool.started and tool.finished carry the mechanism of a gateway-made
     call too, so the null model of such a call can be told from a lost one.
