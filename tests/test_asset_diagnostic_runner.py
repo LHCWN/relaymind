@@ -471,7 +471,32 @@ def test_source_benchmark_index_preparation_ms_excludes_index_preparation(
             )
         return await real_prepare(*args, **kwargs)
 
+    class OfflineSelector:
+        name = "example_lexical"
+        version = "1"
+        builtin = True
+        mechanism = "offline_test"
+
+        async def select(self, request, context):
+            req = request.data
+            return dict(
+                schema_version=2,
+                recommendation_id=req["recommendation_id"],
+                catalog_revision=req["catalog_revision"],
+                host_snapshot_revision=req["host_snapshot_revision"],
+                selector={"name": self.name, "version": self.version},
+                mechanism=self.mechanism,
+                candidates=[],
+                index_revision=None,
+                elapsed_ms=0,
+                usage_claims=None,
+                outcome="completed",
+                decision="no_match",
+            )
+
     monkeypatch.setattr(asset_benchmark, "prepare_asset_index", slow_prepare)
+    monkeypatch.setattr(asset_benchmark, "build_asset_selector", lambda _s: OfflineSelector())
+    monkeypatch.setattr(api(), "build_asset_selector", lambda _s: OfflineSelector())
     report = run(
         development_input,
         config=production(development_input, http=True),
@@ -491,7 +516,7 @@ def test_prepare_benchmark_session_local_mode_setup_ms_excludes_prepare_local(mo
 
     class FakeRuntime:
         def __init__(self):
-            self.provider = SimpleNamespace(close=lambda: None)
+            self.provider = SimpleNamespace(stop=lambda: None)
             self.service = SimpleNamespace(primary=SimpleNamespace(name="fake_native", version="1"))
 
         @classmethod
@@ -519,6 +544,9 @@ def test_prepare_benchmark_session_local_mode_setup_ms_excludes_prepare_local(mo
             use_native_runtime=True,
         )
     )
-    assert session.setup_ms == pytest.approx(25.0)
-    assert session.status == "completed"
-    assert session.preparation["status"] == "ready"
+    try:
+        assert session.setup_ms == pytest.approx(25.0)
+        assert session.status == "completed"
+        assert session.preparation["status"] == "ready"
+    finally:
+        asyncio.run(session.close())
