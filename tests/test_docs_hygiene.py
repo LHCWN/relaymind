@@ -286,6 +286,6 @@ def test_scripts_readme_mentions_every_script():
         if path.name == "__init__.py" or "__pycache__" in path.parts:
             continue
         rel = path.relative_to(REPO / "scripts").as_posix()
-        if rel not in readme and path.name not in readme:
+        if rel not in readme:
             missing.append(rel)
     assert not missing, f"Scripts missing from scripts/README.md: {missing}"

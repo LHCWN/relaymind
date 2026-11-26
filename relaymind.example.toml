@@ -1,5 +1,5 @@
 # Example configuration for `relaymind serve --config relaymind.example.toml`
-# (spec 0.74 section 14.1). Copy it and edit. Relative paths resolve against
+# (spec 0.75 section 14.1). Copy it and edit. Relative paths resolve against
 # the directory you start the command in. No credential belongs in this file.
 
 [server]
@@ -185,16 +185,20 @@ routing = false
 [ui]
 mode = "live"
 
-# Per-prompt guidance (spec section 7.7; RM45, RM46; docs/guidance.md). Disabled by default.
+# Per-prompt guidance (spec section 7.7; RM45 to RM48; docs/guidance.md). Disabled by default.
 # Proposes the few assets one prompt needs from the list the host sends. Needs no
 # index and no model. keywords: none, local (needs [local_model]) or external.
 # picker: none or external (needs [external_model]). External stages only run if set.
+# For a third-party HTTP selector, set primary = "http" with name, version, and url,
+# and optionally sync_url (RM47) and feedback_url (RM48, requires sync_url).
 # [guidance]
 # enabled = true
 # keywords = "local"
 # picker = "none"
 # total_ms = 12000
 # max_picks = 8    # The most assets to name. A big workflow can need several.
+# sync_url = "http://127.0.0.1:8913/index"
+# feedback_url = "http://127.0.0.1:8913/feedback"
 
 # Independent asset discovery (#192; RM34/AC25). Disabled by default.
 # Enabling starts bounded catalog scans and the recommendation API, which is ready

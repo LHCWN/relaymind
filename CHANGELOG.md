@@ -1233,7 +1233,7 @@ pre-release development.
   `PerformanceSettings`; every default is the earlier behavior. A wrong value
   is exit status 2. `answer_stream = "live"` is refused until gated answer
   streaming exists (RM32). `calls_per_generation` (section 4.3) and
-  `prefetch` (RM29) are recorded and acted on; see the two entries above.
+  `prefetch` (RM29) are recorded and acted on; see the #122 and #123 entries above.
   `run.accepted` records the five options in force; the trace schema stays
   at version 1 with these fields optional.
 - A failed run with error code `predicate_unmet` is run state: a chat

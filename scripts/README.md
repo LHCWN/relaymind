@@ -594,7 +594,7 @@ Linux. Their unit tests also run on Windows in CI, but no real benchmark run was
   payload; verification checks that digest against both the embedded value and
   the ordered case lock, in addition to checking the exact file bytes. ToolRet
   derivation and measurement share `~/.cache/relaymind/toolret` by default;
-  explicit cache flags override it. `derive_toolret.py --verify --parquet`
+  explicit cache flags override it. `benchmarks/derive_toolret.py --verify --parquet`
   checks the six supplied shards in declared source order without fetching or
   rewriting the lock. The skills track requires `--proposal none`.
 
@@ -602,7 +602,7 @@ Linux. Their unit tests also run on Windows in CI, but no real benchmark run was
   derivation suffixes colliding tool names in the order of each declaration's
   digest, so a plain name never marks a positive. `--tools-lock-version 1`
   measures `tools.v1.lock.json`, the same rows with source-order suffixes, which
-  is kept only to reproduce the runs recorded with it. `derive_skillsbench.py`
+  is kept only to reproduce the runs recorded with it. `benchmarks/derive_skillsbench.py`
   caches its archives in `~/.cache/relaymind/skillsbench` by default and refuses
   a cached, supplied, or downloaded archive whose SHA-256 differs from the lock.
   `benchmarks/derive_matrix.py` and `benchmarks/derive_mcp_tools.py` reproduce
