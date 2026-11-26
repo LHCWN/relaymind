@@ -40,7 +40,6 @@ raw scale (score 2.8164, margin 0.1268) on the corpus that tuned them;
 they are evidence, not this module's defaults.
 """
 
-import json
 import math
 import re
 from collections import Counter
@@ -108,23 +107,9 @@ def example_requests(text: str) -> list[str]:
     gives nothing for it; the registry checks the package, not this file's
     inner shape.
     """
-    try:
-        data = json.loads(text)
-    except ValueError:
-        return []
-    pairs = data.get("pairs") if isinstance(data, Mapping) else None
-    if not isinstance(pairs, list):
-        return []
-    found: list[str] = []
-    for pair in pairs:
-        if not isinstance(pair, Mapping):
-            continue
-        for language in LANGUAGES:
-            side = pair.get(language)
-            request = side.get("request") if isinstance(side, Mapping) else None
-            if isinstance(request, str) and request.strip():
-                found.append(request)
-    return found
+    from relaymind.skills.registry import parse_example_requests
+
+    return list(parse_example_requests(text))
 
 
 @dataclass(frozen=True)

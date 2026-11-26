@@ -52,7 +52,31 @@ from relaymind.tools.registry import (
 
 MANIFEST_FILENAME = "skill.manifest.json"
 SKILL_FILENAME = "SKILL.md"
+EXAMPLES_RESOURCE = "examples.json"
 MANIFEST_SCHEMA_VERSION = 1
+_EXAMPLE_LANGUAGES: tuple[str, ...] = ("en", "zh")
+
+
+def parse_example_requests(text: str) -> tuple[str, ...]:
+    """Parse English and Chinese example requests from an examples.json text, in order."""
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return ()
+    pairs = data.get("pairs") if isinstance(data, Mapping) else None
+    if not isinstance(pairs, list):
+        return ()
+    found: list[str] = []
+    for pair in pairs:
+        if not isinstance(pair, Mapping):
+            continue
+        for language in _EXAMPLE_LANGUAGES:
+            side = pair.get(language)
+            request = side.get("request") if isinstance(side, Mapping) else None
+            if isinstance(request, str) and request.strip():
+                found.append(request)
+    return tuple(found)
+
 
 SKILL_MANIFEST_SCHEMA: dict[str, Any] = load_packaged_schema(__package__, "skill_manifest.v1.json")
 _MANIFEST_VALIDATOR = StrictValidator(SKILL_MANIFEST_SCHEMA)
@@ -166,6 +190,17 @@ class Skill:
     resource_texts: Mapping[str, str] = field(repr=False)
     # The read-only calls to run before the first generation (RM29), in order.
     prefetch: tuple[PrefetchCall, ...] = ()
+    # Pre-parsed example requests from examples.json, if declared (RM28).
+    examples: tuple[str, ...] | None = None
+
+    def __post_init__(self) -> None:
+        if self.examples is None:
+            parsed = (
+                parse_example_requests(self.resource_texts[EXAMPLES_RESOURCE])
+                if EXAMPLES_RESOURCE in self.resource_texts
+                else ()
+            )
+            object.__setattr__(self, "examples", parsed)
 
 
 # Section 4.2: the default root list is ["skills/"].

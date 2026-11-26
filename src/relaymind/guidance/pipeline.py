@@ -378,20 +378,41 @@ def _word_count(text: str) -> int:
     return count
 
 
+_HAS_NAME_SEP = re.compile(r"[-_.:]")
+_SIMPLE_ASCII_NAME = re.compile(r"^[a-z0-9_-]+\Z")
+_SIMPLE_ASCII_TOKEN = re.compile(r"[a-z0-9_-]+")
+
+
 def _named_in_prompt(assets: Sequence[Mapping], text: str) -> list[Mapping]:
     """Assets whose whole name appears in the prompt as its own word. Single common words do not
     count, so a tool called "search" is not pinned by every prompt that says search."""
     lowered = text.lower()
+    if _HAS_NAME_SEP.search(lowered) is None:
+        return []
+    simple_tokens = {
+        tok for tok in _SIMPLE_ASCII_TOKEN.findall(lowered) if "-" in tok or "_" in tok
+    }
     named = []
     for item in assets:
         name = item["name"].lower()
-        if not re.search(r"[-_.:]", name) or name not in lowered:
+        if _HAS_NAME_SEP.search(name) is None:
+            continue
+        if _SIMPLE_ASCII_NAME.match(name) is not None:
+            if name not in simple_tokens:
+                continue
+        elif name not in lowered:
             continue
         # Latin letters only around the name: Chinese is written without spaces.
         # A separator followed by a letter or digit continues a name, as in name.v2 or name:extra.
         if re.search(rf"(?<![a-z0-9_.:-]){re.escape(name)}(?![a-z0-9_-]|[.:][a-z0-9])", lowered):
             named.append(item)
     return named
+
+
+async def _named(assets: Sequence[Mapping], text: str) -> list[Mapping]:
+    if len(assets) > _THREAD_ABOVE:
+        return await asyncio.to_thread(_named_in_prompt, assets, text)
+    return _named_in_prompt(assets, text)
 
 
 async def _rank(assets: Sequence[Mapping], query: frozenset[str], tokens=None) -> _Ranked:
@@ -907,7 +928,7 @@ async def run_guidance(
             run.record("keywords", "skipped")
 
     # A name the user wrote exactly is a clear request, wherever word match ranked it.
-    named = _named_in_prompt(assets, text)
+    named = await _named(assets, text)
     named_ids = {id(item) for item in named}
 
     def named_first(items: Sequence[Mapping], size: int) -> list[Mapping]:

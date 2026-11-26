@@ -7,6 +7,8 @@ A catalog failure is never reported as a changed asset: it propagates.
 
 from collections.abc import Mapping
 
+from relaymind.store.asset_catalog import AssetCatalogStore
+
 # The source-owned fields that must be unchanged for an offered asset to stay
 # the same asset (spec section 5.1): a changed value is asset_changed.
 IDENTITY_FIELDS = (
@@ -24,6 +26,14 @@ def current_asset(catalog, asset_id: str):
     """The current catalog record for asset_id, or None when it is gone."""
     if catalog is None:
         raise RuntimeError("asset admission needs the current catalog")
+    lookup = getattr(catalog, "get_asset", None)
+    if (
+        callable(lookup)
+        and isinstance(catalog, AssetCatalogStore)
+        and type(catalog).snapshot is AssetCatalogStore.snapshot
+        and "snapshot" not in getattr(catalog, "__dict__", ())
+    ):
+        return lookup(asset_id)
     return next((asset for asset in catalog.snapshot().assets if asset.asset_id == asset_id), None)
 
 

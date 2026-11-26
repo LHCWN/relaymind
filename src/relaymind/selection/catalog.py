@@ -10,7 +10,6 @@ declares none has an empty list.
 from collections.abc import Iterable
 from typing import Any
 
-from relaymind.selection.example_match import EXAMPLES_RESOURCE, example_requests
 from relaymind.skills import SkillRegistry
 
 __all__ = ["catalog_entries"]
@@ -21,11 +20,6 @@ def catalog_entries(registry: SkillRegistry, names: Iterable[str]) -> list[dict[
     entries = []
     for name in names:
         skill = registry.get(name)
-        examples = (
-            example_requests(registry.read_resource(name, EXAMPLES_RESOURCE))
-            if EXAMPLES_RESOURCE in skill.resource_texts
-            else []
-        )
         entries.append(
             {
                 "id": skill.name,
@@ -35,7 +29,7 @@ def catalog_entries(registry: SkillRegistry, names: Iterable[str]) -> list[dict[
                 "languages": list(skill.languages),
                 "local_eligible": skill.local_eligible,
                 "allowed_tools": list(skill.allowed_tools),
-                "examples": examples,
+                "examples": list(skill.examples or ()),
             }
         )
     return entries

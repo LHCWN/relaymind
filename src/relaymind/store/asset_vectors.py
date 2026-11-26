@@ -46,35 +46,52 @@ class AssetVectorStore:
                 )
                 check()
 
+    _SQL_BATCH_SIZE = 250
+
+    @classmethod
+    def _batches(cls, items):
+        for start in range(0, len(items), cls._SQL_BATCH_SIZE):
+            yield items[start : start + cls._SQL_BATCH_SIZE]
+
     def restore(self, config, scope, records, *, check=lambda: None) -> HybridIndex:
         index = HybridIndex(config, scope)
         scope_json = canonical_json(scope)
         found_records, found_vectors = [], []
+        keyed = []
         for record in records:
             check()
-            with self.store.sql_read() as db:
-                row = db.execute(
-                    "SELECT asset_id,length(vector_json),"
-                    "substr(vector_json,1,131073),vector_digest "
-                    "FROM asset_vectors WHERE vector_key=? AND scope_json=? AND config_digest=?",
-                    (index.key(record), scope_json, config.digest),
-                ).fetchone()
+            keyed.append((index.key(record), record))
+        for chunk in self._batches(keyed):
+            keys = list(dict.fromkeys(k for k, _ in chunk))
+            placeholders = ",".join("?" for _ in keys)
             check()
-            if row is None:
-                continue
-            if row[0] != record["asset_id"] or row[1] > 131072:
-                raise EmbeddingError("corrupt_vector")
-            try:
-                vector = json.loads(row[2])
-                if canonical_digest(vector) != row[3]:
+            with self.store.sql_read() as db:
+                rows = db.execute(
+                    "SELECT vector_key,asset_id,length(vector_json),"
+                    "substr(vector_json,1,131073),vector_digest "
+                    f"FROM asset_vectors WHERE scope_json=? AND config_digest=? "
+                    f"AND vector_key IN ({placeholders})",
+                    (scope_json, config.digest, *keys),
+                ).fetchall()
+            check()
+            by_key = {row[0]: row for row in rows}
+            for vector_key, record in chunk:
+                row = by_key.get(vector_key)
+                if row is None:
+                    continue
+                if row[1] != record["asset_id"] or row[2] > 131072:
                     raise EmbeddingError("corrupt_vector")
-            except (ValueError, TypeError, RecursionError):
-                raise EmbeddingError("corrupt_vector") from None
-            found_records.append(record)
-            found_vectors.append(vector)
-            if len(found_records) == 25:
-                index.publish_batch(found_records, found_vectors, check=check)
-                found_records, found_vectors = [], []
+                try:
+                    vector = json.loads(row[3])
+                    if canonical_digest(vector) != row[4]:
+                        raise EmbeddingError("corrupt_vector")
+                except (ValueError, TypeError, RecursionError):
+                    raise EmbeddingError("corrupt_vector") from None
+                found_records.append(record)
+                found_vectors.append(vector)
+                if len(found_records) == 25:
+                    index.publish_batch(found_records, found_vectors, check=check)
+                    found_records, found_vectors = [], []
         if found_records:
             index.publish_batch(found_records, found_vectors, check=check)
         return index
@@ -87,8 +104,12 @@ class AssetVectorStore:
                 "SELECT vector_key FROM asset_vectors WHERE scope_json=?",
                 (canonical_json(scope),),
             ).fetchall()
-            for row in rows:
+            stale = [row[0] for row in rows if row[0] not in allowed]
+            for batch in self._batches(stale):
                 check()
-                if row[0] not in allowed:
-                    db.execute("DELETE FROM asset_vectors WHERE vector_key=?", (row[0],))
+                placeholders = ",".join("?" for _ in batch)
+                db.execute(
+                    f"DELETE FROM asset_vectors WHERE vector_key IN ({placeholders})",
+                    batch,
+                )
             check()

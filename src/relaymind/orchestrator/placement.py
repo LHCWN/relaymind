@@ -1,6 +1,8 @@
 """Measured per-generation placement (RM27; specification 0.39 section 14.2)."""
 
+import contextlib
 import math
+import threading
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from statistics import median
@@ -8,6 +10,7 @@ from types import MappingProxyType
 from typing import Any
 
 from relaymind.store import RunStore
+from relaymind.store.model_timings import TimingEstimate, timing_estimate
 
 
 @dataclass(frozen=True)
@@ -84,6 +87,41 @@ class Placement:
     def __init__(self, store: RunStore, settings: PlacementSettings | None = None) -> None:
         self.store = store
         self.settings = settings or PlacementSettings()
+        self._timing_lock = threading.Lock()
+        self._timing_cache: dict[
+            tuple[str, str], tuple[tuple[int, int, str | None], TimingEstimate, int | float | None]
+        ] = {}
+
+    def _local_timing_summary(
+        self, model: str, purpose: str
+    ) -> tuple[TimingEstimate, int | float | None]:
+        """Fetch local timing samples once and cache while unchanged."""
+        key_fn = getattr(self.store, "model_timing_summary_key", None)
+        sql_read = getattr(self.store, "sql_read", None)
+        cache_key = (model, purpose)
+        with self._timing_lock:
+            read_ctx = sql_read() if callable(sql_read) else contextlib.nullcontext()
+            with read_ctx:
+                summary_key = (
+                    key_fn(model=model, purpose=purpose, actor="local")
+                    if callable(key_fn)
+                    else None
+                )
+                if summary_key is not None:
+                    cached = self._timing_cache.get(cache_key)
+                    if cached is not None and cached[0] == summary_key:
+                        return cached[1], cached[2]
+                samples = self.store.model_timings(model=model, purpose=purpose, actor="local")
+            estimate = timing_estimate(model, purpose, "local", samples)
+            outputs = [
+                s.output_tokens
+                for s in samples
+                if s.succeeded and s.kind == "run" and s.output_tokens is not None
+            ]
+            output_median = median(outputs) if outputs else None
+            if summary_key is not None:
+                self._timing_cache[cache_key] = (summary_key, estimate, output_median)
+            return estimate, output_median
 
     def predict(
         self,
@@ -101,13 +139,8 @@ class Placement:
             raise ValueError("model and purpose must be nonblank")
         if input_source not in ("tokenizer", "routing_sample", "none"):
             raise ValueError("invalid input source")
-        estimate = self.store.timing_estimate(model, purpose)
-        outputs = [
-            s.output_tokens
-            for s in self.store.model_timings(model=model, purpose=purpose, actor="local")
-            if s.succeeded and s.kind == "run" and s.output_tokens is not None
-        ]
-        output = median(outputs) if outputs else output_cap
+        estimate, run_output = self._local_timing_summary(model, purpose)
+        output = run_output if run_output is not None else output_cap
         if output is not None and output_cap is not None:
             output = min(output, output_cap)
         rates = getattr(estimate, estimate.latest_cache_class, None)
@@ -130,7 +163,7 @@ class Placement:
                 "input_source": input_source if input_tokens is not None else "none",
                 "expected_output_tokens": output,
                 "output_source": "run_samples"
-                if outputs
+                if run_output is not None
                 else ("purpose_cap" if output_cap is not None else "unavailable"),
                 "cache_class": estimate.latest_cache_class,
                 "sample_count": rates.sample_count if rates else 0,

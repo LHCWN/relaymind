@@ -681,11 +681,18 @@ class AssetFeedbackStore:
 
         return remove
 
-    def correction_snapshot(self, scope, current_catalog, *, now, check=lambda: None):
-        """One store-owned revision/history read; filter before retaining latest20.
+    def scope_revision(self, scope: Mapping) -> int:
+        """Read the current feedback revision for scope via one indexed PK lookup."""
+        with self.store.sql_read() as db:
+            return self._scope_revision(db, scope)
 
-        Stream historical rows under the caller's unchanged total deadline; do
-        not allocate an unbounded list or silently stop at a favorable prefix.
+    def correction_snapshot(self, scope, current_catalog, *, now, check=lambda: None):
+        """One store-owned revision/history read; filter before retaining latest 20.
+
+        Filters non-correction rows in SQL while streaming via the existing
+        (user_id, workspace_id, insertion_sequence) index so check() runs
+        without any unindexed SQL sort delay and exact datetime ordering
+        (correction_order) is preserved.
         """
         self.maintain_scope(scope, now=now)
         self.recommendations._observe_scope_expiry(scope, now=now)
@@ -697,9 +704,11 @@ class AssetFeedbackStore:
             check()
             revision = self._scope_revision(db, scope)
             rows = db.execute(
-                "SELECT r.record_json,b.asset_json FROM feedback_records r "
-                "JOIN feedback_bindings b USING(feedback_id) WHERE r.user_id=? "
-                "AND r.workspace_id=?",
+                "SELECT r.record_json, b.asset_json FROM feedback_records r "
+                "JOIN feedback_bindings b USING(feedback_id) "
+                "WHERE r.user_id=? AND r.workspace_id=? "
+                "AND json_extract(r.record_json, '$.feedback.kind')='correction' "
+                "ORDER BY r.insertion_sequence",
                 (scope["user_id"], scope["workspace_id"]),
             )
             for row in rows:
@@ -717,7 +726,7 @@ class AssetFeedbackStore:
                     continue
                 bisect.insort(result, validate_feedback_record(record), key=correction_order)
                 if len(result) > 20:
-                    del result[0]
+                    result.pop(0)
             check()
         return CorrectionSnapshot(revision, current_catalog.catalog_revision, tuple(result))
 
