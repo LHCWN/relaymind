@@ -36,7 +36,7 @@ from typing import Any
 
 import yaml
 
-from relaymind.orchestrator import identifiers
+from relaymind import identifiers
 from relaymind.schema_util import (
     check_schema_version,
     first_schema_error,
