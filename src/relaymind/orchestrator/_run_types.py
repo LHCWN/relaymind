@@ -570,13 +570,13 @@ if TYPE_CHECKING:
         """Static typing contract for attributes and cross-mixin methods provided by _Run."""
 
         o: LocalOrchestrator
-        messages: Sequence[Message]
+        messages: tuple[Message, ...]
         mode: ExecutionMode
         meter: BudgetMeter
         authority: DispatchAuthority
         record: RunRecord
         final_options: GenerationOptions
-        answer_stream_effective: bool
+        answer_stream_effective: str
         model_calls: list[dict[str, str]]
         generating: dict[str, ModelAdapter]
         cancel_asked: set[str]
@@ -589,11 +589,11 @@ if TYPE_CHECKING:
         _approvals: dict[str, str]
         waiting_since: float | None
         waiting_ms: int
-        offered: list[dict[str, Any]]
+        offered: dict[str, Any]
         secrets: set[str]
         _calls: int
         routing_placement: Prediction
-        pending_selector: Any
+        pending_selector: dict[str, Any] | None
         pending_placement: Prediction | None
         _routing_count: tuple[tuple[Message, ...], tuple[ToolSchema, ...], int] | None
         skill: Skill | None
