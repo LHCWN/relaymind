@@ -11,7 +11,7 @@ Follow the linked operator guides for commands.
 | Component | Directory | Main files | Responsibility |
 | --- | --- | --- | --- |
 | API | `src/relaymind/api/` | `app.py`, `chat.py`, `chat_request.py`, `native.py`, `recommendations.py`, `guidance.py`, `user_actions.py`, `auth.py`, `errors.py`, `idempotency.py`, `server.py` | Validate requests, authenticate callers, expose compatible chat, native run, recommendation, user-action, and guidance APIs, and map errors. `server.py` binds to loopback. |
-| Orchestrator | `src/relaymind/orchestrator/` | `local_loop.py`, `run_state.py`, `router.py`, `route_decision.py`, `budgets.py` | Admit model proposals, enforce budgets and identifier provenance, run the managed loop, and own answer publication. |
+| Orchestrator | `src/relaymind/orchestrator/` | `local_loop.py`, `selection.py`, `generation.py`, `tools.py`, `confirmation.py`, `publish.py`, `_run_types.py`, `run_state.py`, `router.py`, `route_decision.py`, `budgets.py` | Admit model proposals, enforce budgets and identifier provenance, run the managed loop, and own answer publication. |
 | Handoff and client-owned inference | `src/relaymind/orchestrator/` | `handoff.py`, `client_loop.py` | Transfer completed work within the remaining budget; return client-owned tool proposals without executing them. |
 | Lifecycle and performance | `src/relaymind/orchestrator/` | `recovery.py`, `warmup.py`, `local_status.py`, `placement.py`, `performance.py`, `prefetch.py`, `routing_cache.py`, `workflows.py` | Recover interrupted runs, assess local availability, predict placement, and implement optional optimizations and the fixed parallel workflow. Predictions never change budgets. |
 | Managed skill selection (v1) | `src/relaymind/selection/` | `contract.py`, `catalog.py`, `chain.py`, `admission.py`, `model_router.py`, `example_match.py`, `http.py`, `settings.py` | Build the offered skill catalog, obtain a proposal, then admit it through gateway checks. HTTP selection uses the loopback transport. |
@@ -141,10 +141,10 @@ Named subsystems and explicit exceptions:
   modules import `orchestrator/router.py`, `orchestrator/route_decision.py`,
   and `orchestrator/placement.py` (`PlacementDeclined` in `selection/chain.py`),
   `identifiers.py`, `skills/`, `tools/`, `adapters/`, and leaf modules (never
-  `assets/`, `recommendations/`, or `store/`); `orchestrator/local_loop.py`
-  and `orchestrator/routing_cache.py` import `selection/`. None of the
-  orchestrator modules that `selection/` imports (directly or transitively
-  within `orchestrator/`) imports `selection/` back.
+  `assets/`, `recommendations/`, or `store/`); `orchestrator/local_loop.py`,
+  `orchestrator/selection.py`, and `orchestrator/routing_cache.py` import
+  `selection/`. None of the orchestrator modules that `selection/` imports
+  (directly or transitively within `orchestrator/`) imports `selection/` back.
 - **Asset catalog, recommendations, and v2 selection (`assets/`,
   `recommendations/`, `selection/asset_*.py`, `selection/adaptation_stage.py`,
   and M10 `store/` modules):** form a dedicated subsystem built over
