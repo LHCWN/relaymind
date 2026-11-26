@@ -1145,17 +1145,14 @@ def test_latest_event_returns_highest_seq_using_type_index(store):
     assert any("events_run_type_seq" in step for step in plan), plan
 
 
-def test_appending_many_deltas_uses_bounded_queries_and_near_linear_time(store, clock):
-    """RM22, RM25, #294: appending N deltas avoids per-append full-trace scans."""
-    import time
-
+def test_appending_many_deltas_uses_bounded_queries_and_indexed_plans(store, clock):
+    """RM22, RM25, #294: appending N deltas uses O(1) indexed queries with zero full-trace scans."""
     run_id = store.create_run("accepted").run_id
     accept(store, run_id)
 
-    def measure_appends(count: int, prefix: str) -> tuple[list[str], float]:
+    def trace_appends(count: int, prefix: str) -> list[str]:
         traced: list[str] = []
         store._conn.set_trace_callback(traced.append)
-        started = time.perf_counter()
         try:
             for i in range(count):
                 clock.mono += 0.001
@@ -1164,21 +1161,29 @@ def test_appending_many_deltas_uses_bounded_queries_and_near_linear_time(store, 
                 )
         finally:
             store._conn.set_trace_callback(None)
-        return traced, time.perf_counter() - started
+        return traced
 
-    queries_n, elapsed_n = measure_appends(400, "a")
-    queries_2n, elapsed_2n = measure_appends(800, "b")
+    queries_n = trace_appends(200, "a")
+    queries_2n = trace_appends(400, "b")
 
     # No UNION ALL / full-table elapsed_ms scan per append; query count scales linearly (2x).
     assert not any("UNION ALL" in q for q in queries_n + queries_2n)
-    assert len(queries_n) <= 2000, f"expected <=5 queries per append, got {len(queries_n)}"
+    assert len(queries_n) <= 1000, f"expected <=5 queries per append, got {len(queries_n)}"
     assert len(queries_2n) == 2 * len(queries_n)
-    assert elapsed_n + elapsed_2n < 5.0, (
-        f"expected bounded append time, got {elapsed_n + elapsed_2n:.3f}s"
-    )
-    assert elapsed_2n <= elapsed_n * 3.5, (
-        f"expected near-linear scaling for 2N appends: N={elapsed_n:.4f}s, 2N={elapsed_2n:.4f}s"
-    )
+
+    # Every SELECT/UPDATE executed during append_event must use an index/PK (zero table SCANs).
+    checked_plans = 0
+    for sql in sorted({q.strip() for q in queries_n}):
+        upper = sql.upper()
+        if upper.startswith(("SELECT ", "UPDATE ")):
+            plan = [
+                row["detail"] for row in store._conn.execute(f"EXPLAIN QUERY PLAN {sql}").fetchall()
+            ]
+            assert plan and not any(
+                step.startswith("SCAN ") and step != "SCAN CONSTANT ROW" for step in plan
+            ), (sql, plan)
+            checked_plans += 1
+    assert checked_plans >= 2, f"expected SELECT/UPDATE plans checked, got {checked_plans}"
 
     # Batch append uses a constant number of non-INSERT SQLite statements regardless of batch size.
     batch_queries: list[str] = []
