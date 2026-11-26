@@ -1378,6 +1378,38 @@ def test_the_selector_proxy_passes_exchanges_on_and_sees_when_the_selector_is_re
         selector.server_close()
 
 
+def test_the_selector_proxy_does_not_take_a_partial_answer_for_the_full_ranking():
+    """Spec 0.75 section 7.7 (RM47, AC42): a :partial mechanism counts as partial, not ranked."""
+    import httpx
+
+    selector = _selector([("ranked", "router:partial"), ("no_match", "router:partial")])
+    base = f"http://127.0.0.1:{selector.server_address[1]}"
+    proxy = harness.SelectorProxy(f"{base}/select", f"{base}/sync")
+    try:
+        ready = []
+        for _ in range(2):
+            httpx.post(proxy.url + "/select", content=b"{}", timeout=10, trust_env=False)
+            ready.append(proxy.ready())
+        assert ready == [False, False]
+        assert proxy.counts() == {"partial": 2}
+        # Review of PR 306: a failure keeps its own outcome whatever its mechanism says.
+        failed = _selector([("not_ready", "router:partial"), ("unavailable", "router:early")])
+        failed_base = f"http://127.0.0.1:{failed.server_address[1]}"
+        failed_proxy = harness.SelectorProxy(f"{failed_base}/select", f"{failed_base}/sync")
+        try:
+            for _ in range(2):
+                httpx.post(failed_proxy.url + "/select", content=b"{}", timeout=10, trust_env=False)
+            assert failed_proxy.counts() == {"not_ready": 1, "unavailable": 1}
+        finally:
+            failed_proxy.close()
+            failed.shutdown()
+            failed.server_close()
+    finally:
+        proxy.close()
+        selector.shutdown()
+        selector.server_close()
+
+
 def test_a_third_party_arm_syncs_through_the_proxy_when_asked():
     arm = harness.ARMS["third_party"]
     local = ("m", "a", "http://127.0.0.1:2")

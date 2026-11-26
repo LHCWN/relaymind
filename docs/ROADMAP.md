@@ -1900,3 +1900,15 @@ Real turns with `glm-5.3-flash` show no difference
 from the default in loading the right skill (29 and 33 of 40, within the noise) at about a third of the input
 tokens, and asset-router misses Chinese prompts it answers with `no_match`. Not done: the same sync for
 recommendations.
+
+## Guidance selector feedback and partial answers (spec 0.75; RM47; RM48; AC42; AC43)
+
+Implemented for guidance (#301). A selector may answer `ranked` or `no_match` over an offer it has only partly
+indexed, with a `mechanism` ending in `:partial`; the gateway passes it on and still syncs, and the compare and
+benchmark scripts count such answers apart. With `guidance.feedback_url` the answer carries the select's
+`recommendation_id`, and after a successful run the plugin reports the offered skills loaded and offered tools
+executed; the gateway sends them to the selector as pairs of that select, with no text or path, only to a selector
+with local inference unless allowed. Deterministic tests use a fake router, the reference selector
+(`scripts/guidance_selector_server.py --partial`) and a host double (`tests/test_guidance_feedback.py`,
+`test/guidance-plugin.test.ts`). Not measured yet: how much feedback improves a real selector on real turns; the
+issue's figures come from magpie-picker's own research, not from a RelayMind run.

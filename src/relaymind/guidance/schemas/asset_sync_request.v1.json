@@ -1,17 +1,34 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://relaymind.local/schemas/asset_sync_request.v1.json",
-  "description": "AssetSyncRequestV1 (spec 0.72 section 7.7; RM47). find_missing sends asset pairs; upload sends the exact select records with an optional skill file.",
+  "description": "AssetSyncRequestV1 (spec 0.72 section 7.7; RM47; feedback spec 0.75, RM48). find_missing sends asset pairs; upload sends the exact select records with an optional skill file; feedback names the offered assets one turn used.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "operation", "feeder_id", "assets"],
+  "required": ["schema_version", "operation", "feeder_id"],
   "properties": {
     "schema_version": {"const": 1},
-    "operation": {"enum": ["find_missing", "upload"]},
+    "operation": {"enum": ["find_missing", "upload", "feedback"]},
     "feeder_id": {"const": "guidance"},
-    "assets": {"type": "array", "maxItems": 1000}
+    "assets": {"type": "array", "maxItems": 1000},
+    "recommendation_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "used": {"type": "array", "maxItems": 1000, "items": {"$ref": "#/$defs/used"}},
+    "not_offered": {"type": "integer", "minimum": 0}
   },
   "allOf": [
+    {
+      "if": {"properties": {"operation": {"const": "feedback"}}},
+      "then": {"required": ["recommendation_id", "used", "not_offered"], "not": {"required": ["assets"]}},
+      "else": {
+        "required": ["assets"],
+        "not": {
+          "anyOf": [
+            {"required": ["recommendation_id"]},
+            {"required": ["used"]},
+            {"required": ["not_offered"]}
+          ]
+        }
+      }
+    },
     {
       "if": {"properties": {"operation": {"const": "find_missing"}}},
       "then": {"properties": {"assets": {"items": {"$ref": "#/$defs/pair"}}}},
@@ -19,6 +36,20 @@
     }
   ],
   "$defs": {
+    "used": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["asset_id", "content_hash", "kind", "signal"],
+      "properties": {
+        "asset_id": {"type": "string", "minLength": 1},
+        "content_hash": {"type": "string", "pattern": "^[0-9a-f]{64}(?![\\s\\S])"},
+        "kind": {"enum": ["skill", "mcp_tool"]},
+        "signal": {"enum": ["loaded", "executed", "refused"]}
+      },
+      "if": {"properties": {"kind": {"const": "skill"}}},
+      "then": {"properties": {"signal": {"enum": ["loaded", "refused"]}}},
+      "else": {"properties": {"signal": {"enum": ["executed", "refused"]}}}
+    },
     "pair": {
       "type": "object",
       "additionalProperties": false,

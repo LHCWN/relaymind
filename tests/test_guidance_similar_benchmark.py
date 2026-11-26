@@ -137,10 +137,16 @@ def indexing_selector(tmp_path):
     server = load_script_module("guidance_selector_server")
     index = server.SyncIndex([tmp_path])
     settings = GuidanceSettings(enabled=True)
-    state = dict(uploads=[], sync_fails=False)
+    state = dict(uploads=[], sync_fails=False, partial=False, mechanisms=[])
 
     def answer(value):
-        return asyncio.run(server.select(value, settings, name="router", version="1", index=index))
+        result = asyncio.run(
+            server.select(
+                value, settings, name="router", version="1", index=index, partial=state["partial"]
+            )
+        )
+        state["mechanisms"].append(result["mechanism"])
+        return result
 
     def sync(value):
         if state["sync_fails"]:
@@ -191,6 +197,18 @@ def test_with_sync_url_the_selector_is_synced_from_the_json_assets_before_measur
     assert sorted(item["record"]["description"] for item in uploads) == sorted(
         a["description"] for a in assets
     )
+
+
+def test_a_partial_answer_is_not_ready_and_the_selector_is_synced_until_it_ranks_fully(
+    indexing_selector,
+):
+    """Spec 0.75 section 7.7 (RM47, AC42): a partial answer is not the selector's full ranking."""
+    indexing_selector.state["partial"] = True
+    args = _third_party(indexing_selector, "--sync-url", indexing_selector.sync)
+    report = asyncio.run(harness.run(args))
+    assert report["sync"]["outcome"] == "ready" and report["sync"]["selects"] == 2
+    assert indexing_selector.state["mechanisms"][0].endswith(":partial")
+    assert indexing_selector.state["uploads"]
 
 
 def test_a_selector_that_never_gets_ready_is_not_measured(indexing_selector):

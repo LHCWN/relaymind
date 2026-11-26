@@ -14,7 +14,9 @@ With one or more --sync-root DIR it is also a reference selector for guidance se
 (spec 0.72 section 7.7; RM47): it answers POST /sync, reads a skill file only when its real path is
 under a root and its size and SHA-256 match, and answers not_ready to a select that offers a pair it
 has not indexed. Its index is in memory and only records which pairs it has; it still ranks with
-the descriptions of the select, so it shows the protocol, not a better ranking.
+the descriptions of the select, so it shows the protocol, not a better ranking. With --partial it
+ranks such a select anyway and labels the answer `:partial` (spec 0.75). It also answers POST
+/feedback (spec 0.75; RM48) and keeps only which asset IDs each select's turn used, in memory.
 """
 
 import argparse
@@ -55,6 +57,8 @@ class SyncIndex:
         # Roots are compared as real paths, so a link inside a root cannot lead out of it.
         self.roots = [Path(root).resolve(strict=True) for root in roots]
         self.inference = inference
+        # Selector feedback (spec 0.75): each select's ID and the asset IDs its turn used.
+        self.feedbacks: list[tuple[str, list[str]]] = []
         self._pairs = set()
         self._lock = threading.Lock()
 
@@ -68,14 +72,18 @@ class SyncIndex:
             raise ValueError("invalid sync request")
         operation = value["operation"]
         missing = results = None
-        if operation == "find_missing":
+        if operation == "feedback":
+            with self._lock:
+                used = [item["asset_id"] for item in value["used"]]
+                self.feedbacks.append((value["recommendation_id"], used))
+        elif operation == "find_missing":
             with self._lock:
                 missing = [
                     pair
                     for pair in value["assets"]
                     if (pair["asset_id"], pair["content_hash"]) not in self._pairs
                 ]
-        else:
+        elif operation == "upload":
             results = [self._take(item) for item in value["assets"]]
         return dict(
             schema_version=1,
@@ -154,12 +162,17 @@ def _label(record):
     return identity.get("exposed_name") or identity.get("package_id") or record["asset_id"]
 
 
-async def select(value, settings, *, name, version, keywords=None, picker=None, index=None):
+async def select(
+    value, settings, *, name, version, keywords=None, picker=None, index=None, partial=False
+):
     """One SelectionRequestV2 through run_guidance to one SelectionResultV2.
 
-    With a SyncIndex, a select that offers a pair it has not indexed is `not_ready`."""
+    With a SyncIndex, a select that offers a pair it has not indexed is `not_ready`, or with
+    `partial` a ranking of the whole offer labeled `:partial` (spec 0.75): this selector ranks by
+    the select's descriptions, so it can rank a pair it has not indexed."""
     data = parse_asset_request(value).data
-    if index is not None and not index.ready(data["catalog"]):
+    unindexed = index is not None and not index.ready(data["catalog"])
+    if unindexed and not partial:
         return parse_asset_result(
             dict(
                 schema_version=2,
@@ -226,7 +239,8 @@ async def select(value, settings, *, name, version, keywords=None, picker=None, 
         # A failed stage must show in the benchmark evidence, not read as the configured arm.
         mechanism="guidance_"
         + outcome["mechanism"].replace("+", "_")
-        + ("_degraded" if outcome["degraded"] else ""),
+        + ("_degraded" if outcome["degraded"] else "")
+        + (":partial" if unindexed else ""),
         outcome="ranked" if candidates else "no_match",
         decision="choice_required" if candidates else "no_match",
         candidates=candidates,
@@ -237,11 +251,14 @@ async def select(value, settings, *, name, version, keywords=None, picker=None, 
     return parse_asset_result(result).to_json_object()
 
 
-def make_handler(answer, sync=None):
-    """A request handler for POST /select, and POST /sync when `sync` is given.
+def make_handler(answer, sync=None, feedback=None):
+    """A request handler for POST /select, and POST /sync and /feedback when given.
 
-    answer(request) gives the select result and sync(request) the sync answer."""
-    routes = {"/select": answer} | ({"/sync": sync} if sync is not None else {})
+    answer(request) gives the select result, sync(request) the sync answer and feedback(request)
+    the feedback answer."""
+    routes = {"/select": answer}
+    routes |= {"/sync": sync} if sync is not None else {}
+    routes |= {"/feedback": feedback} if feedback is not None else {}
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a):  # Never log a prompt.
@@ -283,6 +300,11 @@ def main():
         help="serve guidance selector sync and read skill files only under this directory",
     )
     parser.add_argument("--inference", choices=("local", "remote"), default="local")
+    parser.add_argument(
+        "--partial",
+        action="store_true",
+        help="with --sync-root, rank an offer it has not fully indexed and label it :partial",
+    )
     args = parser.parse_args()
     settings = GuidanceSettings(
         enabled=True,
@@ -325,13 +347,16 @@ def main():
                 keywords=keywords[args.keywords],
                 picker=picker,
                 index=index,
+                partial=args.partial,
             )
         )
 
     print(f"Serving on http://127.0.0.1:{args.port}/select", file=sys.stderr)
     if index is not None:
         print(f"Serving sync on http://127.0.0.1:{args.port}/sync", file=sys.stderr)
-    handler = make_handler(answer, index.handle if index is not None else None)
+        print(f"Serving feedback on http://127.0.0.1:{args.port}/feedback", file=sys.stderr)
+    handle = index.handle if index is not None else None
+    handler = make_handler(answer, handle, handle)
     ThreadingHTTPServer(("127.0.0.1", args.port), handler).serve_forever()
 
 

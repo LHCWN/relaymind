@@ -39,6 +39,8 @@ Over all prompts:
   failed       the selector did not answer, so a fallback did or nothing did
   early        the selector ranked early, from the features it had indexed so far (spec 0.73),
                not with its full ranking; such answers count as answers, not failures
+  partial      the selector ranked an offer it had only partly indexed (spec 0.75), so not with
+               its full ranking either; counted like early, in its own column
 
 Development evidence unless the data has independent labels. The formal gates are in the benchmarks'
 own compare commands; this tool adds metrics and sets no gate.
@@ -76,6 +78,7 @@ def read_report(report: dict) -> tuple[list[dict], int | None]:
                 decision=r["decision"],
                 degraded=r["degraded"],
                 early=_early(r.get("mechanism")),
+                partial=_partial(r.get("mechanism")),
                 ms=r["ms"],
             )
             for r in report["rows"]
@@ -102,7 +105,8 @@ def read_report(report: dict) -> tuple[list[dict], int | None]:
                 # Selection v2 has no "choose", so whether it asked is unknown, not "no".
                 decision=None,
                 degraded=_fell_back(r),
-                early=_early(((r.get("attempts") or [{}])[0]).get("mechanism")),
+                early=_early(_first_mechanism(r)),
+                partial=_partial(_first_mechanism(r)),
                 ms=r["observed_ms"],
             )
             for r in report["rows"]
@@ -119,14 +123,26 @@ def _fell_back(row: dict) -> bool:
     if row["status"] not in ("ready", "ranked", "no_match") or len(attempts) > 1:
         return True
     first = attempts[0] if attempts else {}
-    return first.get("outcome", "ranked") not in ("ranked", "no_match") or str(
-        first.get("mechanism", "")
-    ).endswith("_degraded")
+    # A label for an early or partial answer comes after `_degraded` (spec 0.73 and 0.75).
+    mechanism = str(first.get("mechanism", "")).removesuffix(":partial").removesuffix(":early")
+    return first.get("outcome", "ranked") not in ("ranked", "no_match") or mechanism.endswith(
+        "_degraded"
+    )
+
+
+def _first_mechanism(row: dict) -> object:
+    """The mechanism of a platform row's first attempt: the configured selector's own answer."""
+    return ((row.get("attempts") or [{}])[0]).get("mechanism")
 
 
 def _early(mechanism: object) -> bool:
     """A selector answer ranked from an earlier stage while later features index (spec 0.73)."""
     return str(mechanism or "").endswith(":early")
+
+
+def _partial(mechanism: object) -> bool:
+    """A selector answer over an offer it had only partly indexed (spec 0.75)."""
+    return str(mechanism or "").endswith(":partial")
 
 
 def _mean(values: list[float]) -> float | None:
@@ -259,6 +275,7 @@ def metrics(rows: list[dict]) -> dict:
         workflow_picks=_mean([len(r["picks"]) for r in workflow]),
         degraded=sum(bool(r["degraded"]) for r in rows),
         early=sum(bool(r.get("early")) for r in rows),
+        partial=sum(bool(r.get("partial")) for r in rows),
         p50_ms=statistics.median(times) if times else None,
         p95_ms=times[math.ceil(len(times) * 0.95) - 1] if times else None,
     )
@@ -346,10 +363,11 @@ def table(arms: dict) -> str:
     lines = [
         "| Arm | Macro P | Macro R | Micro P | Micro R | P wins/losses (p) | R wins/losses (p) | "
         "First pick | MRR | P@3 | R@3 | F1@3 | R@8 | Picks | False picks | Asked | "
-        "Offered | Set found | All found | Set exact | Set picks | Failed | Early | p50 ms | "
+        "Offered | Set found | All found | Set exact | Set picks | Failed | Early | Partial | "
+        "p50 ms | "
         "First pick wins/losses (p) |",
         "|---|---:|---:|---:|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"
-        "---:|---:|---:|---:|---:|---:|---|",
+        "---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for name, arm in arms.items():
         m = arm["metrics"]
@@ -364,7 +382,7 @@ def table(arms: dict) -> str:
             f"{_cell(m['undecided_asked'])} | {_cell(m['undecided_share_offered'])} | "
             f"{_cell(m['workflow_found'])} | {_cell(m['workflow_all_found'])} | "
             f"{_cell(m['workflow_precision'])} | {_cell(m['workflow_picks'], False)} | "
-            f"{m['degraded']} | {m['early']} | {p50} | "
+            f"{m['degraded']} | {m['early']} | {m['partial']} | {p50} | "
             f"{_versus(arm.get('paired_with_baseline'))} |"
         )
     return "\n".join(lines)

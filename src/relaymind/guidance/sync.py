@@ -46,6 +46,34 @@ def _target(record: Mapping) -> str:
     return hashlib.sha256(canonical_json(record).encode()).hexdigest()
 
 
+async def exchange(
+    url: str,
+    document: Mapping,
+    *,
+    seconds: float,
+    clock: Callable[[], float],
+    transport_factory: Callable[[], httpx.AsyncBaseTransport] | None = None,
+) -> dict:
+    """One selector exchange: a valid AssetSyncResponseV1 of the same operation, or an error."""
+    if len(document.get("assets", ())) > _THREAD_ABOVE:
+        payload = (await asyncio.to_thread(canonical_json, document)).encode()
+    else:
+        payload = canonical_json(document).encode()
+    # wait_for bounds the whole exchange; the transport needs no clock of its own.
+    answer = await asyncio.wait_for(
+        post_json(
+            url, payload, SelectorContext(clock, lambda: None), transport_factory=transport_factory
+        ),
+        seconds,
+    )
+    if (
+        first_schema_error(_RESPONSE, answer) is not None
+        or answer["operation"] != document["operation"]
+    ):
+        raise ValueError("invalid_sync_response")
+    return answer
+
+
 class GuidanceSync:
     """At most one sync at a time; a sync wanted while one runs is skipped."""
 
@@ -71,6 +99,10 @@ class GuidanceSync:
         # A running sync fills `_current`; the status shows it only once that sync ends.
         self._current: dict | None = None
         self._last = self._nothing()
+        # The last inference a selector exchange reported, or None before any, and when it was
+        # reported (spec 0.75; RM48).
+        self.inference: str | None = None
+        self.inference_at = 0.0
 
     def status(self) -> dict:
         """GuidanceSyncStatusV1 for `GET /relay/v1/guidance/sync`."""
@@ -106,6 +138,41 @@ class GuidanceSync:
         finally:
             self._running, self._current = False, None
 
+    async def ask_inference(self, pairs: list[dict]) -> str | None:
+        """Learn the selector's inference with a find_missing of these pairs, uploading nothing.
+
+        Feedback needs it before it sends anything (spec 0.75; RM48). The question takes the one
+        sync slot and keeps the wait after a failure, so it is None while a sync runs or that wait
+        lasts; a failed question starts the wait like a failed sync, and raises."""
+        if self._running or self._clock() < self._not_before:
+            return None
+        self._running = True
+        try:
+            _, inference = await self._find_missing(pairs)
+        except Exception:
+            self._wait()
+            raise
+        finally:
+            self._running = False
+        return inference
+
+    async def _find_missing(self, pairs: list[dict]) -> tuple[set[tuple[str, str]], str]:
+        """The missing pairs and the inference of a valid find_missing answer, else an error.
+
+        Only a valid answer, whose missing pairs were offered and do not repeat, teaches the
+        inference (spec 0.75)."""
+        found = await self._exchange("find_missing", pairs)
+        missing = [_key(pair) for pair in found["missing"]]
+        chosen = set(missing)
+        if len(chosen) != len(missing) or not chosen <= {_key(pair) for pair in pairs}:
+            raise ValueError("invalid_sync_response")
+        self.learn_inference(found["inference"])
+        return chosen, found["inference"]
+
+    def learn_inference(self, inference: str) -> None:
+        """Remember what a valid selector exchange reported, and when (spec 0.75; RM48)."""
+        self.inference, self.inference_at = inference, self._clock()
+
     @staticmethod
     def _nothing() -> dict:
         return dict(
@@ -125,19 +192,13 @@ class GuidanceSync:
     async def _sync(self, catalog: Sequence[Mapping], files: Mapping[str, Mapping]) -> bool:
         """One sync; False when it made no progress (spec 0.72): every record it uploaded is the
         current target of its asset ID, or every missing pair was rejected before."""
-        offered = {_key(record) for record in catalog}
-        found = await self._exchange(
-            "find_missing",
-            [dict(asset_id=r["asset_id"], content_hash=r["content_hash"]) for r in catalog],
+        chosen, inference = await self._find_missing(
+            [dict(asset_id=r["asset_id"], content_hash=r["content_hash"]) for r in catalog]
         )
-        missing = [_key(pair) for pair in found["missing"]]
-        chosen = set(missing)
-        if len(chosen) != len(missing) or not chosen <= offered:
-            raise ValueError("invalid_sync_response")
         known = chosen & self._rejected.keys()
         self._current = current = dict(
             last_outcome="nothing_missing" if not chosen else "synced",
-            last_inference=found["inference"],
+            last_inference=inference,
             missing=len(chosen),
             accepted=0,
             rejected=len(known),
@@ -153,7 +214,7 @@ class GuidanceSync:
         # return to an earlier one included (hashes A, B, A), and that is progress.
         progress = any(self._targets.get(r["asset_id"]) != _target(r) for r in records)
         # A selector that sends text to remote inference gets no file unless the operator allows it.
-        send_files = found["inference"] == "local" or self.allow_remote
+        send_files = inference == "local" or self.allow_remote
         uploads = [
             dict(
                 record=record,
@@ -209,20 +270,10 @@ class GuidanceSync:
 
     async def _exchange(self, operation: str, assets: list) -> dict:
         document = dict(schema_version=1, operation=operation, feeder_id=FEEDER_ID, assets=assets)
-        if len(assets) > _THREAD_ABOVE:
-            payload = (await asyncio.to_thread(canonical_json, document)).encode()
-        else:
-            payload = canonical_json(document).encode()
-        # wait_for bounds the whole exchange; the transport needs no clock of its own.
-        answer = await asyncio.wait_for(
-            post_json(
-                self.url,
-                payload,
-                SelectorContext(self._clock, lambda: None),
-                transport_factory=self._transport_factory,
-            ),
-            self.exchange_s,
+        return await exchange(
+            self.url,
+            document,
+            seconds=self.exchange_s,
+            clock=self._clock,
+            transport_factory=self._transport_factory,
         )
-        if first_schema_error(_RESPONSE, answer) is not None or answer["operation"] != operation:
-            raise ValueError("invalid_sync_response")
-        return answer

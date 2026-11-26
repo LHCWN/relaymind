@@ -695,29 +695,37 @@ class SelectorProxy:
         try:
             result = response.json()
             outcome = str(result.get("outcome"))
-            early = str(result.get("mechanism") or "").endswith(":early")
+            mechanism = str(result.get("mechanism") or "")
+            # Neither an early nor a partial answer is the selector's full ranking (spec 0.75).
+            # A failure keeps its own outcome whatever its mechanism says (review of PR 306).
+            label = (
+                next((s for s in ("early", "partial") if mechanism.endswith(f":{s}")), None)
+                if outcome in ("ranked", "no_match")
+                else None
+            )
         except (ValueError, AttributeError):
-            outcome, early = "invalid", False
+            outcome, label = "invalid", None
         with self._lock:
-            self.outcomes.append((outcome, early))
+            self.outcomes.append((outcome, label))
 
     def ready(self) -> bool:
-        """The last select was the selector's full ranking: ranked or no_match, and not early."""
+        """The last select was the full ranking: ranked or no_match, neither early nor partial."""
         with self._lock:
             if not self.outcomes:
                 return False
-            outcome, early = self.outcomes[-1]
-        return outcome in ("ranked", "no_match") and not early
+            outcome, label = self.outcomes[-1]
+        return outcome in ("ranked", "no_match") and label is None
 
     def mark(self) -> int:
         with self._lock:
             return len(self.outcomes)
 
     def counts(self, since=0) -> dict:
-        """Select outcomes from `since` on; an early answer counts as "early", not "ranked"."""
+        """Select outcomes from `since` on; an early or partial answer counts as "early" or
+        "partial", not "ranked"."""
         with self._lock:
             seen = self.outcomes[since:]
-        return dict(Counter("early" if early else outcome for outcome, early in seen))
+        return dict(Counter(label or outcome for outcome, label in seen))
 
     def close(self):
         self.server.shutdown()

@@ -1256,3 +1256,195 @@ describe("tool_call arguments, as the pinned host reads them", () => {
     expect(hostCall(c.params, known)).toEqual({ target: c.target, args: c.args });
   });
 });
+
+describe("selector feedback (spec 0.75; RM48; AC43)", () => {
+  const RUN = { ...CTX, runId: "run-1" };
+  const withId = (names: string[]) => ({ ...picks(names, "third_party"), recommendation_id: "rec-1" });
+
+  /** A gateway double that answers guidance with `answer` and takes feedback. */
+  function gatewayWithFeedback(answer: object) {
+    return vi.fn(async (url: string, _init: RequestInit) =>
+      String(url).endsWith("/feedback")
+        ? new Response(JSON.stringify({ schema_version: 1, queued: true }))
+        : new Response(JSON.stringify(answer)),
+    );
+  }
+
+  async function turn(answer: object, more: object = {}) {
+    const chosen = skill("chosen", "Chosen skill");
+    const other = skill("other", "Other skill");
+    const tools = join(dir, "tools.json");
+    writeFileSync(tools, JSON.stringify([{ name: "Demo__One", description: "One" }, { name: "demo__two", description: "Two" }]));
+    const fetcher = gatewayWithFeedback(answer);
+    vi.stubGlobal("fetch", fetcher);
+    const { handlers } = load({ toolsFile: tools, ...more }, [entry("chosen", chosen), entry("other", other)]);
+    await handlers.before_prompt_build(EVENT, RUN);
+    const used = (toolName: string, params: object, extra: object = {}, ctx: object = RUN) =>
+      handlers.after_tool_call({ toolName, params, ...extra }, ctx);
+    const end = (success = true) => handlers.agent_end({ runId: "run-1", messages: [], success }, RUN);
+    const sent = () => fetcher.mock.calls.filter(([url]) => String(url).endsWith("/relay/v1/guidance/feedback"));
+    return { handlers, used, end, sent, chosen, other };
+  }
+
+  it("reports the offered skills loaded and tools executed in the run, picked or not, after a successful run", async () => {
+    const { used, end, sent, chosen } = await turn(withId(["chosen"]));
+    used("skills_read", { name: "other" });
+    used("read", { path: join(dirname(chosen), "reference.md") });
+    used("tool_call", { id: "demo:demo__one", args: {} });
+    used("skills_read", { name: "not-offered" });
+    await end();
+    expect(sent()).toHaveLength(1);
+    const [url, init] = sent()[0]!;
+    expect(url).toBe("http://127.0.0.1:8080/relay/v1/guidance/feedback");
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer app-token");
+    expect(init.redirect).toBe("manual");
+    expect(JSON.parse(String(init.body))).toEqual({
+      schema_version: 1,
+      recommendation_id: "rec-1",
+      used: [
+        { name: "other", kind: "skill", signal: "loaded" },
+        { name: "chosen", kind: "skill", signal: "loaded" },
+        // The host lowercases a tool name; the offered name is reported.
+        { name: "Demo__One", kind: "mcp_tool", signal: "executed" },
+      ],
+    });
+    expect(String(init.body)).not.toContain("merge two pdf");
+  });
+
+  it("sends an empty list when the run used nothing it offered", async () => {
+    const { end, sent } = await turn(withId(["chosen"]));
+    await end();
+    expect(JSON.parse(String(sent()[0]![1].body)).used).toEqual([]);
+  });
+
+  it("does not count a call that failed or a call of another run", async () => {
+    const { used, end, sent } = await turn(withId(["chosen"]));
+    used("skills_read", { name: "chosen" }, { error: "not found" });
+    used("skills_read", { name: "other" }, {}, { ...RUN, runId: "run-2" });
+    await end();
+    expect(JSON.parse(String(sent()[0]![1].body)).used).toEqual([]);
+  });
+
+  it("sends nothing after a failed run, and nothing twice", async () => {
+    const failed = await turn(withId(["chosen"]));
+    failed.used("skills_read", { name: "chosen" });
+    await failed.end(false);
+    await failed.end(true);
+    expect(failed.sent()).toHaveLength(0);
+    const ok = await turn(withId(["chosen"]));
+    await ok.end();
+    await ok.end();
+    expect(ok.sent()).toHaveLength(1);
+  });
+
+  it("finds the run by the hook context's run ID, as the prompt hook stored it (review of PR 306)", async () => {
+    const { handlers, sent } = await turn(withId(["chosen"]));
+    await handlers.agent_end({ messages: [], success: true }, RUN);
+    expect(sent()).toHaveLength(1);
+  });
+
+  it("records a use by the event's run ID when the hook context has none, like agent_end (review of PR 306)", async () => {
+    const { handlers, end, sent } = await turn(withId(["chosen"]));
+    handlers.after_tool_call({ toolName: "skills_read", params: { name: "chosen" }, runId: "run-1" }, { ...CTX });
+    await end();
+    expect(JSON.parse(String(sent()[0]![1].body)).used).toEqual([{ name: "chosen", kind: "skill", signal: "loaded" }]);
+  });
+
+  it("tracks nothing for an empty recommendation_id, which the gateway would refuse (review of PR 306)", async () => {
+    const { used, end, sent } = await turn({ ...picks(["chosen"], "third_party"), recommendation_id: "" });
+    used("skills_read", { name: "chosen" });
+    await end();
+    expect(sent()).toHaveLength(0);
+  });
+
+  it("reports an offered asset the strict limit refused as refused, the clearest miss (review of PR 306)", async () => {
+    const { handlers, used, end, sent } = await turn(withId(["chosen"]), { limit: "strict" });
+    expect(handlers.before_tool_call({ toolName: "skills_read", params: { name: "other" } }, RUN).block).toBe(true);
+    expect(handlers.before_tool_call({ toolName: "demo__two", params: {} }, RUN).block).toBe(true);
+    // Search refuses no particular asset, so it is not feedback.
+    expect(handlers.before_tool_call({ toolName: "skills_search", params: { query: "x" } }, RUN).block).toBe(true);
+    used("skills_read", { name: "chosen" });
+    await end();
+    expect(JSON.parse(String(sent()[0]![1].body)).used).toEqual([
+      { name: "other", kind: "skill", signal: "refused" },
+      { name: "demo__two", kind: "mcp_tool", signal: "refused" },
+      { name: "chosen", kind: "skill", signal: "loaded" },
+    ]);
+  });
+
+  it("keeps what the run used across a second prompt build of the same run, a retry (review of PR 306)", async () => {
+    const { handlers, used, end, sent } = await turn(withId(["chosen"]));
+    used("skills_read", { name: "other" });
+    vi.stubGlobal("fetch", gatewayWithFeedback({ ...withId(["chosen"]), recommendation_id: "rec-2" }));
+    await handlers.before_prompt_build(EVENT, RUN);
+    used("skills_read", { name: "chosen" });
+    await end();
+    const posts = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(([url]) => String(url).endsWith("/feedback"));
+    expect(sent()).toHaveLength(0);
+    expect(posts).toHaveLength(1);
+    expect(JSON.parse(String(posts[0]![1].body))).toMatchObject({
+      recommendation_id: "rec-2",
+      used: [
+        { name: "other", kind: "skill", signal: "loaded" },
+        { name: "chosen", kind: "skill", signal: "loaded" },
+      ],
+    });
+  });
+
+  it("gives the feedback request a short time of its own, not the prompt hook's (review of PR 306)", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    const { end } = await turn(withId(["chosen"]));
+    timeout.mockClear();
+    await end();
+    expect(timeout).toHaveBeenCalledWith(2000);
+    timeout.mockRestore();
+  });
+
+  it("sends nothing when the answer has no recommendation_id", async () => {
+    const { used, end, sent } = await turn(picks(["chosen"]));
+    used("skills_read", { name: "chosen" });
+    await end();
+    expect(sent()).toHaveLength(0);
+  });
+
+  it("reports with the strict limit on too, and keeps the limit", async () => {
+    const { handlers, used, end, sent } = await turn(withId(["chosen"]), { limit: "strict" });
+    expect(handlers.before_tool_call({ toolName: "skills_read", params: { name: "other" } }, RUN).block).toBe(true);
+    used("skills_read", { name: "chosen" });
+    await end();
+    // The refused one is reported too (review of PR 306).
+    expect(JSON.parse(String(sent()[0]![1].body)).used).toEqual([
+      { name: "other", kind: "skill", signal: "refused" },
+      { name: "chosen", kind: "skill", signal: "loaded" },
+    ]);
+  });
+
+  it("reports at most 1,000 assets, the gateway's limit", async () => {
+    const tools = join(dir, "many.json");
+    writeFileSync(tools, JSON.stringify(Array.from({ length: 1001 }, (_, i) => ({ name: `t${i}`, description: "T" }))));
+    const { used, end, sent } = await turn(withId(["chosen"]), { toolsFile: tools });
+    for (let i = 0; i < 1001; i += 1) used(`t${i}`, {});
+    await end();
+    expect(JSON.parse(String(sent()[0]![1].body)).used).toHaveLength(1000);
+  });
+
+  it("lets a later use replace a refusal even with 1,000 assets recorded (review of PR 306)", async () => {
+    const tools = join(dir, "many.json");
+    writeFileSync(tools, JSON.stringify(Array.from({ length: 1001 }, (_, i) => ({ name: `t${i}`, description: "T" }))));
+    const { handlers, used, end, sent } = await turn(withId(["chosen"]), { toolsFile: tools, limit: "strict" });
+    expect(handlers.before_tool_call({ toolName: "t0", params: {} }, RUN).block).toBe(true);
+    for (let i = 1; i < 1000; i += 1) used(`t${i}`, {});
+    used("t0", {});
+    await end();
+    const reported = JSON.parse(String(sent()[0]![1].body)).used;
+    expect(reported).toHaveLength(1000);
+    expect(reported[0]).toEqual({ name: "t0", kind: "mcp_tool", signal: "executed" });
+  });
+
+  it("stays quiet when the feedback request fails", async () => {
+    const { end } = await turn(withId(["chosen"]));
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("down"); }));
+    await expect(end()).resolves.toBeUndefined();
+    expect(logs.join("\n")).not.toContain("merge two pdf");
+  });
+});

@@ -140,6 +140,8 @@ class GuidanceSettings:
     sync_url: str | None = None
     sync_allow_remote: bool = False
     sync_ms: int = 60000
+    # Selector feedback (spec 0.75; RM48): off unless a loopback feedback URL is set.
+    feedback_url: str | None = None
 
 
 GUIDANCE_FIELDS = frozenset(f.name for f in fields(GuidanceSettings))
@@ -183,6 +185,10 @@ def parse_guidance_settings(value: Mapping) -> GuidanceSettings:
         if raw["primary"] != "http" or type(raw["sync_url"]) is not str:
             raise ValueError("guidance sync_url needs primary http and must be text")
         validate_url(raw["sync_url"])
+    if raw["feedback_url"] is not None:
+        if raw["sync_url"] is None or type(raw["feedback_url"]) is not str:
+            raise ValueError("guidance feedback_url needs sync_url and must be text")
+        validate_url(raw["feedback_url"])
     return GuidanceSettings(**raw)
 
 
@@ -420,6 +426,8 @@ class _Run:
         self.redact: Callable[[str], str] = redact
         self.deadline = clock() + settings.total_ms / 1000
         self.stages: list[dict] = []
+        # The select a host may send feedback about (spec 0.75; RM48), or None.
+        self.recommendation_id: str | None = None
         self.degraded = False
 
     def remaining(self) -> float:
@@ -600,19 +608,20 @@ def _parse_picks(text: str, shortlist: Sequence[Mapping]) -> tuple[list[Mapping]
 
 def _result(run, *, picks, chosen_by, mechanism, offered, shortlist, unclear=False) -> dict:
     decision = "no_match" if not picks else "choose" if unclear and len(picks) > 1 else "picks"
-    return validate_guidance_result(
-        dict(
-            schema_version=1,
-            decision=decision,
-            picks=_picks(picks, run.redact),
-            chosen_by=chosen_by if picks else "none",
-            mechanism=mechanism,
-            degraded=run.degraded,
-            offered=offered,
-            shortlist=shortlist,
-            stages=run.stages,
-        )
+    result = dict(
+        schema_version=1,
+        decision=decision,
+        picks=_picks(picks, run.redact),
+        chosen_by=chosen_by if picks else "none",
+        mechanism=mechanism,
+        degraded=run.degraded,
+        offered=offered,
+        shortlist=shortlist,
+        stages=run.stages,
     )
+    if run.recommendation_id is not None:
+        result["recommendation_id"] = run.recommendation_id
+    return validate_guidance_result(result)
 
 
 _MARKUP_START = re.compile(r"<(?=[A-Za-z!?/])")
@@ -668,11 +677,17 @@ def _record(item: Mapping, redact: Callable[[str], str]) -> dict:
 
 
 class _NotReady(Exception):
-    """The selector has not indexed what it was offered (spec 0.72): a selector failure."""
+    """The selector has not indexed what it was offered (spec 0.72), or says it is unavailable
+    (spec 0.75): a selector failure, so the fallback answers."""
+
+
+def is_partial(mechanism: str) -> bool:
+    """A selector answer over an offer it has only partly indexed (spec 0.75 section 7.7)."""
+    return mechanism.endswith(":partial")
 
 
 async def _third_party(
-    run, request, settings, selector, text, recent, search, on_not_ready=None
+    run, request, settings, selector, text, recent, search, on_sync=None, on_selected=None
 ) -> dict | None:
     """The selector's admitted result, or None after recording why not."""
     started = run.clock()
@@ -730,15 +745,27 @@ async def _third_party(
         validate_against_offer(
             parsed, v2, SelectorIdentity(settings.name, settings.version), http=True
         )
-        if parsed.data["outcome"] == "not_ready":
-            if on_not_ready is not None:
-                # Only what a sync sends: the offered records, and each skill file's path and size.
-                files = {
-                    asset_id: dict(path=item["path"], size_bytes=item["size_bytes"])
-                    for asset_id, item in offered.items()
-                    if "path" in item
-                }
-                on_not_ready(v2.data["catalog"], files)
+        outcome = parsed.data["outcome"]
+        # The selector got this request and answered it: the host may say what the turn used.
+        # Only these answers count; `unavailable` is not one (spec 0.75).
+        if on_selected is not None and outcome in ("ranked", "no_match", "not_ready"):
+            on_selected(
+                v2.data["recommendation_id"], v2.data["catalog_revision"], v2.data["catalog"]
+            )
+            run.recommendation_id = v2.data["recommendation_id"]
+        not_ready = outcome == "not_ready"
+        # A partial answer stands, and the pairs it could not rank still need a sync (spec 0.75).
+        # Only a ranked or no_match answer can be partial.
+        partial = outcome in ("ranked", "no_match") and is_partial(parsed.data["mechanism"])
+        if on_sync is not None and (not_ready or partial):
+            # Only what a sync sends: the offered records, and each skill file's path and size.
+            files = {
+                asset_id: dict(path=item["path"], size_bytes=item["size_bytes"])
+                for asset_id, item in offered.items()
+                if "path" in item
+            }
+            on_sync(v2.data["catalog"], files)
+        if not_ready or outcome == "unavailable":
             raise _NotReady
         return parsed
 
@@ -760,12 +787,15 @@ async def run_guidance(
     selector: object | None = None,
     redact: Callable[[str], str] = lambda text: text,
     clock: Callable[[], float] = time.monotonic,
-    on_not_ready: Callable[[Sequence[Mapping], dict], None] | None = None,
+    on_sync: Callable[[Sequence[Mapping], dict], None] | None = None,
+    on_selected: Callable[[str, int, Sequence[Mapping]], None] | None = None,
 ) -> dict:
     """The stages of section 7.7, or the third-party selector with word match as its fallback.
 
-    `on_not_ready(catalog, files)` hears a valid `not_ready` answer, with the offered records and
-    the skill files by asset ID, so the caller can sync after it answers (RM47).
+    `on_sync(catalog, files)` hears a valid `not_ready` or partial answer, with the offered records
+    and the skill files by asset ID, so the caller can sync after it answers (RM47).
+    `on_selected(recommendation_id, catalog_revision, catalog)` hears every valid selector answer,
+    and the result then carries that `recommendation_id` for feedback (RM48).
     """
     run = _Run(settings, clock, redact)
     assets = request["assets"]
@@ -781,7 +811,15 @@ async def run_guidance(
 
     if settings.primary == "http" and selector is not None:
         answer = await _third_party(
-            run, request, settings, selector, clean, recent_clean, with_recent, on_not_ready
+            run,
+            request,
+            settings,
+            selector,
+            clean,
+            recent_clean,
+            with_recent,
+            on_sync,
+            on_selected,
         )
         if answer is not None:
             return _result(

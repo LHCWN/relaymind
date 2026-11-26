@@ -1,7 +1,7 @@
 # RelayMind guidance plugin for OpenClaw
 
 Optional. On each prompt it asks the RelayMind gateway which few skills the prompt needs, and
-adds one labeled hint to that turn. With `limit: "strict"` it also refuses what was offered and not
+adds one labeled hint to that turn. When the gateway asks for it, it also reports what a successful run used. With `limit: "strict"` it also refuses what was offered and not
 selected. It grants nothing. If anything fails it adds no hint and no limit, and the turn goes on.
 See [the tutorial](../../../docs/guidance.md).
 
@@ -60,6 +60,14 @@ Beyond the first 32 KiB of each file, it reads at most 64 MiB of skill files who
 is offered by its description and read on a later turn, when its `content_hash` changes once to the file's hash.
 When the request would pass the gateway's body limit, it leaves out the file fields first and shortens
 descriptions only after that.
+
+Selector feedback (spec 0.75): when the gateway's answer carries a `recommendation_id`, which it does only when
+the operator set `feedback_url` for a third-party selector, the plugin records which offered skills that run
+loaded (`skills_read`, or a plain `read` inside the skill's folder) and which offered tools it called, counting
+only calls that returned without error; with `limit: "strict"` it also reports an offered asset the limit refused.
+When the run ends with success it sends them to the gateway, picked or not, with no prompt text or path; a failed
+run sends nothing. A skill the user starts with OpenClaw's own command is not seen. It needs no setting of its own, and with no
+`recommendation_id` it sends nothing. See [the tutorial](../../../docs/guidance.md#tell-your-selector-what-a-turn-used).
 
 Tools: OpenClaw's plugin API gives a plugin no list of the host's tools, so tools come from the
 optional `toolsFile`. `relaymind openclaw guidance --tools-file PATH` writes it from the host's MCP
