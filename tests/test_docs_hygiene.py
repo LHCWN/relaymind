@@ -161,7 +161,7 @@ def _github_heading_slugs(text: str) -> set[str]:
             continue
         heading = match.group(1).strip().lower()
         heading = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", heading)
-        heading = re.sub(r"[`*_~]", "", heading)
+        heading = re.sub(r"[`*~]", "", heading)
         heading = re.sub(r"[^\w\s-]", "", heading)
         base = heading.replace(" ", "-")
         seen = counts.get(base, 0)
