@@ -162,12 +162,16 @@ Named subsystems and explicit exceptions:
     `relaymind.selection` to hash `asset_hybrid.py`, `asset_adaptation.py`,
     `adaptation_stage.py`, and `asset_chain.py`), `recommendations/service.py`
     (in `assets/index_lifecycle.py`, `TYPE_CHECKING`-only), and leaf modules.
-  - `recommendations/` imports `assets/`, `selection/`, `store/`,
-    `api/errors.py` (in `recommendations/errors.py`, to share the HTTP error
-    mapping), and leaf modules.
+  - `recommendations/` imports `assets/`, v2 `selection/` (`selection/asset_*.py`,
+    never v1 `selection/`), `store/`, `api/errors.py` (in
+    `recommendations/errors.py`, to share the HTTP error mapping), and leaf
+    modules.
   - V2 selection modules (`selection/asset_*.py` and
     `selection/adaptation_stage.py`) import `assets/`, `recommendations/`,
-    `store/`, and leaf modules.
+    `store/`, leaf modules, other v2 `selection/` modules, and two v1
+    `selection/` helpers (`selection/chain.py` in `selection/asset_admission.py`,
+    and `selection/http.py` in `selection/asset_http.py` and
+    `selection/asset_preparation.py`).
 - **Per-prompt guidance (`guidance/`):** sits beside `recommendations/` and
   imports `adapters/`, `assets/catalog.py`, `recommendations/limits.py`,
   `selection/` (`asset_admission.py`, `asset_contract.py`, `asset_http.py`,

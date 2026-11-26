@@ -24,6 +24,7 @@ CORE_STORE_NAMES = frozenset(
 
 # Documented package-level allowed dependencies from docs/ARCHITECTURE.md.
 ALLOWED_PACKAGE_EDGES: dict[str, frozenset[str]] = {
+    "__init__": frozenset(),
     "canonical": frozenset(),
     "schema_util": frozenset(),
     "redaction": frozenset(),
@@ -193,7 +194,7 @@ ALLOWED_MODULE_EDGES: dict[tuple[str, str], frozenset[str]] = {
         }
     ),
     ("assets", "tools"): frozenset({"relaymind.tools.registry"}),
-    ("assets", "recommendations"): frozenset({"relaymind.recommendations.service"}),
+    ("assets", "recommendations"): frozenset(),
     ("assets", "selection"): frozenset(
         {
             "relaymind.selection.asset_contract",
@@ -201,7 +202,7 @@ ALLOWED_MODULE_EDGES: dict[tuple[str, str], frozenset[str]] = {
             "relaymind.selection.http",
         }
     ),
-    ("recommendations", "api"): frozenset({"relaymind.api.errors"}),
+    ("recommendations", "api"): frozenset(),
     ("guidance", "assets"): frozenset({"relaymind.assets.catalog"}),
     ("guidance", "recommendations"): frozenset({"relaymind.recommendations.limits"}),
     ("guidance", "selection"): frozenset(
@@ -218,12 +219,18 @@ ALLOWED_MODULE_EDGES: dict[tuple[str, str], frozenset[str]] = {
 # File-scoped exceptions documented in docs/ARCHITECTURE.md.
 ALLOWED_FILE_MODULE_EDGES: dict[tuple[str, str], frozenset[str]] = {
     ("assets/embedding_bundle.py", "selection"): frozenset({"relaymind.selection"}),
+    ("assets/index_lifecycle.py", "recommendations"): frozenset(
+        {"relaymind.recommendations.service"}
+    ),
+    ("recommendations/errors.py", "api"): frozenset({"relaymind.api.errors"}),
 }
 
 V2_SELECTION_MODULES = frozenset({"adaptation_stage.py"})
+V2_SELECTION_ALLOWED_V1_HELPERS = frozenset({"chain", "http"})
 M10_ONLY_TARGETS = frozenset({"assets", "recommendations", "store"})
 V2_SELECTION_ALLOWED_TARGETS = M10_ONLY_TARGETS | LEAVES
 CORE_STORE_ONLY_CALLERS = frozenset({"tools", "orchestrator", "ui"})
+V2_SELECTION_ONLY_CALLERS = frozenset({"store", "recommendations"})
 
 
 def _is_v2_selection_name(mod_name: str) -> bool:
@@ -246,8 +253,6 @@ def test_package_imports_match_documented_architecture_contract():
     violations: list[str] = []
     discovered_packages: set[str] = set()
     for path in sorted(SRC.rglob("*.py")):
-        if path.name == "__init__.py" and path.parent == SRC:
-            continue
         pkg = _package_of(path)
         rel_src = path.relative_to(SRC).as_posix()
         discovered_packages.add(pkg)
@@ -289,12 +294,12 @@ def test_package_imports_match_documented_architecture_contract():
                     violations.append(
                         f"{path.relative_to(REPO)}: orchestrator -> v2 selection module {mod}"
                     )
-            # M10 store modules may only import v2 selection modules (never v1 selection).
-            if pkg == "store" and target == "selection":
+            # M10 store and recommendations modules may only import v2 selection modules.
+            if pkg in V2_SELECTION_ONLY_CALLERS and target == "selection":
                 submod = _submodule_in_package("selection", mod)
                 if submod is None or not _is_v2_selection_name(submod):
                     violations.append(
-                        f"{path.relative_to(REPO)}: store -> non-v2 selection module {mod}"
+                        f"{path.relative_to(REPO)}: {pkg} -> non-v2 selection module {mod}"
                     )
     assert not violations, "Forbidden cross-layer imports:\n" + "\n".join(violations)
     assert discovered_packages <= set(ALLOWED_PACKAGE_EDGES)
@@ -356,7 +361,16 @@ def test_type_checking_only_and_v1_selection_restrictions():
                             f"{path.relative_to(REPO)} (v1 selection) imports v2 module {mod}"
                         )
             else:
-                if target != "selection" and target not in V2_SELECTION_ALLOWED_TARGETS:
+                if target == "selection":
+                    submod = _submodule_in_package("selection", mod)
+                    if submod is None or (
+                        not _is_v2_selection_name(submod)
+                        and submod not in V2_SELECTION_ALLOWED_V1_HELPERS
+                    ):
+                        violations.append(
+                            f"{path.relative_to(REPO)} (v2 selection) imports v1 module {mod}"
+                        )
+                elif target not in V2_SELECTION_ALLOWED_TARGETS:
                     violations.append(f"{path.relative_to(REPO)} (v2 selection) imports {mod}")
     assert not violations, "Type-checking / v1-v2 selection violations:\n" + "\n".join(violations)
 
@@ -446,8 +460,9 @@ def test_architecture_doc_lists_every_public_api_module():
     ]
     assert len(api_rows) == 1, f"Expected one API component-map row, found {len(api_rows)}"
     api_row = api_rows[0]
+    api_files_cell = api_row.strip("|").split("|")[2]
     api_modules = sorted(p.name for p in (SRC / "api").glob("*.py") if not p.name.startswith("_"))
-    missing = [name for name in api_modules if f"`{name}`" not in api_row]
+    missing = [name for name in api_modules if f"`{name}`" not in api_files_cell]
     assert not missing, f"API modules missing from docs/ARCHITECTURE.md API row: {missing}"
 
 
