@@ -1145,8 +1145,30 @@ def test_latest_event_returns_highest_seq_using_type_index(store):
     assert any("events_run_type_seq" in step for step in plan), plan
 
 
-def test_appending_many_deltas_uses_bounded_queries_and_indexed_plans(store, clock):
-    """RM22, RM25, #294: appending N deltas uses O(1) indexed queries with zero full-trace scans."""
+_TX_CONTROL_PREFIXES = ("BEGIN", "COMMIT", "ROLLBACK", "SAVEPOINT", "RELEASE", "PRAGMA")
+
+
+def _assert_indexed_plans(conn, traced_sqls: list[str]) -> None:
+    """Verify every non-transaction SQL statement avoids table scans and temp B-tree sorts."""
+    checked_plans = 0
+    for sql in sorted({q.strip() for q in traced_sqls}):
+        norm = " ".join(sql.split()).upper()
+        if not norm or norm.startswith(_TX_CONTROL_PREFIXES):
+            continue
+        plan = [row["detail"] for row in conn.execute(f"EXPLAIN QUERY PLAN {sql}").fetchall()]
+        assert not any(
+            (step.startswith("SCAN ") and step != "SCAN CONSTANT ROW") or "USE TEMP B-TREE" in step
+            for step in plan
+        ), (sql, plan)
+        if plan:
+            checked_plans += 1
+    assert checked_plans >= 1, "expected at least one non-empty query plan to be verified"
+
+
+def test_appending_many_deltas_uses_bounded_queries_and_near_linear_time(store, clock):
+    """RM22, RM25, #294: appending N deltas uses O(1) indexed queries and near-linear CPU time."""
+    import time
+
     run_id = store.create_run("accepted").run_id
     accept(store, run_id)
 
@@ -1170,20 +1192,7 @@ def test_appending_many_deltas_uses_bounded_queries_and_indexed_plans(store, clo
     assert not any("UNION ALL" in q for q in queries_n + queries_2n)
     assert len(queries_n) <= 1000, f"expected <=5 queries per append, got {len(queries_n)}"
     assert len(queries_2n) == 2 * len(queries_n)
-
-    # Every SELECT/UPDATE executed during append_event must use an index/PK (zero table SCANs).
-    checked_plans = 0
-    for sql in sorted({q.strip() for q in queries_n}):
-        upper = sql.upper()
-        if upper.startswith(("SELECT ", "UPDATE ")):
-            plan = [
-                row["detail"] for row in store._conn.execute(f"EXPLAIN QUERY PLAN {sql}").fetchall()
-            ]
-            assert plan and not any(
-                step.startswith("SCAN ") and step != "SCAN CONSTANT ROW" for step in plan
-            ), (sql, plan)
-            checked_plans += 1
-    assert checked_plans >= 2, f"expected SELECT/UPDATE plans checked, got {checked_plans}"
+    _assert_indexed_plans(store._conn, queries_n)
 
     # Batch append uses a constant number of non-INSERT SQLite statements regardless of batch size.
     batch_queries: list[str] = []
@@ -1197,6 +1206,7 @@ def test_appending_many_deltas_uses_bounded_queries_and_indexed_plans(store, clo
     assert len(batch) == 200
     non_insert = [q for q in batch_queries if not q.lstrip().startswith("INSERT")]
     assert len(non_insert) <= 5, f"expected <=5 non-INSERT statements, got {non_insert}"
+    _assert_indexed_plans(store._conn, batch_queries)
 
     # Verify the elapsed_ms index exists and is chosen by SQLite.
     plan = [
@@ -1208,7 +1218,8 @@ def test_appending_many_deltas_uses_bounded_queries_and_indexed_plans(store, clo
     ]
     assert any("events_run_elapsed" in step for step in plan), plan
 
-    # Exercise in-memory fast path (self._in_memory is True) and verify zero MAX queries.
+    # Exercise in-memory fast path (zero WAL/disk I/O): verify zero MAX queries, indexed plans,
+    # and near-linear CPU scaling (2x for O(1)/append vs 8x for O(n)/append across N then 2N).
     mem_clock = FakeClock()
     mem_store = RunStore(":memory:", clock=mem_clock)
     try:
@@ -1224,6 +1235,26 @@ def test_appending_many_deltas_uses_bounded_queries_and_indexed_plans(store, clo
             mem_store._conn.set_trace_callback(None)
         assert not any("MAX(elapsed_ms)" in q for q in mem_queries)
         assert mem_store.elapsed_ms(mem_run) == 100
+        _assert_indexed_plans(mem_store._conn, mem_queries)
+
+        def measure_mem_appends(count: int, prefix: str) -> float:
+            started = time.perf_counter()
+            for i in range(count):
+                mem_clock.mono += 0.001
+                mem_store.append_event(
+                    mem_run, EventType.ANSWER_DELTA, "local", {"text": f"{prefix}{i}"}
+                )
+            return time.perf_counter() - started
+
+        mem_n = measure_mem_appends(1500, "mn")
+        mem_2n = measure_mem_appends(3000, "m2n")
+        assert mem_n + mem_2n < 5.0, (
+            f"expected bounded :memory: append time, got {mem_n + mem_2n:.3f}s"
+        )
+        assert mem_2n <= mem_n * 4.0, (
+            f"expected near-linear :memory: scaling for 2N appends: "
+            f"N={mem_n:.4f}s, 2N={mem_2n:.4f}s"
+        )
     finally:
         mem_store.close()
 
