@@ -19,6 +19,7 @@ from relaymind.orchestrator._run_types import (
     ROUTING_MECHANISM,
     Escalation,
     _Generation,
+    _RunHost,
 )
 from relaymind.orchestrator.placement import PlacementDeclined, marker
 from relaymind.orchestrator.route_decision import (
@@ -50,7 +51,7 @@ from relaymind.selection import (
 from relaymind.store.trace_event import EventType
 
 
-class _SelectionMixin:
+class _SelectionMixin(_RunHost):
     """Routing, selector-chain admission, and routing-cache operations mixed into _Run."""
 
     def _selector_payload(

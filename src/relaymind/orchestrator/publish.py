@@ -12,6 +12,7 @@ from relaymind.orchestrator._run_types import (
     Escalation,
     _Generation,
     _PublicationFailure,
+    _RunHost,
 )
 from relaymind.orchestrator.budgets import BudgetExceededError
 from relaymind.orchestrator.handoff import LOCAL_ACTOR
@@ -27,7 +28,7 @@ from relaymind.store.trace_event import EventType
 from relaymind.tools.registry import ToolResult
 
 
-class _PublishMixin:
+class _PublishMixin(_RunHost):
     """Final answer generation, draft checking, and append-only publication mixed into _Run."""
 
     def _keep_draft(self, text: str) -> None:

@@ -6,7 +6,7 @@ import json
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from relaymind.adapters import (
     AdapterCapabilities,
@@ -26,6 +26,15 @@ from relaymind.skills.predicates import CompletionCriteria, Predicate
 from relaymind.store.trace_event import WORKFLOW_BRANCHES
 from relaymind.tools.executor import ValidatedCall
 from relaymind.tools.registry import ToolResult
+
+if TYPE_CHECKING:
+    from relaymind.orchestrator.budgets import BudgetMeter
+    from relaymind.orchestrator.handoff import DispatchAuthority
+    from relaymind.orchestrator.local_loop import LocalOrchestrator
+    from relaymind.orchestrator.placement import Prediction
+    from relaymind.orchestrator.route_decision import ExecutionMode
+    from relaymind.store import RunRecord
+    from relaymind.store.trace_event import EventType
 
 GATEWAY_ACTOR = "gateway"
 LOCALITIES = (LOCAL_ACTOR, EXTERNAL_ACTOR)
@@ -553,3 +562,100 @@ def _tool_exchange(call: ToolCall, content: Mapping[str, Any]) -> list[Message]:
             content=json.dumps(dict(content), ensure_ascii=False),
         ),
     ]
+
+
+if TYPE_CHECKING:
+
+    class _RunHost(Protocol):
+        """Static typing contract for attributes and cross-mixin methods provided by _Run."""
+
+        o: LocalOrchestrator
+        messages: Sequence[Message]
+        mode: ExecutionMode
+        meter: BudgetMeter
+        authority: DispatchAuthority
+        record: RunRecord
+        final_options: GenerationOptions
+        answer_stream_effective: bool
+        model_calls: list[dict[str, str]]
+        generating: dict[str, ModelAdapter]
+        cancel_asked: set[str]
+        workflow: _Workflow | None
+        tool_branch: str | None
+        decision: RouteDecision | None
+        narrowed: tuple[str, ...] | None
+        language: Language | None
+        confirmation: _Confirmation | None
+        _approvals: dict[str, str]
+        waiting_since: float | None
+        waiting_ms: int
+        offered: list[dict[str, Any]]
+        secrets: set[str]
+        _calls: int
+        routing_placement: Prediction
+        pending_selector: Any
+        pending_placement: Prediction | None
+        _routing_count: tuple[tuple[Message, ...], tuple[ToolSchema, ...], int] | None
+        skill: Skill | None
+        results: list[ToolResult]
+        local_proposals: dict[str, dict[str, Any]]
+        drafts: list[dict[str, Any]]
+
+        @property
+        def run_id(self) -> str: ...
+        @property
+        def active_model(self) -> ConfiguredModel: ...
+        @property
+        def no_local(self) -> bool: ...
+        @property
+        def actor(self) -> str: ...
+        def _local_label(self) -> dict[str, str]: ...
+        def emit(
+            self, event_type: EventType | str, actor: str, payload: Mapping[str, Any]
+        ) -> None: ...
+        def move(self, state: RunState, **kwargs: Any) -> None: ...
+        def scrub(self, text: str) -> str: ...
+        def redact_arguments(self, arguments: Mapping[str, Any]) -> dict[str, Any]: ...
+        def _summary(self) -> dict[str, Any]: ...
+        def _answer_option_record(self) -> dict[str, Any]: ...
+        def _answer_options(self) -> GenerationOptions: ...
+        def _local_unavailable(self, detail: str) -> Escalation: ...
+        def _fail(self, error_code: str, *, detail: str, **extra: Any) -> RunOutcome: ...
+        async def _protected(self, work: Callable[[], Awaitable[RunOutcome]]) -> RunOutcome: ...
+        async def _run_local(
+            self, loop: _Loop, confirmed: _Confirmation | None = None
+        ) -> RunOutcome: ...
+        async def _run_external(
+            self,
+            loop: _Loop,
+            stop: Escalation,
+            confirmed: _Confirmation | None = None,
+            *,
+            prefetch: bool = False,
+        ) -> RunOutcome: ...
+        async def _generate(
+            self,
+            purpose: str,
+            messages: Sequence[Message],
+            tool_schemas: Sequence[ToolSchema],
+            options: GenerationOptions = LOCAL_OPTIONS,
+            *,
+            model: ConfiguredModel | None = None,
+            branch: str | None = None,
+            answer_predicate: str | None = None,
+        ) -> tuple[str, _Generation]: ...
+        def _publication_ready(self, external: bool) -> None: ...
+        def _publish_live(
+            self,
+            generation: _Generation,
+            piece: str,
+            model: ConfiguredModel,
+            check_deadline: Callable[[], None],
+            *,
+            dispatch_role: str,
+        ) -> None: ...
+
+else:
+
+    class _RunHost:
+        pass

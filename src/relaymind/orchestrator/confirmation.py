@@ -18,6 +18,7 @@ from relaymind.orchestrator._run_types import (
     _ConfirmationNeeded,
     _digest,
     _finish,
+    _RunHost,
     _Step,
 )
 from relaymind.orchestrator.run_state import CANCEL_REQUESTED, RunState, SlotUnavailableError
@@ -26,7 +27,7 @@ from relaymind.store.run_store import utc_iso
 from relaymind.store.trace_event import EventType
 
 
-class _ConfirmationMixin:
+class _ConfirmationMixin(_RunHost):
     """Wait expiry, confirmation issuance, decision, and cancellation mixed into _Run."""
 
     def _waited_ms(self) -> int:

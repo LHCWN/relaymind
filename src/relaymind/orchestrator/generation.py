@@ -27,6 +27,7 @@ from relaymind.orchestrator._run_types import (
     _Generation,
     _LivePredicateFailure,
     _PublicationFailure,
+    _RunHost,
     _Workflow,
 )
 from relaymind.orchestrator.budgets import EXTERNAL_PURPOSES, BudgetExceededError
@@ -37,7 +38,7 @@ from relaymind.store.model_timings import observed_cached_tokens
 from relaymind.store.trace_event import EventType
 
 
-class _GenerationMixin:
+class _GenerationMixin(_RunHost):
     """Generation execution, placement admission, cancellation, and timing mixed into _Run."""
 
     def cancel_generation(self) -> None:

@@ -429,7 +429,18 @@ _T = TypeVar("_T")
 
 
 class AcceptedRun:
-    """A run that holds the execution slot, with run.accepted written, and no work started."""
+    """A run that holds the execution slot, with run.accepted written, and no work started.
+
+    A streamed chat request under early headers (RM32, spec 0.32 section
+    7.3) needs the run ID before the run finishes, and every check that
+    can refuse the request (including the 429 slot) before a header is
+    sent. ``LocalOrchestrator.accept`` does that synchronous part. The
+    caller then drives the work in a task it owns with ``start``: the
+    task owns the run from the moment it is created, so
+    ``request_cancel`` maps a disconnect to it as it does for ``run``,
+    even before the task first runs. A task cancelled before it first
+    ran ends the run as cancelled and releases the slot.
+    """
 
     def __init__(
         self,
@@ -446,6 +457,13 @@ class AcceptedRun:
         return self._run.run_id
 
     def start(self, convert: Callable[[RunOutcome], _T]) -> "asyncio.Task[_T]":
+        """Drive the run in a new task whose result is convert(outcome).
+
+        The task owns the run as soon as it exists (request_cancel), and
+        gives it up when it ends. A task cancelled before its first step
+        still ends the run.
+        """
+
         async def drive() -> _T:
             return convert(self._owner._keep_if_waiting(self._run, await self._work()))
 
@@ -457,8 +475,11 @@ class AcceptedRun:
     def _settle(self, task: "asyncio.Task[Any]") -> None:
         self._owner._owned.pop(task, None)
         if task.cancelled():
+            # Cancelled before its first step, the work never reached _protected,
+            # so the run is ended here. A run that already ended is unchanged.
             self._run._abort(asyncio.CancelledError())
         else:
+            # The run recorded its own failure (section 5); nobody retrieves it.
             task.exception()
 
 
@@ -467,7 +488,12 @@ _ABORTED_RUN = "_relaymind_aborted_run"
 
 
 def aborted_run_id(exc: BaseException) -> str | None:
-    """The run whose own work raised exc, or None for any other exception."""
+    """The run whose own work raised exc, or None for any other exception.
+
+    Such a run already ended as failed with internal_error or as
+    cancelled (section 5), so the exception is never an error of the
+    request, whatever its type (section 11).
+    """
     run_id = getattr(exc, _ABORTED_RUN, None)
     return run_id if isinstance(run_id, str) else None
 
@@ -2478,31 +2504,13 @@ def _stop(run: _Run, task: "asyncio.Task[Any]") -> None:
 
 
 __all__ = [
-    "APPROVAL_EXPIRED",
-    "CONTEXT_LIMIT_EXCEEDED",
-    "CORRECTION",
-    "CRITERIA_VALUES_HEADER",
-    "EXTERNAL_FAILED",
-    "EXTERNAL_OPTIONS",
-    "GATEWAY_ACTOR",
-    "INPUT_EXPIRED",
-    "INTERNAL_ERROR",
-    "LOCAL_OPTIONS",
-    "MISSING_INPUT",
-    "NEEDS_EXTERNAL",
-    "AcceptedRun",
     "ApprovalRejectedError",
-    "ConfiguredModel",
     "ConfirmationRequest",
-    "ContextLimitExceeded",
+    "ConfiguredModel",
     "Escalation",
-    "ExecutionModeForbiddenError",
-    "ExternalFailure",
     "LocalOrchestrator",
     "ResumeInputError",
     "RunOutcome",
-    "StartedRun",
     "aborted_run_id",
-    "not_executed_rejection",
     "skill_stage_messages",
 ]

@@ -16,6 +16,7 @@ from relaymind.orchestrator._run_types import (
     _count,
     _Generation,
     _Loop,
+    _RunHost,
     _tool_exchange,
     _tool_exchange_set,
     _Turn,
@@ -38,7 +39,7 @@ from relaymind.tools.executor import (
 from relaymind.tools.registry import SideEffect, ToolResult, ToolStatus
 
 
-class _ToolsMixin:
+class _ToolsMixin(_RunHost):
     """Skill loading, tool admission, prefetch, and execution mixed into _Run."""
 
     def _permitted_tools(
