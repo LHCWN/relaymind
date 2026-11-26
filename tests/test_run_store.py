@@ -1219,7 +1219,7 @@ def test_appending_many_deltas_uses_bounded_queries_and_near_linear_time(store, 
     assert any("events_run_elapsed" in step for step in plan), plan
 
     # Exercise in-memory fast path (zero WAL/disk I/O): verify zero MAX queries, indexed plans,
-    # and near-linear CPU scaling (2x for O(1)/append vs 8x for O(n)/append across N then 2N).
+    # and near-constant per-chunk CPU cost (early vs late chunk medians <= 3.0x).
     mem_clock = FakeClock()
     mem_store = RunStore(":memory:", clock=mem_clock)
     try:
