@@ -1088,3 +1088,68 @@ def test_reveal_confirmation_mismatch_preserves_live_token_and_skips_store_read(
         )
         is None
     )
+
+
+def test_await_confirmation_commits_state_approval_and_event_atomically_for_concurrent_run_view(
+    tmp_path, monkeypatch
+):
+    """RM11, RM17, RM21: concurrent run_view never sees waiting_confirmation without approval."""
+    import threading
+
+    from relaymind.api.native import run_view
+
+    gateway = gateway_for(tmp_path)
+    observed: list[dict] = []
+    real_create = gateway.store.create_approval
+
+    def intercepted_create(run_id, *args, **kwargs):
+        # Simulate GET /relay/v1/runs/{id} running run_view in a worker thread mid-transition.
+        reader = threading.Thread(
+            target=lambda: observed.append(run_view(gateway.orchestrator, run_id))
+        )
+        reader.start()
+        reader.join(timeout=0.05)
+        result = real_create(run_id, *args, **kwargs)
+        readers.append(reader)
+        return result
+
+    readers: list[threading.Thread] = []
+    monkeypatch.setattr(gateway.store, "create_approval", intercepted_create)
+
+    outcome = asyncio.run(gateway.orchestrator.run_text(PROMPT))
+    for reader in readers:
+        reader.join(timeout=2.0)
+        assert not reader.is_alive()
+
+    assert outcome.state is RunState.WAITING_CONFIRMATION
+    assert outcome.confirmation is not None
+    assert len(observed) == 1
+    view = observed[0]
+    assert view["state"] == "waiting_confirmation"
+    assert view["pending_approval"] is not None
+    assert view["pending_approval"]["approval_id"] == outcome.confirmation.approval_id
+
+
+def test_await_confirmation_rolls_back_state_if_approval_creation_fails(tmp_path, monkeypatch):
+    """RM11, RM17: failure during approval issuance rolls back waiting_confirmation."""
+    from relaymind.store.trace_event import EventType
+
+    gateway = gateway_for(tmp_path)
+    seen_run_ids: list[str] = []
+
+    def broken_create(run_id, *args, **kwargs):
+        seen_run_ids.append(run_id)
+        raise RuntimeError("injected approval failure")
+
+    monkeypatch.setattr(gateway.store, "create_approval", broken_create)
+
+    with pytest.raises(RuntimeError, match="injected approval failure"):
+        asyncio.run(gateway.orchestrator.run_text(PROMPT))
+
+    assert len(seen_run_ids) == 1
+    run_id = seen_run_ids[0]
+    record = gateway.store.get_run(run_id)
+    assert record.state == RunState.FAILED.value
+    assert gateway.store.get_pending_approval(run_id) is None
+    events = gateway.store.events(run_id)
+    assert not any(e.event_type == EventType.CONFIRMATION_REQUIRED for e in events)

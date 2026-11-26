@@ -84,33 +84,42 @@ class _ConfirmationMixin(_RunHost):
         target = str(arguments[target_argument])
         # Section 11: the stage ends; waiting is not active time.
         self.meter.end_stage()
-        self.move(RunState.WAITING_CONFIRMATION)
-        version = self.record.version
         token = secrets.token_urlsafe(32)
         store = self.o.store
-        issued = store.create_approval(
-            self.run_id,
-            token=token,
-            tool_name=admitted.tool_name,
-            arguments=arguments,
-            target=target,
-            state_version=version,
-        )
-        approval_id, expires_at = issued.approval_id, issued.expires_at
-        self.emit(
-            EventType.CONFIRMATION_REQUIRED,
-            GATEWAY_ACTOR,
-            {
-                "approval_id": approval_id,
-                "tool_name": admitted.tool_name,
-                "proposal_id": needed.proposal_id,
-                "arguments": arguments,
-                "target": target,
-                "state_version": version,
-                "expires_at": utc_iso(expires_at),
-                "model": self.active_model.model_id,
-            },
-        )
+        previous = self.record
+        try:
+            # Transition, approval issuance, and confirmation.required commit in one
+            # transaction so concurrent run_view readers never observe waiting_confirmation
+            # without a matching pending_approval (RM11, RM17, RM21).
+            with store.transaction():
+                self.move(RunState.WAITING_CONFIRMATION)
+                version = self.record.version
+                issued = store.create_approval(
+                    self.run_id,
+                    token=token,
+                    tool_name=admitted.tool_name,
+                    arguments=arguments,
+                    target=target,
+                    state_version=version,
+                )
+                approval_id, expires_at = issued.approval_id, issued.expires_at
+                self.emit(
+                    EventType.CONFIRMATION_REQUIRED,
+                    GATEWAY_ACTOR,
+                    {
+                        "approval_id": approval_id,
+                        "tool_name": admitted.tool_name,
+                        "proposal_id": needed.proposal_id,
+                        "arguments": arguments,
+                        "target": target,
+                        "state_version": version,
+                        "expires_at": utc_iso(expires_at),
+                        "model": self.active_model.model_id,
+                    },
+                )
+        except Exception:
+            self.record = previous
+            raise
         self.confirmation = _Confirmation(
             loop=needed.loop,
             tool_call=needed.tool_call,
