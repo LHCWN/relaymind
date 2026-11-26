@@ -560,7 +560,8 @@ the next revision changes. The milestone opens with the S0 spikes, each
 a day or less on existing exports or the existing benchmark.
 
 - Specification 0.31 and the documents around it (#113): RM26 to RM32,
-  AC17 to AC23, the changelog, the design rationale, this roadmap.
+  AC17 to AC23 (RM30 and AC23 later retired), the changelog, the design
+  rationale, this roadmap.
 - S0 spikes, measure before commitment (spec section 12.3):
   - read the runtime's `timings` and cached tokens, then rerun the
     latency benchmark, because every cached-token figure so far is an

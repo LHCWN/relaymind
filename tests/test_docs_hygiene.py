@@ -48,31 +48,41 @@ def test_changelog_uses_unique_standard_category_headings():
 
 
 def test_active_docs_use_current_lhcwn_repository_url():
-    """#298: active non-evidence docs never link the pre-rename organization URL."""
+    """#298: active non-evidence docs and CODEOWNERS never cite the pre-rename org name."""
     stale: list[str] = []
-    for path in ACTIVE_DOCS:
+    targets = (*ACTIVE_DOCS, REPO / ".github" / "CODEOWNERS")
+    for path in targets:
         for lineno, line in enumerate(path.read_text("utf-8").splitlines(), 1):
-            if "Last-Humans-Coding-Under-White-Nights/relaymind" in line:
+            if "Last-Humans-Coding-Under-White-Nights" in line:
                 stale.append(f"{path.relative_to(REPO)}:{lineno}")
-    assert not stale, "Pre-rename org URL found in active docs:\n" + "\n".join(stale)
+    assert not stale, "Pre-rename org reference found in active files:\n" + "\n".join(stale)
 
 
-def test_no_unannotated_retired_ids_in_code_tests_or_scripts():
-    """#298: no active code, test, or script cites retired RM30/AC23 without marking it retired."""
+def test_no_unannotated_retired_ids_in_code_tests_scripts_or_docs():
+    """#298: no active code, test, script, or doc cites retired RM30/AC23 without marking it."""
     offenders: list[str] = []
     id_re = re.compile(r"\b(?:RM30|AC23)\b")
-    retired_re = re.compile(r"(?<!\bnot\s)\bretired\b", re.IGNORECASE)
-    for root in (REPO / "src", REPO / "tests", REPO / "scripts"):
-        for path in sorted(root.rglob("*.py")):
-            if path.name == "test_docs_hygiene.py" or "__pycache__" in path.parts:
+    retired_re = re.compile(r"(?<!\bnot\s)\bretir(?:e|ed|ing)\b", re.IGNORECASE)
+    py_files = [
+        path
+        for root in (REPO / "src", REPO / "tests", REPO / "scripts")
+        for path in sorted(root.rglob("*.py"))
+        if path.name != "test_docs_hygiene.py" and "__pycache__" not in path.parts
+    ]
+    # Historical records (CHANGELOG.md and dated docs/design/* memos) may preserve original text.
+    non_historical_docs = [
+        path
+        for path in ACTIVE_DOCS
+        if path != REPO / "CHANGELOG.md" and path.parent != REPO / "docs" / "design"
+    ]
+    for path in (*py_files, *non_historical_docs):
+        lines = path.read_text("utf-8").splitlines()
+        for idx, line in enumerate(lines):
+            if not id_re.search(line):
                 continue
-            lines = path.read_text("utf-8").splitlines()
-            for idx, line in enumerate(lines):
-                if not id_re.search(line):
-                    continue
-                window = " ".join(lines[max(0, idx - 1) : min(len(lines), idx + 2)])
-                if not retired_re.search(window):
-                    offenders.append(f"{path.relative_to(REPO)}:{idx + 1}: {line.strip()}")
+            window = " ".join(lines[max(0, idx - 1) : min(len(lines), idx + 2)])
+            if not retired_re.search(window):
+                offenders.append(f"{path.relative_to(REPO)}:{idx + 1}: {line.strip()}")
     assert not offenders, "Retired RM30/AC23 cited without retired marker:\n" + "\n".join(offenders)
 
 
@@ -110,18 +120,18 @@ def test_specification_section_8_1_schema_status_matches_disk():
     """#298: section 8.1 Shipped vs Planned schema rows match files on disk."""
     spec = (REPO / "docs" / "SPECIFICATION.md").read_text("utf-8")
     start = spec.index("### 8.1 ")
-    end = spec.find("\n### ", start + 1)
-    section = spec[start:] if end == -1 else spec[start:end]
+    table_header = "| Object | Schema path | Contract |"
+    table_start = spec.index(table_header, start)
     shipped_checked = 0
     planned_checked = 0
     missing_shipped: list[str] = []
     unexpected_planned: list[str] = []
-    for line in section.splitlines():
-        if not line.startswith("|") or line.startswith("| ---"):
-            continue
+    for line in spec[table_start:].splitlines()[2:]:
+        if not line.startswith("|"):
+            break
         cells = [cell.strip() for cell in line.strip("|").split("|")]
-        if len(cells) < 3 or cells[0] == "Object":
-            continue
+        if len(cells) < 3:
+            raise AssertionError(f"Malformed section 8.1 schema row: {line!r}")
         contract = cells[2]
         if re.match(r"^Shipped\b", contract):
             for full in _resolve_schema_paths(cells[1]):
@@ -138,6 +148,10 @@ def test_specification_section_8_1_schema_status_matches_disk():
                 shipped_checked += 1
                 if not full.is_file():
                     missing_shipped.append(str(full.relative_to(REPO)))
+        else:
+            raise AssertionError(
+                f"Unclassified section 8.1 Contract cell for {cells[0]!r}: {contract!r}"
+            )
     assert shipped_checked >= 20
     assert planned_checked >= 1
     assert not missing_shipped, f"Shipped schemas missing on disk: {missing_shipped}"
@@ -180,12 +194,54 @@ def _parse_markdown_link_target(raw: str) -> str:
     return target.split(None, 1)[0] if target else ""
 
 
+def _markdown_link_targets(line: str) -> list[str]:
+    """Extract raw markdown link targets outside inline code spans (preserving backtick labels)."""
+    targets: list[str] = []
+    i = 0
+    n = len(line)
+    while i < n:
+        if line[i] == "`":
+            # Skip standalone inline code span of matching backtick length.
+            ticks = 1
+            while i + ticks < n and line[i + ticks] == "`":
+                ticks += 1
+            close = line.find("`" * ticks, i + ticks)
+            i = n if close == -1 else close + ticks
+            continue
+        if line[i] == "[" and (i == 0 or line[i - 1] != "\\"):
+            # Scan link label, skipping over inline code spans inside [...].
+            j = i + 1
+            while j < n and line[j] != "]":
+                if line[j] == "`":
+                    ticks = 1
+                    while j + ticks < n and line[j + ticks] == "`":
+                        ticks += 1
+                    close = line.find("`" * ticks, j + ticks)
+                    j = n if close == -1 else close + ticks
+                else:
+                    j += 1
+            if j + 1 < n and line[j] == "]" and line[j + 1] == "(":
+                k = j + 2
+                depth = 1
+                while k < n and depth > 0:
+                    if line[k] == "(":
+                        depth += 1
+                    elif line[k] == ")":
+                        depth -= 1
+                    k += 1
+                if depth == 0:
+                    targets.append(line[j + 2 : k - 1])
+                    i = k
+                    continue
+        i += 1
+    return targets
+
+
 def test_active_docs_relative_links_and_anchors_resolve():
     """#298: relative markdown links and heading anchors in active docs resolve."""
     heading_cache: dict[Path, set[str]] = {}
     broken: list[str] = []
-    link_re = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
-    inline_code_re = re.compile(r"`[^`]*`")
+    checked = 0
     repo_root = REPO.resolve()
     for path in ACTIVE_DOCS:
         in_fence = False
@@ -195,11 +251,11 @@ def test_active_docs_relative_links_and_anchors_resolve():
                 continue
             if in_fence:
                 continue
-            scrubbed = inline_code_re.sub("", line)
-            for _, raw_target in link_re.findall(scrubbed):
+            for raw_target in _markdown_link_targets(line):
                 target = _parse_markdown_link_target(raw_target)
                 if not target or target.startswith(("http://", "https://", "mailto:")):
                     continue
+                checked += 1
                 file_part, _, anchor = target.partition("#")
                 dest = path.resolve() if not file_part else (path.parent / file_part).resolve()
                 if not dest.is_relative_to(repo_root):
@@ -218,6 +274,7 @@ def test_active_docs_relative_links_and_anchors_resolve():
                             f"{path.relative_to(REPO)}:{lineno}: missing anchor #{anchor} in "
                             f"{dest.relative_to(repo_root)}"
                         )
+    assert checked >= 150, f"Expected backtick-labeled links to be checked, got {checked}"
     assert not broken, "Broken relative links or anchors in active docs:\n" + "\n".join(broken)
 
 
