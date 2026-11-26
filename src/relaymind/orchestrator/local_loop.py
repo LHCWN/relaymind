@@ -1144,11 +1144,21 @@ class LocalOrchestrator:
         if run.wait_expired():
             # Untracked only once the expiry is recorded, so a store
             # error leaves the wait for the next sweep (section 5).
-            outcome = run.expire()
-            del self._waiting[run_id]
+            done = False
+            try:
+                outcome = run.expire()
+                done = True
+            finally:
+                if done or not self._still_waiting(run_id, default=True):
+                    self._drop_waiting(run_id)
             return run, outcome
-        run.reopen(expected_version)
-        del self._waiting[run_id]
+        done = False
+        try:
+            run.reopen(expected_version)
+            done = True
+        finally:
+            if done or not self._still_waiting(run_id, default=True):
+                self._drop_waiting(run_id)
         return run, lambda: run.continue_with(text)
 
     def recover_after_restart(self) -> RecoveryReport:
@@ -1236,9 +1246,9 @@ class LocalOrchestrator:
             step = run.begin_decision(approval_id, token, approve)
         finally:
             # A store that cannot be read keeps the run tracked, as in
-            # expire_waiting, so a later resume or sweep can still end it.
-            if not self._still_waiting(run_id, default=True):
-                self._waiting.pop(run_id, None)
+            # expire_waiting, unless begin_decision already cleared the wait.
+            if run.confirmation is None or not self._still_waiting(run_id, default=True):
+                self._drop_waiting(run_id)
         return run, step
 
     def start(
@@ -1321,10 +1331,18 @@ class LocalOrchestrator:
         """
         tracked = self._waiting.get(run_id)
         if tracked is not None and self._still_waiting(run_id) and tracked.wait_expired():
-            tracked.expire()
-            del self._waiting[run_id]
+            try:
+                tracked.expire()
+            finally:
+                if tracked.waiting_since is None or not self._still_waiting(run_id, default=True):
+                    self._drop_waiting(run_id)
         record = self.store.get_run(run_id)
         state = RunState(record.state)
+        tracked = self._waiting.get(run_id)
+        if state not in WAITING_STATES or (
+            tracked is not None and record.version != tracked.record.version
+        ):
+            self._drop_waiting(run_id)
         if state in TERMINAL_STATES:
             self._driven.pop(run_id, None)
             raise TerminalStateError(f"run {run_id} is {state}; terminal runs never restart")
@@ -1333,10 +1351,15 @@ class LocalOrchestrator:
         if state in WAITING_STATES:
             run = self._waiting.get(run_id)
             if run is not None:
-                record = run.cancel_waiting(expected_version)
-                self._waiting.pop(run_id, None)
-                return record
-            return self._cancel_untracked(run_id, expected_version)
+                try:
+                    record = run.cancel_waiting(expected_version)
+                finally:
+                    if run.waiting_since is None or not self._still_waiting(run_id, default=True):
+                        self._drop_waiting(run_id)
+            else:
+                record = self._cancel_untracked(run_id, expected_version)
+                self._drop_waiting(run_id)
+            return record
         driven = self._driven.get(run_id)
         if driven is None or driven[1].done():
             raise InvalidTransitionError(
@@ -1451,8 +1474,12 @@ class LocalOrchestrator:
         """
         record = self.store.get_run(run_id)
         state = RunState(record.state)
+        tracked = self._waiting.get(run_id)
+        if state not in WAITING_STATES or (
+            tracked is not None and record.version != tracked.record.version
+        ):
+            self._drop_waiting(run_id)
         if state in TERMINAL_STATES:
-            self._waiting.pop(run_id, None)
             raise TerminalStateError(f"run {run_id} is {state}; terminal runs never restart")
         if record.version != expected_version:
             raise StaleVersionError(run_id, expected_version, record.version)
@@ -1487,34 +1514,47 @@ class LocalOrchestrator:
         for run_id, run in list(self._waiting.items()):
             try:
                 if not self._still_waiting(run_id):
-                    del self._waiting[run_id]
+                    self._drop_waiting(run_id)
                 elif run.wait_expired():
                     expired.append(run.expire())
-                    del self._waiting[run_id]
+                    self._drop_waiting(run_id)
             except Exception as exc:
                 if not self._still_waiting(run_id, default=True):
-                    self._waiting.pop(run_id, None)
+                    self._drop_waiting(run_id)
                 else:
                     errors.append(exc)
         if errors:
             raise ExceptionGroup("some expired waits could not be failed", errors)
         return expired
 
+    def _drop_waiting(self, run_id: str) -> None:
+        """Stop tracking a wait and release any unrevealed confirmation token (RM11)."""
+        self._waiting.pop(run_id, None)
+        self._issued.pop(run_id, None)
+
     def _still_waiting(self, run_id: str, *, default: bool = False) -> bool:
-        """True when the store shows the run in a waiting state.
+        """True when the store still shows the tracked wait for run_id.
 
         default is the answer when the store cannot be read.
         """
         try:
-            return RunState(self.store.get_run(run_id).state) in WAITING_STATES
+            record = self.store.get_run(run_id)
         except Exception:
             return default
+        if RunState(record.state) not in WAITING_STATES:
+            return False
+        tracked = self._waiting.get(run_id)
+        return tracked is None or record.version == tracked.record.version
 
     def _keep_if_waiting(self, run: "_Run", outcome: RunOutcome) -> RunOutcome:
         if outcome.state in WAITING_STATES:
             self._waiting[run.run_id] = run
             if outcome.confirmation is not None:
                 self._issued[run.run_id] = outcome.confirmation
+            else:
+                self._issued.pop(run.run_id, None)
+        else:
+            self._drop_waiting(run.run_id)
         # A confirmation of a run that is no longer waiting can never be read.
         for run_id in [r for r in self._issued if r not in self._waiting]:
             del self._issued[run_id]
