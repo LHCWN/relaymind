@@ -136,17 +136,19 @@ Core stack rules:
 Named subsystems and explicit exceptions:
 
 - **Managed skill selection v1 (`selection/`):** sits beside the orchestrator's
-  routing modules rather than below the whole orchestrator. `selection/`
-  imports `orchestrator/router.py` and `orchestrator/route_decision.py` (the
-  router that `model_router` wraps and admission reuses), `identifiers.py`,
-  `skills/`, `tools/`, `adapters/`, and leaf modules;
-  `orchestrator/local_loop.py` and `orchestrator/routing_cache.py` import
-  `selection/`. None of the orchestrator modules that `selection/` imports
-  imports `selection/` back.
+  routing modules rather than below the whole orchestrator. V1 `selection/`
+  modules import `orchestrator/router.py`, `orchestrator/route_decision.py`,
+  and `orchestrator/placement.py` (`PlacementDeclined` in `selection/chain.py`),
+  `identifiers.py`, `skills/`, `tools/`, `adapters/`, and leaf modules (never
+  `assets/`, `recommendations/`, or `store/`); `orchestrator/local_loop.py`
+  and `orchestrator/routing_cache.py` import `selection/`. None of the
+  orchestrator modules that `selection/` imports (directly or transitively
+  within `orchestrator/`) imports `selection/` back.
 - **Asset catalog, recommendations, and v2 selection (`assets/`,
-  `recommendations/`, `selection/asset_*.py`, and M10 `store/` modules):**
-  form a dedicated subsystem built over `RunStore`'s SQLite connection rather
-  than sitting beneath `tools/` or `orchestrator/`:
+  `recommendations/`, `selection/asset_*.py`, `selection/adaptation_stage.py`,
+  and M10 `store/` modules):** form a dedicated subsystem built over
+  `RunStore`'s SQLite connection rather than sitting beneath `tools/` or
+  `orchestrator/`:
   - M10 store modules (`store/asset_catalog.py`, `store/asset_feedback.py`,
     `store/asset_remote_state.py`, `store/asset_vectors.py`,
     `store/index_job_event.py`, `store/recommendation_event.py`,
@@ -155,18 +157,21 @@ Named subsystems and explicit exceptions:
     `recommendations/`, and `selection/asset_*.py`.
   - `assets/` imports `store/` (for persistence), `tools/registry.py` (to
     project MCP tool schemas), `selection/` (`asset_contract.py`,
-    `asset_lexical.py`, `http.py`), `recommendations/service.py` (in
-    `assets/index_lifecycle.py`), and leaf modules.
+    `asset_lexical.py`, `http.py`, plus `assets/embedding_bundle.py` importing
+    `relaymind.selection` to hash `asset_hybrid.py`, `asset_adaptation.py`,
+    `adaptation_stage.py`, and `asset_chain.py`), `recommendations/service.py`
+    (in `assets/index_lifecycle.py`, `TYPE_CHECKING`-only), and leaf modules.
   - `recommendations/` imports `assets/`, `selection/`, `store/`,
     `api/errors.py` (in `recommendations/errors.py`, to share the HTTP error
     mapping), and leaf modules.
-  - `selection/asset_*.py` imports `assets/`, `recommendations/`, `store/`,
-    and leaf modules.
+  - V2 selection modules (`selection/asset_*.py` and
+    `selection/adaptation_stage.py`) import `assets/`, `recommendations/`,
+    `store/`, and leaf modules.
 - **Per-prompt guidance (`guidance/`):** sits beside `recommendations/` and
   imports `adapters/`, `assets/catalog.py`, `recommendations/limits.py`,
-  `selection/` (`asset_admission.py`, `asset_contract.py`, `asset_lexical.py`,
-  `http.py`), and leaf modules. It never imports `orchestrator/`, `store/`,
-  `skills/`, `tools/`, `api/`, or `ui/`.
+  `selection/` (`asset_admission.py`, `asset_contract.py`, `asset_http.py`,
+  `asset_lexical.py`, `http.py`), and leaf modules. It never imports
+  `orchestrator/`, `store/`, `skills/`, `tools/`, `api/`, or `ui/`.
 - **Demo UI (`ui/`):** sits beside `api/`. `api/app.py` installs UI routes, and
   `ui/` imports `api/`, `orchestrator/`, `store/`, and `adapters/`.
 - **Composition roots and evaluation (`launcher.py`, `evaluation/`,

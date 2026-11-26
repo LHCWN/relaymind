@@ -179,10 +179,43 @@ def _package_of(path: Path) -> str:
 
 # Documented narrow module-level restrictions on specific cross-package edges.
 ALLOWED_MODULE_EDGES: dict[tuple[str, str], frozenset[str]] = {
+    ("stats", "adapters"): frozenset({"relaymind.adapters.base"}),
+    ("tools", "adapters"): frozenset({"relaymind.adapters.base"}),
     ("skills", "tools"): frozenset({"relaymind.tools.registry"}),
-    ("recommendations", "api"): frozenset({"relaymind.api.errors"}),
     ("identifiers", "tools"): frozenset({"relaymind.tools.registry"}),
+    ("selection", "orchestrator"): frozenset(
+        {
+            "relaymind.orchestrator.router",
+            "relaymind.orchestrator.route_decision",
+            "relaymind.orchestrator.placement",
+        }
+    ),
+    ("assets", "tools"): frozenset({"relaymind.tools.registry"}),
+    ("assets", "recommendations"): frozenset({"relaymind.recommendations.service"}),
+    ("assets", "selection"): frozenset(
+        {
+            "relaymind.selection",
+            "relaymind.selection.asset_contract",
+            "relaymind.selection.asset_lexical",
+            "relaymind.selection.http",
+        }
+    ),
+    ("recommendations", "api"): frozenset({"relaymind.api.errors"}),
+    ("guidance", "assets"): frozenset({"relaymind.assets.catalog"}),
+    ("guidance", "recommendations"): frozenset({"relaymind.recommendations.limits"}),
+    ("guidance", "selection"): frozenset(
+        {
+            "relaymind.selection.asset_admission",
+            "relaymind.selection.asset_contract",
+            "relaymind.selection.asset_http",
+            "relaymind.selection.asset_lexical",
+            "relaymind.selection.http",
+        }
+    ),
 }
+
+V2_SELECTION_MODULES = frozenset({"adaptation_stage.py"})
+M10_ONLY_TARGETS = frozenset({"assets", "recommendations", "store"})
 
 
 def test_package_imports_match_documented_architecture_contract():
@@ -228,7 +261,7 @@ def test_core_store_modules_depend_only_on_leaves():
                 continue
             target = parts[1]
             if target == "store":
-                if len(parts) >= 3 and parts[2] not in CORE_STORE_NAMES:
+                if len(parts) < 3 or parts[2] not in CORE_STORE_NAMES:
                     violations.append(f"{path.relative_to(REPO)} imports non-core store {mod}")
             elif target not in LEAVES:
                 violations.append(f"{path.relative_to(REPO)} imports {mod}")
@@ -237,32 +270,31 @@ def test_core_store_modules_depend_only_on_leaves():
     )
 
 
-def test_documented_module_level_layer_restrictions():
-    """#297: enforce narrow module-level edges documented in docs/ARCHITECTURE.md."""
+def test_type_checking_only_and_v1_selection_restrictions():
+    """#297: enforce TYPE_CHECKING-only edges and v1/v2 selection isolation."""
     violations: list[str] = []
-    # skills/ may only import tools.registry from tools.
-    for path in sorted((SRC / "skills").rglob("*.py")):
-        for mod in sorted(_imported_modules(path)):
-            parts = mod.split(".")
-            if len(parts) >= 2 and parts[1] == "tools" and mod != "relaymind.tools.registry":
-                violations.append(
-                    f"{path.relative_to(REPO)} imports {mod} (only tools.registry allowed)"
-                )
-    # recommendations/ may only import api.errors from api.
-    for path in sorted((SRC / "recommendations").rglob("*.py")):
-        for mod in sorted(_imported_modules(path)):
-            parts = mod.split(".")
-            if len(parts) >= 2 and parts[1] == "api" and mod != "relaymind.api.errors":
-                violations.append(
-                    f"{path.relative_to(REPO)} imports {mod} (only api.errors allowed)"
-                )
     # identifiers.py may only reference tools under TYPE_CHECKING, never at runtime.
     id_path = SRC / "identifiers.py"
     for mod in sorted(_imported_modules(id_path, include_type_checking=False)):
         parts = mod.split(".")
         if len(parts) >= 2 and parts[1] == "tools":
             violations.append(f"src/relaymind/identifiers.py imports {mod} at runtime")
-    assert not violations, "Module-level layering violations:\n" + "\n".join(violations)
+    # assets/ may only reference recommendations under TYPE_CHECKING, never at runtime.
+    for path in sorted((SRC / "assets").rglob("*.py")):
+        for mod in sorted(_imported_modules(path, include_type_checking=False)):
+            parts = mod.split(".")
+            if len(parts) >= 2 and parts[1] == "recommendations":
+                violations.append(f"{path.relative_to(REPO)} imports {mod} at runtime")
+    # v1 selection modules (everything except asset_*.py and adaptation_stage.py) must not
+    # depend on M10 layers (assets, recommendations, store).
+    for path in sorted((SRC / "selection").rglob("*.py")):
+        if path.name.startswith("asset_") or path.name in V2_SELECTION_MODULES:
+            continue
+        for mod in sorted(_imported_modules(path)):
+            parts = mod.split(".")
+            if len(parts) >= 2 and parts[1] in M10_ONLY_TARGETS:
+                violations.append(f"{path.relative_to(REPO)} (v1 selection) imports {mod}")
+    assert not violations, "Type-checking / v1-selection violations:\n" + "\n".join(violations)
 
 
 def test_adapters_never_import_sqlite_or_other_relaymind_packages():
@@ -287,8 +319,18 @@ def test_adapters_never_import_sqlite_or_other_relaymind_packages():
     assert not violations, "Adapter isolation violations:\n" + "\n".join(violations)
 
 
+def _resolve_orchestrator_module(mod_name: str) -> Path:
+    file_path = SRC / "orchestrator" / f"{mod_name}.py"
+    if file_path.is_file():
+        return file_path
+    pkg_init = SRC / "orchestrator" / mod_name / "__init__.py"
+    if pkg_init.is_file():
+        return pkg_init
+    return SRC / "orchestrator" / "__init__.py"
+
+
 def test_selection_never_creates_an_orchestrator_module_cycle():
-    """#297: orchestrator modules imported by selection never import selection back."""
+    """#297: orchestrator modules imported by selection never reach selection transitively."""
     imported_by_selection: set[str] = set()
     bare_orchestrator_imports: list[str] = []
     for path in sorted((SRC / "selection").rglob("*.py")):
@@ -303,14 +345,28 @@ def test_selection_never_creates_an_orchestrator_module_cycle():
         "selection must import specific orchestrator leaf modules, not the whole package: "
         + ", ".join(bare_orchestrator_imports)
     )
+    # Transitive DFS across orchestrator modules reachable from selection/.
     back_edges: list[str] = []
-    for mod_name in sorted(imported_by_selection):
-        orch_file = SRC / "orchestrator" / f"{mod_name}.py"
-        if orch_file.is_file():
-            for mod in sorted(_imported_modules(orch_file)):
-                parts = mod.split(".")
-                if len(parts) >= 2 and parts[1] == "selection":
-                    back_edges.append(f"{orch_file.relative_to(REPO)} imports {mod}")
+    visited: set[Path] = set()
+    stack: list[Path] = [
+        _resolve_orchestrator_module(name) for name in sorted(imported_by_selection)
+    ]
+    while stack:
+        orch_file = stack.pop()
+        if orch_file in visited or not orch_file.is_file():
+            continue
+        visited.add(orch_file)
+        for mod in sorted(_imported_modules(orch_file)):
+            parts = mod.split(".")
+            if len(parts) < 2:
+                continue
+            if parts[1] == "selection":
+                back_edges.append(f"{orch_file.relative_to(REPO)} imports {mod}")
+            elif parts[1] == "orchestrator":
+                if len(parts) == 2:
+                    stack.append(SRC / "orchestrator" / "__init__.py")
+                else:
+                    stack.append(_resolve_orchestrator_module(parts[2]))
     assert not back_edges, "Cycle between selection and orchestrator:\n" + "\n".join(back_edges)
 
 
@@ -329,7 +385,7 @@ def test_architecture_doc_lists_every_public_api_module():
 
 
 def test_architecture_doc_component_map_files_exist():
-    """#297: every .py file named in single-directory rows of docs/ARCHITECTURE.md exists."""
+    """#297: every file named in docs/ARCHITECTURE.md component map rows exists on disk."""
     missing: list[str] = []
     checked = 0
     for line in ARCH_DOC.read_text("utf-8").splitlines():
@@ -338,15 +394,20 @@ def test_architecture_doc_component_map_files_exist():
         cells = [cell.strip() for cell in line.strip("|").split("|")]
         if len(cells) < 3:
             continue
+        # Verify explicit file paths in the Directory column (e.g. api/guidance.py).
+        for explicit_file in re.findall(r"`(src/relaymind/[^`]+\.py)`", cells[1]):
+            checked += 1
+            if not (REPO / explicit_file).is_file():
+                missing.append(explicit_file)
         dirs = re.findall(r"`(src/relaymind/(?:[^`]+/)?)`", cells[1])
-        if len(dirs) != 1:
+        dirs = [d for d in dirs if d.endswith("/")]
+        if not dirs:
             continue
-        base_dir = REPO / dirs[0]
         for filename in re.findall(r"`([A-Za-z0-9_]+\.py)`", cells[2]):
             checked += 1
-            if not (base_dir / filename).is_file():
-                missing.append(f"{dirs[0]}{filename}")
-    assert checked >= 20
+            if not any((REPO / d / filename).is_file() for d in dirs):
+                missing.append(f"{dirs}: {filename}")
+    assert checked >= 25
     assert not missing, f"Missing files referenced in docs/ARCHITECTURE.md component map: {missing}"
 
 
