@@ -73,7 +73,16 @@ class _PublishMixin:
         return self._publish(generation, LOCAL_ACTOR)
 
     def _draft_publishable(self, draft: str) -> bool:
-        """Whether a draft that met the predicate may be the answer (RM31, AC17)."""
+        """Whether a draft that met the predicate may be the answer (RM31, AC17).
+
+        Only under answer_pass draft. The caller must have sent no
+        non-default answer option (section 7.1), because such an option
+        shapes the final generation and the recorded answer_options must
+        be what shaped the answer (a native run never sets any); an
+        option at its API default does not block the draft. The draft
+        must be in the run's language and hold no tool-call JSON.
+        Otherwise the final generation runs as before.
+        """
         if self.o.performance.answer_pass != "draft":
             return False
         if non_default_answer_options(self._answer_option_record()):
@@ -125,7 +134,11 @@ class _PublishMixin:
         generation.published = True
 
     def _publish(self, generation: _Generation, role: str) -> str:
-        """Publish a validated answer as answer.delta events, once (RM14, RM20)."""
+        """Publish a validated answer as answer.delta events, once (RM14, RM20).
+
+        role is the dispatch role of the model, local or external; the
+        events are labeled with the locality its adapter declares.
+        """
         if generation.published:
             return self.scrub(generation.text)
         self.authority.claim_final_answer(role)

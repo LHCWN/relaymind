@@ -141,10 +141,10 @@ Named subsystems and explicit exceptions:
   modules import `orchestrator/router.py`, `orchestrator/route_decision.py`,
   and `orchestrator/placement.py` (`PlacementDeclined` in `selection/chain.py`),
   `identifiers.py`, `skills/`, `tools/`, `adapters/`, and leaf modules (never
-  `assets/`, `recommendations/`, or `store/`); `orchestrator/local_loop.py`
-  and `orchestrator/routing_cache.py` import `selection/`. None of the
-  orchestrator modules that `selection/` imports (directly or transitively
-  within `orchestrator/`) imports `selection/` back.
+  `assets/`, `recommendations/`, or `store/`); `orchestrator/local_loop.py`,
+  `orchestrator/selection.py`, and `orchestrator/routing_cache.py` import
+  `selection/`. None of the orchestrator modules that `selection/` imports
+  (directly or transitively within `orchestrator/`) imports `selection/` back.
 - **Asset catalog, recommendations, and v2 selection (`assets/`,
   `recommendations/`, `selection/asset_*.py`, `selection/adaptation_stage.py`,
   and M10 `store/` modules):** form a dedicated subsystem built over

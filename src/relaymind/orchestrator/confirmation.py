@@ -41,7 +41,13 @@ class _ConfirmationMixin:
         return self.o.clock.monotonic() - self.waiting_since > self.o.budgets.waiting_seconds
 
     def expire(self) -> RunOutcome:
-        """An expired wait ends as failed with input_expired or approval_expired (section 5)."""
+        """An expired wait ends as failed with input_expired or approval_expired (section 5).
+
+        Section 12.1: the wait counts toward the waiting_ms of run.failed,
+        the only waiting field that event has (section 8). The wait is
+        closed only once the transition succeeds: if the store fails, the
+        run keeps its wait unchanged, so a later sweep can expire it.
+        """
         waited_ms = self._waited_ms()
         self.record = self.o.store.get_run(self.run_id)
         self.waiting_ms += waited_ms
@@ -62,12 +68,20 @@ class _ConfirmationMixin:
     def _await_confirmation(
         self, needed: _ConfirmationNeeded, stop: Escalation | None
     ) -> RunOutcome:
-        """Suspend in waiting_confirmation with a single-use approval (RM11, RM17)."""
+        """Suspend in waiting_confirmation with a single-use approval (RM11, RM17).
+
+        The approval is bound to the run's version in waiting_confirmation,
+        so it is issued after the transition. Only the token's hash is
+        stored; the plaintext token goes to the caller in the outcome.
+        """
         admitted = needed.admitted
         target_argument = admitted.tool.confirmation_target
         assert target_argument is not None  # _admit rejects a tool without one
         arguments = self.redact_arguments(admitted.arguments)
+        # Read from the redacted arguments, so a secret target is never
+        # written in plaintext (RM12); the digest still binds its value.
         target = str(arguments[target_argument])
+        # Section 11: the stage ends; waiting is not active time.
         self.meter.end_stage()
         self.move(RunState.WAITING_CONFIRMATION)
         version = self.record.version
@@ -131,7 +145,19 @@ class _ConfirmationMixin:
         return await _finish(self.begin_decision(approval_id, token, approve))
 
     def begin_decision(self, approval_id: str, token: str, approve: bool) -> _Step:
-        """Check and apply the answer to the pending confirmation (RM11, section 5)."""
+        """Check and apply the answer to the pending confirmation (RM11, section 5).
+
+        Returns the outcome when the answer ended the run, or the
+        continuation to await when the run goes on.
+
+        The approval ID and the token are checked first, so a caller
+        without the token gets 403 and changes nothing: it cannot expire
+        the run or learn about the slot. Then an expired approval fails
+        the run, and an approval checks the execution slot (429). The
+        approval is consumed in the same store transaction as the resume
+        or the cancel, so a resume that fails, for example because another
+        process took the slot, keeps the approval (section 5).
+        """
         pending = self.confirmation
         assert pending is not None
         if approval_id != pending.approval_id or not hmac.compare_digest(
@@ -139,6 +165,7 @@ class _ConfirmationMixin:
         ):
             raise ApprovalRejectedError("the approval does not match the pending confirmation")
         if not hmac.compare_digest(_arguments_digest(pending.admitted), pending.arguments_digest):
+            # A held call that drifted from the approval is refused, not executed.
             raise ApprovalRejectedError("the held call does not match the approval")
         if self.wait_expired():
             return self.expire()
@@ -170,6 +197,8 @@ class _ConfirmationMixin:
                 self.run_id, RunState.CANCELLED, error_code=USER_DENIED, decision=self.decision
             )
         self._approvals[pending.proposal_id] = pending.approval_id
+        # Like a clarification resume: a new stage with the full per-stage
+        # limits, inside the entire-run limits (spec 0.10 section 5).
         self.meter.new_stage()
         if pending.stop is None:
             return lambda: self._protected(lambda: self._run_local(pending.loop, pending))
@@ -177,7 +206,11 @@ class _ConfirmationMixin:
         return lambda: self._protected(lambda: self._run_external(pending.loop, stop, pending))
 
     def cancel_waiting(self, expected_version: int) -> RunRecord:
-        """Cancel the run on request while it waits (RM17, RM21)."""
+        """Cancel the run on request while it waits (RM17, RM21).
+
+        The pending approval ends in the same transaction as the
+        cancel, and the wait counts toward waiting_ms of run.cancelled.
+        """
         waited_ms = self._waited_ms()
         summary = self._summary()
         summary["waiting_ms"] += waited_ms

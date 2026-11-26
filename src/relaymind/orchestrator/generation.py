@@ -30,7 +30,7 @@ from relaymind.orchestrator._run_types import (
     _Workflow,
 )
 from relaymind.orchestrator.budgets import EXTERNAL_PURPOSES, BudgetExceededError
-from relaymind.orchestrator.placement import PlacementDeclined, marker
+from relaymind.orchestrator.placement import PlacementDeclined, Prediction, marker
 from relaymind.skills.predicates import StatementGate, StatementRejected
 from relaymind.store import ModelTiming
 from relaymind.store.model_timings import observed_cached_tokens
@@ -59,7 +59,7 @@ class _GenerationMixin:
         messages: Sequence[Message],
         tool_schemas: Sequence[ToolSchema],
         options: GenerationOptions,
-    ) -> Any:
+    ) -> Prediction:
         """Count tokens (reusing routing measurement when identical) and check placement."""
         tokens = None
         measured = self._routing_count
@@ -118,7 +118,14 @@ class _GenerationMixin:
         branch: str | None = None,
         answer_predicate: str | None = None,
     ) -> tuple[str, _Generation]:
-        """Charge, run, and trace one model call (RM03, RM16); the only budget path."""
+        """Charge, run, and trace one model call (RM03, RM16); the only budget path.
+
+        The model is the one that holds dispatch authority (RM14), unless
+        the parallel workflow names its own: the checklist draft is made
+        by the external model before the join (spec 0.25). branch labels
+        the call and its events with its workflow branch.
+        Returns the call ID and what the model produced.
+        """
         if self.authority.answer_owner is not None:
             raise RuntimeError("an answer generation already owns this run")
         model = model or self.active_model
@@ -126,11 +133,52 @@ class _GenerationMixin:
         on_external = purpose in EXTERNAL_PURPOSES
         label = {} if branch is None else {"branch": branch}
         self.meter.check_generation(purpose)
-        placement = (
-            await self._admit_local_placement(model, purpose, messages, tool_schemas, options)
-            if model.actor == "local"
-            else marker(external=True)
-        )
+        placement = marker(external=True)
+        if model.actor == "local":
+            tokens = None
+            measured = self._routing_count
+            if measured is not None and (tuple(messages), tuple(tool_schemas)) == measured[:2]:
+                tokens = measured[2]
+            else:
+                try:
+                    async with asyncio.timeout(
+                        max(self.meter.remaining_seconds(), 0.001)
+                    ) as token_timeout:
+                        tokens = await model.adapter.count_tokens(messages, tool_schemas)
+                except TimeoutError:
+                    if token_timeout.expired():
+                        raise self.meter.time_exhausted() from None
+                    # The adapter's own tokenizer timeout is an unavailable measurement,
+                    # not evidence that the gateway's active-time budget was spent.
+                    tokens = None
+                except Exception:
+                    # Counting solely for placement must not create a capability failure.
+                    tokens = None
+                else:
+                    if token_timeout.expired():
+                        # A tokenizer that suppressed cancellation still used its budget.
+                        raise self.meter.time_exhausted()
+            self.meter.check_generation(purpose)
+            prediction = self.o.placement.predict(
+                model.model_id, purpose, tokens, output_cap=options.max_output_tokens
+            )
+            placement = self.o.placement.admit(
+                prediction,
+                mode=self.mode.value,
+                external_model=None if self.o.external is None else self.o.external.model_id,
+                stage_seconds=self.o.budgets.active_seconds - self.meter.elapsed_seconds(),
+                run_seconds=self.o.budgets.run_active_seconds - self.meter.active_seconds(),
+                skill_id=None if self.skill is None else self.skill.name,
+            )
+            if purpose == "routing":
+                self.routing_placement = placement
+            if placement.role == "none":
+                if purpose == "routing":
+                    # route.selected carries a routing decline (section 14.2.2);
+                    # a later handoff or failure never does.
+                    raise PlacementDeclined(placement)
+                self.pending_placement = placement
+                raise Escalation("local_slow", "local generation declined by placement")
         self.meter.charge_generation(purpose)
         self._calls += 1
         call_id = f"{self.run_id}_gen{self._calls}_{purpose}"
@@ -144,6 +192,9 @@ class _GenerationMixin:
         actor = model.actor
         call = {"call_id": call_id, "model": model_id, "actor": actor, "purpose": purpose}
         self.model_calls.append(call)
+        # Spec 0.33 section 8: the provider options an adapter sends are on the record,
+        # only when at least one is declared. A local runtime, a double, and an
+        # external adapter without declared options record none alike.
         declared = getattr(model.adapter, "request_options", None)
         sent = {"request_options": dict(declared)} if declared else {}
         self.emit(
@@ -158,6 +209,7 @@ class _GenerationMixin:
             },
         )
         started = self.o.clock.monotonic()
+        # The monotonic time of the first generated fragment (spec 0.31 section 6).
         first_token: float | None = None
         generation = _Generation(call_id=call_id)
         gate = (
@@ -170,6 +222,9 @@ class _GenerationMixin:
         usage: Usage | None = None
         finish: str | None = None
         completed = False
+        # True while the gateway's own statement gate works, so an unexpected
+        # exception there ends the run as internal_error (section 5); only
+        # an exception from the provider is a failed generation (RM32).
         gating = False
         failure: GenerationFailed | None = None
         exhausted: BudgetExceededError | None = None
@@ -195,7 +250,12 @@ class _GenerationMixin:
         try:
             async with asyncio.timeout(max(limit, 0.001)) as timeout:
                 if placement.deadline_seconds is not None:
+                    # Request provider cancellation at expiry even if the iterator
+                    # suppresses task cancellation and needs the provider to stop
+                    # before its cleanup can finish. This timer never releases the slot.
                     deadline = timeout.when()
+                    # timeout() above always receives a finite duration, never None;
+                    # this timer must not be silently omitted for a placement deadline.
                     assert deadline is not None
                     provider_cancel_timer = asyncio.get_running_loop().call_at(
                         deadline, self._cancel_call, call_id
@@ -209,6 +269,8 @@ class _GenerationMixin:
                     async for event in stream:
                         if gate is not None:
                             check_live()
+                        # The marker is consumed here and never forwarded. An adapter
+                        # that sends none is dated at its first text or tool call.
                         if first_token is None and (
                             isinstance(event, FirstToken | ToolCall)
                             or (isinstance(event, TextDelta) and event.text)
@@ -257,6 +319,9 @@ class _GenerationMixin:
                                 break
             task = asyncio.current_task()
             if task is not None and task.cancelling():
+                # A provider that ignored the cancel answered late. Its
+                # result is dropped: it proposes, runs, and publishes
+                # nothing (spec 0.19 section 7.4).
                 generation, finish = _Generation(), None
                 raise asyncio.CancelledError
             if timeout.expired() or (
@@ -288,6 +353,8 @@ class _GenerationMixin:
                         )
                     gating = False
         except TimeoutError:
+            # The trace names the limit that bounded this generation, local
+            # or external, not always local time (RM03, RM16).
             task = asyncio.current_task()
             if task is not None and task.cancelling():
                 failure = GenerationFailed(code="cancelled", message="model generation interrupted")
@@ -338,6 +405,7 @@ class _GenerationMixin:
                     "predicted_ms": placement.predicted_ms,
                     "deadline_ms": placement.deadline_ms,
                     "deadline_missed": deadline_missed,
+                    # Integer ms from the request start; null when no token arrived.
                     "first_token_ms": None
                     if first_token is None
                     else round((first_token - started) * 1000),
@@ -353,6 +421,7 @@ class _GenerationMixin:
                     else {
                         "input_tokens": usage.input_tokens,
                         "output_tokens": usage.output_tokens,
+                        # None when the source reported none: null, never 0 (RM16).
                         "cached_tokens": usage.cached_tokens,
                         "reasoning_tokens": usage.reasoning_tokens,
                     },
@@ -379,13 +448,20 @@ class _GenerationMixin:
                     f"external generation failed: {failure.code}", generation_error=failure.code
                 )
             if gate is not None and generation.calls and not generation.published:
+                # A tool proposal where none was offered is invalid_output (section
+                # 4.1); before any statement was forwarded the caller escalates it
+                # exactly as under buffered (RM32).
                 return call_id, generation
             raise self._local_unavailable(f"local generation failed: {failure.code}")
         self.meter.check_time(on_external)
         return call_id, generation
 
     def _finish_model_call(self, actor: str, payload: Mapping[str, Any]) -> None:
-        """Keep the sample and completion event in one transaction (RM17, RM27)."""
+        """Keep the sample and completion event in one transaction (RM17, RM27).
+
+        Client-owned and fixed-workflow calls use this same boundary.
+        Task/predicate success is distinct from the provider call's success.
+        """
         usage = payload["usage"]
         if usage is not None:
             usage = {
@@ -421,7 +497,12 @@ class _GenerationMixin:
         duration_ms: int,
         failure: GenerationFailed | None,
     ) -> None:
-        """Record a workflow call for the terminal summary (RM15, RM25, section 8)."""
+        """Record a workflow call for the terminal summary (RM15, RM25, section 8).
+
+        A synthesis call adds to the extra call latency; a parallel branch
+        call that ended cancelled is abandoned. The synthesis is not a
+        parallel branch call, so it is never abandoned.
+        """
         if branch == SYNTHESIS:
             workflow.synthesis_ms.append(duration_ms)
         elif failure is not None and failure.code == "cancelled":
@@ -430,7 +511,12 @@ class _GenerationMixin:
     def _answer_options(
         self, defaults: GenerationOptions, *, tools_offered: bool = False
     ) -> GenerationOptions:
-        """The caller's options laid over an answer generation's defaults."""
+        """The caller's options laid over an answer generation's defaults.
+
+        A generation offered tools may propose a tool call instead of the
+        answer, so the caller's token budget, a final-response budget, is
+        not applied to it: it would cut off the call (spec 0.14 section 7.1).
+        """
         requested = {
             name: value for name, value in asdict(self.final_options).items() if value is not None
         }

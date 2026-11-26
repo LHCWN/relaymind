@@ -67,7 +67,12 @@ class _ToolsMixin:
         )
 
     def _local_setup(self, decision: RouteDecision, *, read_only: bool = False) -> _Loop:
-        """Load the skill and build the first local conversation (RM06, RM08)."""
+        """Load the skill and build the first local conversation (RM06, RM08).
+
+        read_only keeps only the tools without side effects: the branches
+        of the parallel workflow never get a mutating tool, and the
+        instruction names only the tools offered (spec 0.25 section 4.4).
+        """
         assert decision.skill_id is not None
         skill = self.skill = self._load_skill(decision.skill_id)
         available, schemas = self._permitted_tools(self._skill_allowlist(skill))
@@ -79,6 +84,8 @@ class _ToolsMixin:
             )
             schemas = tuple(schema for schema in schemas if schema.name in available)
         if not schemas:
+            # RM08: nothing the skill allows is available to this caller,
+            # nor to the external stage, which gets the same tools (section 4.4).
             raise Escalation(
                 "capability_missing",
                 f"no permitted tools for skill {skill.name!r}",
@@ -91,7 +98,20 @@ class _ToolsMixin:
         return _Loop(conversation, schemas, available, skill, predicate)
 
     async def _prefetch(self, loop: _Loop) -> None:
-        """Run the skill's declared calls before its first generation (RM29, AC18)."""
+        """Run the skill's declared calls before its first generation (RM29, AC18).
+
+        Only under performance.prefetch. Each declared call is resolved from the
+        user turns by the RM05 rule; one the request does not settle is skipped,
+        and the model proposes it as before. A resolved call passes the checks
+        of a model proposal (RM08, RM09, RM05) and is recorded as a gateway
+        proposal, mechanism prefetch. The admitted calls run together and are
+        charged to the budgets; their exchange joins the conversation in the
+        declared order, so tool output stays data (RM12). Dispatch authority
+        stays with the stage's actor (RM14), and a later proposal of the same
+        call replays the recorded operation (RM10). Prefetch is not started
+        when its new executions exceed the tool budget's room (one per call;
+        a retry can still use more, and then the run ends on budget).
+        """
         skill = loop.skill
         if not self.o.performance.prefetch or skill is None or not skill.prefetch:
             return
@@ -134,18 +154,22 @@ class _ToolsMixin:
             r.tool_name for r in self.results if r.status is ToolStatus.SUCCEEDED
         }
         if not pending:
+            # Every tool the skill needs has a result: an answer generation (section 7.3).
             loop.schemas = ()
             loop.available = frozenset()
 
     async def _tool_step(self, loop: _Loop, turn: _Turn) -> None:
         """Run an admitted turn, or hold its call for a confirmation if it mutates (RM11)."""
         if len(turn.admitted) > 1:
+            # Only read-only calls are admitted as a set (section 4.3).
             await self._execute_set(loop, turn)
             return
         call, admitted, proposal_id = turn.calls[0], turn.admitted[0], turn.proposal_ids[0]
         if admitted.tool.side_effect is SideEffect.MUTATING and not self.o.executor.has_operation(
             admitted
         ):
+            # A call with a recorded operation is a replay: no handler runs
+            # and nothing needs confirming (RM10).
             raise _ConfirmationNeeded(loop, call, admitted, proposal_id)
         await self._execute_step(loop, call, admitted, proposal_id)
 
@@ -177,7 +201,17 @@ class _ToolsMixin:
         return result
 
     async def _execute_set(self, loop: _Loop, turn: _Turn) -> None:
-        """Run an admitted set in proposal order, one executor call each (section 4.3)."""
+        """Run an admitted set in proposal order, one executor call each (section 4.3).
+
+        The set fits the remaining tool budget when one execution is counted
+        for each call (_admit_set); a retry of a transient failure is charged
+        too, so the budget can still run out in the middle, and the run then
+        ends on budget as it would for a single call. A failed call of the
+        local actor escalates at once, as it does for a single call (section
+        11), and the calls after it do not run. When every call ran, the
+        conversation gets one assistant message with every call and one
+        tool message for each.
+        """
         contents = []
         for admitted, proposal_id in zip(turn.admitted, turn.proposal_ids, strict=True):
             result = await self._dispatch_step(loop, admitted, proposal_id)
@@ -192,7 +226,14 @@ class _ToolsMixin:
         *,
         many: bool | None = None,
     ) -> _Turn:
-        """Admit a tool turn and record every proposed call (RM05, RM09, RM11, RM16)."""
+        """Admit a tool turn and record every proposed call (RM05, RM09, RM11, RM16).
+
+        The same checks hold for the local and the external actor. Every
+        proposed call is recorded, so a turn with several calls keeps all
+        of them in the trace (RM16, RM23). many says whether the
+        generation is judged as a set (section 4.3); None takes the
+        performance option.
+        """
         calls = tuple(generation.calls)
         if many is None:
             many = self.o.performance.calls_per_generation == "many"
@@ -204,6 +245,10 @@ class _ToolsMixin:
             one, rejection = self._admit(calls, available, self.results)
             admitted = [] if one is None else [one]
         turn = _Turn(calls, tuple(admitted), rejection, (), answer_all=as_set, offending=offending)
+        # A call that failed its own checks carries its rejection; the valid calls of that
+        # set are recorded as not executed, so the trace never calls a valid call malformed
+        # (RM16). A rejection about the set (a limit, a mutation, no room) is every call's.
+        # The repair exchange tells each call the same (spec 0.34 section 4.3).
         proposal_ids = tuple(
             self._propose(call, skill, call_rejection)
             for call, call_rejection in zip(calls, turn.call_rejections(), strict=True)
@@ -238,7 +283,17 @@ class _ToolsMixin:
         available: frozenset[str],
         results: Sequence[ToolResult],
     ) -> tuple[list[ValidatedCall], dict[str, str] | None, int | None]:
-        """The validated calls of a set, or one rejection of the whole generation (section 4.3)."""
+        """The validated calls of a set, or one rejection of the whole generation (section 4.3).
+
+        More calls than the limit, or a mutating call among several, is
+        multiple_tool_calls. Then each call is validated on its own, and
+        the first rejection in proposal order is the one reported, so a
+        partly valid set never runs in part; the third value is the position
+        of the call it belongs to (None for a rejection about the set).
+        Last, the calls that need a new execution must fit what the tool
+        budget has left (section 11), counting one execution per call; a
+        retry is not reserved for.
+        """
         limit = self.meter.admitted_calls_limit()
         if len(calls) > limit:
             return (
@@ -310,6 +365,8 @@ class _ToolsMixin:
             )
         except ToolRejectedError as exc:
             return None, {"code": exc.code, "message": str(exc)}
+        # RM05: an identifier must come from a user turn or a tool result,
+        # never from the model alone (section 5).
         provenance = identifiers.provenance_text(self.messages, results)
         unsupported = identifiers.unsupported_identifiers(
             admitted.arguments, admitted.tool.declaration.input_schema, provenance
@@ -325,6 +382,7 @@ class _ToolsMixin:
             admitted.tool.side_effect is SideEffect.MUTATING
             and admitted.tool.confirmation_target is None
         ):
+            # RM11: a confirmation binds the target; without one it cannot be asked.
             return None, {
                 "code": CONFIRMATION_UNSUPPORTED,
                 "message": (
@@ -342,7 +400,8 @@ class _ToolsMixin:
         *,
         mechanism: str | None = None,
     ) -> str:
-        """Record a proposed call."""
+        """Record a proposed call. mechanism names a gateway-made call (prefetch, RM29):
+        actor gateway and model null (RM22); a model's proposal leaves it out."""
         proposal_id = f"proposal_{uuid.uuid4().hex[:16]}"
         arguments = self.redact_arguments(call.arguments)
         by_gateway = mechanism is not None
@@ -365,8 +424,10 @@ class _ToolsMixin:
             },
         )
         if by_gateway:
+            # A gateway call is no proposal of a model: it is an operation or it is refused.
             return proposal_id
         if self.authority.holder == LOCAL_ACTOR:
+            # Until it produces an operation, it is only a proposal (RM13).
             self.local_proposals[proposal_id] = {
                 "kind": "tool_call",
                 "label": "proposal",
@@ -384,7 +445,13 @@ class _ToolsMixin:
     async def _dispatch(
         self, call: ValidatedCall, proposal_id: str, actor: str, *, mechanism: str | None = None
     ) -> ToolResult:
-        """Execute (or replay) the call, with the one retry section 11 allows."""
+        """Execute (or replay) the call, with the one retry section 11 allows.
+
+        Only the actor that holds dispatch authority may dispatch (RM14).
+        mechanism names a call the gateway made itself, a prefetch: it
+        runs for the actor that holds authority, and its events name no
+        model but carry the mechanism.
+        """
         self.authority.require(actor)
         execution = await self._execute(call, proposal_id, attempt=1, mechanism=mechanism)
         if self.o.executor.may_retry(call, execution.result, attempt=1):
@@ -407,12 +474,17 @@ class _ToolsMixin:
         }
         approval_id = self._approvals.get(proposal_id)
         if approval_id is not None:
+            # RM11: a confirmed call names the approval that authorized it.
             common["approval_id"] = approval_id
+        # A gateway-made call has no originating model (RM22, spec 0.31); the store
+        # keeps an internal label, because its column is not nullable.
         model_id = None if mechanism is not None else self.active_model.model_id
         if mechanism is not None:
+            # The marker tells a gateway-made call from a model-made one that lost its model.
             common["mechanism"] = mechanism
 
         def before_run(operation_id: str) -> None:
+            # Only a real execution is charged (RM03); a replay never is.
             self.meter.charge_tool_call()
             self.emit(
                 EventType.TOOL_STARTED,
@@ -422,6 +494,8 @@ class _ToolsMixin:
 
         def on_finished(execution: Execution) -> None:
             self.secrets |= execution.secrets
+            # The proposal has a recorded outcome now, so a handoff lists
+            # it as a completed operation, never also as a proposal (RM13).
             self.local_proposals.pop(proposal_id, None)
             result = execution.result
             self.emit(
@@ -449,7 +523,10 @@ class _ToolsMixin:
                 secrets=frozenset(self.secrets),
             )
         except OperationInFlightError as exc:
+            # RM14: an operation in flight blocks continuation that could repeat it.
             raise Escalation("tool_failure", str(exc), operation_id=exc.operation_id) from exc
+        # A tool bounded by the remaining budget ends the run on budget.
+        # Timer resolution can leave the trace clock just before its deadline.
         if execution.time_limit_exhausted:
             raise self.meter.time_exhausted()
         self.meter.check_time()

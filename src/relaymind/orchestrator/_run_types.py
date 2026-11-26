@@ -1,11 +1,12 @@
 """Shared types, constants, and pure helpers for the orchestrator modules (#296)."""
 
+import asyncio
 import hashlib
 import json
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from relaymind.adapters import (
     AdapterCapabilities,
@@ -25,9 +26,6 @@ from relaymind.skills.predicates import CompletionCriteria, Predicate
 from relaymind.store.trace_event import WORKFLOW_BRANCHES
 from relaymind.tools.executor import ValidatedCall
 from relaymind.tools.registry import ToolResult
-
-if TYPE_CHECKING:
-    import asyncio
 
 GATEWAY_ACTOR = "gateway"
 LOCALITIES = (LOCAL_ACTOR, EXTERNAL_ACTOR)
@@ -255,7 +253,22 @@ class ApprovalRejectedError(Exception):
 
 
 class Escalation(Exception):
-    """End the run as needs_external with an RM04 reason code."""
+    """End the run as needs_external with an RM04 reason code.
+
+    The reason code must be one of the section 8 operational labels;
+    anything else is a gateway bug, refused before it reaches a trace.
+    Raised inside a run, that refusal is an unexpected exception, so the
+    run fails with internal_error and never stays active.
+
+    hand_off is False for a stop that must not reach the external model:
+    one the external stage could not resolve either, such as a skill with
+    no permitted tool (RM08); a failed branch of the parallel workflow
+    (RM15), which never hands off in its place; and an unavailable local model when the
+    operator policy does not permit degraded mode (section 11). Such a
+    stop ends as needs_external without a handoff (section 4.4). With
+    degraded mode permitted, an unavailable local model hands off like
+    any other stop, and degraded is set so the trace records it.
+    """
 
     def __init__(
         self,
@@ -405,7 +418,15 @@ class _Generation:
 
 @dataclass(frozen=True)
 class _Turn:
-    """What the gateway decided about the tool calls of one generation (RM05, RM09, RM11)."""
+    """What the gateway decided about the tool calls of one generation (RM05, RM09, RM11).
+
+    admitted holds the validated calls in proposal order, one for each
+    entry of proposal_ids, and is empty when the turn was rejected as a
+    whole. answer_all says that the generation was judged as a set
+    (calls_per_generation many), so a rejection answers every call.
+    offending is the position of the call that failed its own checks, which
+    the rejection belongs to; it is None when the rejection is about the set.
+    """
 
     calls: tuple[ToolCall, ...]
     admitted: tuple[ValidatedCall, ...]
@@ -415,7 +436,12 @@ class _Turn:
     offending: int | None = None
 
     def call_rejections(self) -> list[dict[str, str] | None]:
-        """What each call is told, in proposal order; the trace records the same (section 4.3)."""
+        """What each call is told, in proposal order; the trace records the same (section 4.3).
+
+        The call that failed its own checks gets the rejection and the
+        other calls of the set not_executed. A rejection about the set
+        belongs to no single call, so every call gets it (spec 0.34).
+        """
         return [
             not_executed_rejection()
             if self.offending is not None and index != self.offending
@@ -424,7 +450,12 @@ class _Turn:
         ]
 
     def rejection_exchange(self) -> list[Message]:
-        """The proposed calls and the rejection, as data for the repair (RM12)."""
+        """The proposed calls and the rejection, as data for the repair (RM12).
+
+        A chat provider rejects a request in which an assistant tool call
+        has no tool message, so a set answers every call, each with the
+        rejection its tool.proposed records (spec 0.34 section 4.3).
+        """
         assert self.rejection is not None
         if not self.answer_all:
             return _tool_exchange(self.calls[0], {"error": self.rejection})
@@ -461,7 +492,12 @@ def _correction_exchange(text: str) -> list[Message]:
 
 
 def _external_correction(loop: _Loop, text: str, results: Sequence[ToolResult]) -> list[Message]:
-    """A rejected external answer and a correction that names the failed checks (spec 0.35)."""
+    """A rejected external answer and a correction that names the failed checks (spec 0.35).
+
+    The checks are gateway text from the skill's predicate; the rejected
+    answer is not quoted in the correction (RM12). A loop without criteria,
+    the parallel synthesis, gets the generic correction (AC14).
+    """
     if loop.criteria is None:
         return _correction_exchange(text)
     checks = loop.criteria.failed_checks(text, results) if text.strip() else (EMPTY_ANSWER_CHECK,)
@@ -489,7 +525,11 @@ def _arguments_digest(call: ValidatedCall) -> str:
 def _tool_exchange_set(
     calls: Sequence[ToolCall], contents: Sequence[Mapping[str, Any]]
 ) -> list[Message]:
-    """Every call of a set in one assistant message, then one tool message for each (RM12)."""
+    """Every call of a set in one assistant message, then one tool message for each (RM12).
+
+    A chat provider requires each assistant tool call to have a tool
+    message, in the order of the calls.
+    """
     return [
         Message(role=Role.ASSISTANT, tool_calls=tuple(calls)),
         *[

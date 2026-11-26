@@ -176,7 +176,17 @@ class _SelectionMixin:
     async def _select(
         self, input_tokens: int | None, cache_key: tuple[str, CacheContext] | None
     ) -> Routing:
-        """Run the selector chain and record the admitted choice, or the chain's failure."""
+        """Run the selector chain and record the admitted choice, or the chain's failure.
+
+        The routing generation of model_router runs through ``_generate``,
+        so it is charged, traced, and cancellable as before; its
+        route.selected keeps the model's actor and fields. A choice of any
+        other selector is the gateway's (actor gateway, the selector's
+        mechanism). Only a routing generation's choice is stored in the
+        routing cache (section 10). Without a usable local model (RM26) the
+        chain has no model-based selector, a chosen skill routes external
+        with reason no_local_model, and every route.selected records the class.
+        """
         generations: list[tuple[str, _Generation]] = []
         generation_stop: Exception | asyncio.CancelledError | None = None
 
@@ -343,7 +353,11 @@ class _SelectionMixin:
         return routing
 
     def _selection_request(self) -> Any:
-        """The SelectionRequest of this routing, without a deadline (RM28, section 8)."""
+        """The SelectionRequest of this routing, without a deadline (RM28, section 8).
+
+        The conversation is the run's text messages, redacted (RM12); the
+        catalog is every offered skill at its run.accepted snapshot (RM07).
+        """
         roles = (Role.SYSTEM, Role.DEVELOPER, Role.USER, Role.ASSISTANT)
         conversation = [
             {"role": m.role.value, "content": m.content}
@@ -387,7 +401,13 @@ class _SelectionMixin:
         return self.language or request_language(self.messages)
 
     def _cached_routing(self, cache_key: tuple[str, CacheContext] | None) -> Routing | None:
-        """The routing of a cache hit, or None for a miss (no routing generation then ran)."""
+        """The routing of a cache hit, or None for a miss (no routing generation then ran).
+
+        Only the skill choice is cached. The decision is built again with
+        the gateway rules of a resume, so identifiers and the route come
+        from the current request and registry; anything but a local route
+        is a miss. Authorization and tools are not touched here (RM08).
+        """
         cache = self.o.routing_cache
         if cache is None or cache_key is None:
             return None
