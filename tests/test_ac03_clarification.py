@@ -500,7 +500,7 @@ def test_an_unexpected_error_in_a_resumed_run_fails_it_and_frees_the_slot(tmp_pa
     def broken(*args, **kwargs):
         raise RuntimeError("router bug")
 
-    gateway.orchestrator.router.resume_decision = broken
+    gateway.orchestrator.router.skill_routing = broken
     with pytest.raises(RuntimeError):
         resume(gateway, waiting, "staging-api")
     record = gateway.store.get_run(waiting.run_id)

@@ -10,7 +10,7 @@ exact schema version.
 
 import copy
 import json
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from importlib import resources
 from typing import Any, NoReturn
 
@@ -59,6 +59,25 @@ StrictValidator = extend(
 def load_packaged_schema(package: str, name: str) -> dict[str, Any]:
     """Load ``schemas/<name>`` published inside a package."""
     return json.loads(resources.files(package).joinpath("schemas", name).read_text("utf-8"))
+
+
+def is_closed_mapping(value: object, fields: Collection[str], *, exact: bool = True) -> bool:
+    """True when value is a Mapping with exact field set (or subset when exact=False)."""
+    if not isinstance(value, Mapping):
+        return False
+    expected = fields if isinstance(fields, (set, frozenset)) else set(fields)
+    keys = set(value)
+    return keys == expected if exact else keys <= expected
+
+
+def max_bytes_validator(message: str) -> Callable[[Any, Any, Any, Any], Any]:
+    """Build a jsonschema keyword validator enforcing UTF-8 byte bounds on strings."""
+
+    def _validate(validator: Any, limit: Any, instance: Any, schema: Any) -> Any:
+        if isinstance(instance, str) and len(instance.encode("utf-8")) > limit:
+            yield ValidationError(message)
+
+    return _validate
 
 
 def check_closed_fields(

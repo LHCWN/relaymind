@@ -27,7 +27,6 @@ from relaymind.assets.catalog import (
     validate_catalog_snapshot,
 )
 from relaymind.canonical import canonical_json
-from relaymind.redaction import Redactor
 from relaymind.schema_util import freeze_json
 from relaymind.store.index_job_event import CANCELLED_REASONS, FAILED_REASONS, validate_job_event
 from relaymind.store.run_store import RunStore, append_event, utc_iso
@@ -123,7 +122,7 @@ class AssetCatalogStore:
         for document in documents:
             check()
             record = validate_asset_record(document.record.to_json_object())
-            verified = project_asset(record, body=None, redactor=Redactor(), secrets=())
+            verified = project_asset(record, body=None, secrets=())
             if (
                 document.body is not None
                 or verified.projection_digest != document.projection_digest
@@ -401,7 +400,7 @@ class AssetCatalogStore:
         for document in capture.documents:
             check()
             record = validate_asset_record(document.record.to_json_object())
-            verified = project_asset(record, body=document.body, redactor=Redactor(), secrets=())
+            verified = project_asset(record, body=document.body, secrets=())
             if (
                 record.source_id != capture.source_id
                 or record.availability != "unknown"

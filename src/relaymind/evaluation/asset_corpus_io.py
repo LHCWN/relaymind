@@ -12,7 +12,7 @@ from jsonschema import ValidationError
 from jsonschema.validators import extend
 
 from relaymind.assets.source_io import open_source_tree
-from relaymind.schema_util import StrictValidator, load_packaged_schema
+from relaymind.schema_util import StrictValidator, load_packaged_schema, max_bytes_validator
 
 MIB = 1024 * 1024
 DOCUMENT_BYTES = 64 * MIB
@@ -160,9 +160,7 @@ def parse_json(payload: bytes) -> dict[str, Any]:
     return value
 
 
-def _max_bytes(validator, limit, instance, schema):
-    if isinstance(instance, str) and len(instance.encode("utf-8")) > limit:
-        yield ValidationError("UTF-8 byte limit exceeded")
+_max_bytes = max_bytes_validator("UTF-8 byte limit exceeded")
 
 
 def _sorted(validator, enabled, instance, schema):

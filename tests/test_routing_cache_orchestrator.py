@@ -372,12 +372,21 @@ def test_a_hit_the_gateway_cannot_use_counts_as_a_miss(tmp_path, monkeypatch):
     )
     run(gateway)
 
-    def refuse(*args, **kwargs):
-        raise RouteDecisionError("the cached skill no longer fits")
+    real_skill_routing = gateway.orchestrator.router.skill_routing
+    failed_once = False
 
-    monkeypatch.setattr(gateway.orchestrator.router, "resume_decision", refuse)
+    def refuse(*args, **kwargs):
+        nonlocal failed_once
+        if not failed_once and "no_local" not in kwargs:
+            failed_once = True
+            raise RouteDecisionError("the cached skill no longer fits")
+        return real_skill_routing(*args, **kwargs)
+
+    monkeypatch.setattr(gateway.orchestrator.router, "skill_routing", refuse)
     _, events = run(gateway)
+    assert failed_once
     assert not of_type(events, "cache.hit")
     assert labeled_route(events)["routing_cache"] == "miss"
+    assert labeled_route(events)["mechanism"] == "native_function_calling"
     counters = cache.counters()
     assert (counters["hits"], counters["misses"]) == (0, 2)

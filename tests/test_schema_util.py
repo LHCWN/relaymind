@@ -13,13 +13,16 @@ import pickle
 
 import pytest
 from jsonschema import Draft202012Validator
+from jsonschema.validators import extend
 
 from relaymind.schema_util import (
     check_closed_fields,
     check_schema_version,
     first_schema_error,
     freeze_json,
+    is_closed_mapping,
     load_packaged_schema,
+    max_bytes_validator,
 )
 
 FIELDS = ("schema_version", "route")
@@ -150,3 +153,32 @@ def test_a_deep_copy_of_a_frozen_value_is_plain_and_editable():
     thawed["properties"]["service"]["enum"].append("payments-api")
     assert type(thawed) is dict and type(thawed["required"]) is list
     assert thawed["properties"]["service"]["enum"] == ["staging-api", "payments-api"]
+
+
+def test_is_closed_mapping_checks_exact_subset_and_non_mappings():
+    fields = frozenset({"a", "b"})
+    assert is_closed_mapping({"a": 1, "b": 2}, fields)
+    assert not is_closed_mapping({"a": 1}, fields)
+    assert not is_closed_mapping({"a": 1, "b": 2, "c": 3}, fields)
+    assert is_closed_mapping({"a": 1}, fields, exact=False)
+    assert is_closed_mapping({}, fields, exact=False)
+    assert not is_closed_mapping({"a": 1, "c": 3}, fields, exact=False)
+    assert is_closed_mapping({"a": 1, "b": 2}, ["a", "b"])
+    for invalid in (None, [], "ab", 123):
+        assert not is_closed_mapping(invalid, fields)
+        assert not is_closed_mapping(invalid, fields, exact=False)
+
+
+def test_max_bytes_validator_enforces_utf8_byte_bounds():
+    validator_cls = extend(
+        Draft202012Validator,
+        validators={"x-max-bytes": max_bytes_validator("too many bytes")},
+    )
+    validator = validator_cls({"type": "string", "x-max-bytes": 6})
+    assert validator.is_valid("abcdef")
+    assert not validator.is_valid("abcdefg")
+    # 2 Chinese characters = 6 UTF-8 bytes (valid); 3 characters = 9 UTF-8 bytes (rejected).
+    assert validator.is_valid("中文")
+    errors = list(validator.iter_errors("中文字"))
+    assert len(errors) == 1
+    assert errors[0].message == "too many bytes"

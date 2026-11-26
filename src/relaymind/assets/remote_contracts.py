@@ -14,7 +14,6 @@ class RemoteSourceProfile:
     api_version: str
     minimum_poll_seconds: int
     rights_sha256: str
-    qualification_digest: str
 
 
 PUBLIC_SKILLS = RemoteSourceProfile(
@@ -26,7 +25,6 @@ PUBLIC_SKILLS = RemoteSourceProfile(
     "2022-11-28",
     300,
     "a0df745636ded7b39d42761f4e5000fb0718c04e98be6b004bf00efdcd79509a",
-    "d3089469be1a914da591186f0b9f8019c5a740b5a01942e6f19d54de12fd681a",
 )
 
 

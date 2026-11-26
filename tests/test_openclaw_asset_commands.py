@@ -10,6 +10,7 @@ import subprocess
 import pytest
 
 from api_helpers import RunningServer
+from openclaw_helpers import require_node_dependencies
 from recommendation_helpers import setup
 from test_asset_user_actions import ACTION_TOKEN, enable_fixture_action
 from test_openclaw_host_transport import PACKAGE, REQUIRED, _missing, _node
@@ -45,11 +46,7 @@ def drive_actions(app, driver: str, output, *, timeout: float, env=None, package
 
 @pytest.fixture(autouse=True)
 def node_dependencies():
-    reason = _missing()
-    if reason:
-        if REQUIRED:
-            pytest.fail(reason)
-        pytest.skip(reason)
+    require_node_dependencies(_missing, required=REQUIRED, fail_prefix="")
 
 
 def test_dormant_client_routes_and_explicit_fixture_actions(tmp_path):

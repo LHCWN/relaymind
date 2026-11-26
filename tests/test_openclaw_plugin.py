@@ -22,6 +22,7 @@ import pytest
 from api_helpers import RUN_ID_HEADER, RunningServer, make_app, token_of
 from gateway_helpers import build_gateway, text_turn
 from helpers import of_type
+from openclaw_helpers import require_node_dependencies
 from relaymind.api.app import ChatSettings
 from relaymind.api.chat import ClientToolsChat
 from relaymind.orchestrator.local_status import LocalStatus
@@ -41,11 +42,7 @@ RECONNECT = "openclaw models auth paste-api-key --provider relaymind"
 
 @pytest.fixture(autouse=True)
 def node_dependencies():
-    reason = _missing()
-    if reason is not None:
-        if REQUIRED:
-            pytest.fail(f"RELAYMIND_OPENCLAW_NODE=1 but {reason}")
-        pytest.skip(reason)
+    require_node_dependencies(_missing, required=REQUIRED)
 
 
 def driver_env(base_url, token):

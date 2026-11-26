@@ -2130,7 +2130,7 @@ class _Run:
         """The clarify named a skill: check the new input, no generation (section 5)."""
         assert self.language is not None
         try:
-            routing = self.o.router.resume_decision(
+            routing = self.o.router.skill_routing(
                 skill_id,
                 self.messages,
                 mode=self.mode,
@@ -3202,7 +3202,7 @@ class _Run:
         if hit is None:
             return None
         try:
-            routing = self.o.router.resume_decision(
+            routing = self.o.router.skill_routing(
                 hit.route.skill_id,
                 self.messages,
                 mode=self.mode,

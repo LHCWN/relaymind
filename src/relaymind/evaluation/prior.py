@@ -15,6 +15,7 @@ import jsonschema
 from relaymind.adapters import GenerationOptions
 from relaymind.canonical import canonical_digest
 from relaymind.orchestrator.budgets import LocalBudgets
+from relaymind.schema_util import is_closed_mapping
 from relaymind.store import ModelTiming, RunStore
 from relaymind.store.outcomes import is_local_attempt, project_outcome
 from relaymind.store.trace_event import TRACE_EVENT_SCHEMA, validate_trace_event
@@ -27,7 +28,7 @@ def byte_digest(path: Path) -> str:
 
 
 def _closed(value: object, fields: set[str], label: str) -> dict:
-    if not isinstance(value, dict) or set(value) != fields:
+    if not isinstance(value, dict) or not is_closed_mapping(value, fields):
         raise ValueError(f"{label}: expected exactly {sorted(fields)}")
     return value
 

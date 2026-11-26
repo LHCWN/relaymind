@@ -35,7 +35,6 @@ _SELECTED = frozenset(
 class ArchiveInspection:
     original_sha256: str
     entry_count: int
-    declared_bytes: int
     selected: Mapping[str, bytes]
 
 
@@ -193,7 +192,7 @@ def inspect_skill_archive(payload: bytes) -> ArchiveInspection:
                     raise AssetCorpusError("archive_limit")
                 selected[info.filename] = _selected_bytes(payload, info, limit, bounds[info])
             return ArchiveInspection(
-                hashlib.sha256(payload).hexdigest(), len(infos), total, MappingProxyType(selected)
+                hashlib.sha256(payload).hexdigest(), len(infos), MappingProxyType(selected)
             )
     except (
         zipfile.BadZipFile,

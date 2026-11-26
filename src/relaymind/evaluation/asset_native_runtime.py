@@ -18,7 +18,6 @@ from relaymind.assets.sources import SourceFailure, source_config_digest
 from relaymind.canonical import canonical_digest
 from relaymind.evaluation.asset_corpus_io import AssetCorpusError
 from relaymind.recommendations.service import CatalogProvider, RecommendationService
-from relaymind.redaction import Redactor
 from relaymind.selection.asset_contract import SelectorContext
 from relaymind.selection.asset_lexical import IMPLEMENTATION
 from relaymind.selection.asset_preparation import (
@@ -148,7 +147,6 @@ class NativeBenchmarkRuntime:
                 project_asset(
                     validate_asset_record(asset["record"]),
                     body=None,
-                    redactor=Redactor(),
                     secrets=(),
                 )
                 for asset in release.catalog["assets"]

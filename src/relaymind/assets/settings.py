@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from relaymind.assets.catalog import text
+from relaymind.schema_util import is_closed_mapping
 from relaymind.selection.http import validate_url
 
 
@@ -59,7 +60,7 @@ RECOMMENDATION_FIELDS = frozenset(RecommendationSettings.__dataclass_fields__)
 
 
 def _closed(value: object, fields: frozenset[str], label: str) -> Mapping[str, Any]:
-    if not isinstance(value, Mapping) or set(value) - fields:
+    if not isinstance(value, Mapping) or not is_closed_mapping(value, fields, exact=False):
         raise ValueError(f"{label}: unknown fields or invalid table")
     return value
 

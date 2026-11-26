@@ -27,7 +27,7 @@ trusted only for the skill choice:
   gets a clarify decision with missing_input, naming that skill and the
   missing argument, when no allowed value appears in a user turn
   (``relaymind.orchestrator.identifiers``).
-- On resume after such a clarification (section 5), resume_decision
+- On resume after such a clarification (section 5), skill_routing
   checks the new input for the missing identifier with the same rule,
   without a routing generation: the chosen skill's route, or the same
   clarify again.
@@ -404,26 +404,6 @@ class Router:
         """The selector chain chose nothing (RM28): route external with no skill."""
         return self._external_decision(messages, mode, language, "selection_failed")
 
-    def resume_decision(
-        self,
-        skill_id: str,
-        messages: Sequence[Message],
-        *,
-        mode: ExecutionMode,
-        language: Language,
-        no_local: bool = False,
-    ) -> Routing:
-        """The decision for a resume after a clarify that named skill_id (section 5).
-
-        No routing generation: the gateway checks the conversation, now
-        with the resume input, for the identifier the skill still needs.
-        no_local is a run without a usable local model (RM26).
-        """
-        skill = self._skills.get(skill_id)
-        if skill is None:
-            raise RouteDecisionError(f"skill {skill_id!r} is not in the advertised catalog")
-        return self._skill_routing(skill, messages, mode, language, no_local=no_local)
-
     def skill_routing(
         self,
         skill_id: str,
@@ -433,7 +413,7 @@ class Router:
         language: Language,
         no_local: bool = False,
     ) -> Routing:
-        """The decision for a skill a selector chose (RM28), as for the router's own choice.
+        """The decision for a known skill (after selector choice RM28 or resume section 5).
 
         Catalog membership, then the route from the registry entry and the
         mode, and the RM05 identifier check with the gateway's clarification.

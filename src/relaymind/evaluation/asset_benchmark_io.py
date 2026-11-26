@@ -17,15 +17,12 @@ from relaymind.evaluation.asset_corpus_io import (
     read_local,
     relative_path,
 )
-from relaymind.schema_util import StrictValidator, load_packaged_schema
+from relaymind.schema_util import StrictValidator, load_packaged_schema, max_bytes_validator
 
 CONFIG_BYTES = 4 * 1024 * 1024
 REPORT_BYTES = 256 * 1024 * 1024
 
-
-def _max_bytes(validator, limit, instance, schema):
-    if isinstance(instance, str) and len(instance.encode("utf-8")) > limit:
-        yield ValidationError("byte_bound")
+_max_bytes = max_bytes_validator("byte_bound")
 
 
 def _relative(validator, enabled, instance, schema):

@@ -33,6 +33,7 @@ import pytest
 from api_helpers import RUN_ID_HEADER, RunningServer, make_app, token_of
 from gateway_helpers import build_gateway, replace_handler, text_turn, tool_turn
 from helpers import ScriptedAdapter, load_script_module, make_capabilities, of_type
+from openclaw_helpers import require_node_dependencies
 from relaymind.adapters import Completed, Role, ToolCall
 from relaymind.api.app import ChatSettings, NativeSettings
 from relaymind.api.chat import ClientToolsChat
@@ -56,11 +57,7 @@ ANSWER = "The tool said: echo: lantern."
 
 @pytest.fixture(autouse=True)
 def node_dependencies():
-    reason = _missing()
-    if reason is not None:
-        if REQUIRED:
-            pytest.fail(f"RELAYMIND_OPENCLAW_NODE=1 but {reason}")
-        pytest.skip(reason)
+    require_node_dependencies(_missing, required=REQUIRED)
 
 
 def client_gateway(tmp_path, turns=None, *, settings=None, native=None, **options):

@@ -445,7 +445,7 @@ def test_a_resume_with_the_identifier_continues_with_the_chosen_skill(router):
     the new input for the missing identifier without a routing generation,
     and the decision keeps the run's language."""
     messages = (*ASKED, Message(role=Role.USER, content="staging-api"))
-    routing = router.resume_decision(
+    routing = router.skill_routing(
         "check-service-health", messages, mode=ExecutionMode.AUTO, language=Language.ZH
     )
     decision = routing.decision
@@ -457,7 +457,7 @@ def test_a_resume_with_the_identifier_continues_with_the_chosen_skill(router):
 def test_a_resume_without_the_identifier_asks_again_in_the_run_language(router):
     """RM05: the gateway's own question lists the IDs but is not provenance."""
     messages = (*ASKED, Message(role=Role.USER, content="you pick"))
-    routing = router.resume_decision(
+    routing = router.skill_routing(
         "check-service-health", messages, mode=ExecutionMode.AUTO, language=Language.ZH
     )
     assert routing.decision.route is Route.CLARIFY

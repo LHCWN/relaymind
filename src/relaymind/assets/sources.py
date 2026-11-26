@@ -649,9 +649,7 @@ def _skill_document(
         | context.redactor.secret_values(metadata)
         | context.redactor.secret_values(fallback)
     )
-    return project_asset(
-        validate_asset_record(value), body=body, redactor=context.redactor, secrets=secrets
-    )
+    return project_asset(validate_asset_record(value), body=body, secrets=secrets)
 
 
 def _check_regular(info: SourceInfo) -> None:
@@ -845,9 +843,7 @@ def _import(
                 "stale": False,
             }
         )
-        documents.append(
-            project_asset(record, body=None, redactor=context.redactor, secrets=context.secrets)
-        )
+        documents.append(project_asset(record, body=None, secrets=context.secrets))
         context.finish_record()
     context.finish_batch()
     if data["complete"] and records_by_id - ids - removed:
