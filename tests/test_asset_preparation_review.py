@@ -274,15 +274,42 @@ def test_client_records_deadline_and_invalid_cleanup_without_false_readiness(mon
     module.validate_preparation_record(record, config=config, binding=binding)
 
 
+def _reported_calls_claim(calls: int) -> dict:
+    claim = dict(
+        provenance="reported",
+        value=dict.fromkeys(
+            (
+                "input_tokens",
+                "output_tokens",
+                "cached_tokens",
+                "reasoning_tokens",
+                "calls",
+                "cpu_ms",
+                "peak_bytes",
+            )
+        ),
+    )
+    claim["value"]["calls"] = calls
+    return claim
+
+
 @pytest.mark.parametrize("ending", ["ready", "failed", "timeout_ready_cleanup"])
-def test_genuine_main_outcomes_and_reported_claims_stay_valid(ending):
+def test_genuine_main_outcomes_and_reported_claims_stay_valid(monkeypatch, ending):
     import httpx
 
     from relaymind.selection import asset_preparation as module
     from test_asset_preparation import inputs, reply, response
 
     _, catalog, binding, config = inputs()
-    config |= dict(total_ms=80, request_ms=60, max_polls=5)
+    config |= dict(total_ms=2000, request_ms=1000, poll_ms=1000, max_polls=5)
+    clock = FakeClock()
+    real_sleep = asyncio.sleep
+
+    async def fake_sleep(delay):
+        clock.advance(delay)
+        await real_sleep(0)
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
     requests = []
 
     def handler(request):
@@ -298,27 +325,16 @@ def test_genuine_main_outcomes_and_reported_claims_stay_valid(ending):
             state, reason = "failed", "build_failed"
         else:
             state, reason = "indexing", None
-        claim = dict(
-            provenance="reported",
-            value={
-                k: None
-                for k in (
-                    "input_tokens",
-                    "output_tokens",
-                    "cached_tokens",
-                    "reasoning_tokens",
-                    "calls",
-                    "cpu_ms",
-                    "peak_bytes",
-                )
-            },
-        )
-        claim["value"]["calls"] = len(requests)
+        claim = _reported_calls_claim(len(requests))
         return reply(200, json=response(raw, state=state, reason=reason, usage_claims=claim))
 
     record = asyncio.run(
         module.prepare_asset_index(
-            config, binding, catalog, transport_factory=lambda: httpx.MockTransport(handler)
+            config,
+            binding,
+            catalog,
+            clock=clock.monotonic,
+            transport_factory=lambda: httpx.MockTransport(handler),
         )
     )
     module.validate_preparation_record(record, config=config, binding=binding)
@@ -330,12 +346,77 @@ def test_genuine_main_outcomes_and_reported_claims_stay_valid(ending):
     if ending == "timeout_ready_cleanup":
         assert record["exchanges"][-1]["response"]["state"] == "ready"
         assert record["index_revision"] is None
-    claims = [
+    assert_claims_as_reported(record, received=len(requests))
+
+
+def assert_claims_as_reported(record, *, received):
+    """Each recorded count is the selector's own, in order (RM40).
+
+    The fake selector counts every request it receives. A poll cut off by the total time is
+    recorded with no response and may still have reached the selector, so a count may skip ahead
+    by at most the cut polls just before it; anywhere else the counts are consecutive. `received`
+    is the number of requests the selector's handler really got."""
+    last, cut = 0, 0
+    for exchange in record["exchanges"]:
+        if exchange["response"] is None:
+            cut += 1
+            continue
+        claim = exchange["response"]["usage_claims"]["value"]["calls"]
+        assert last < claim <= last + 1 + cut, (last, cut, claim)
+        last, cut = claim, 0
+    assert last <= received <= last + cut, (last, cut, received)
+
+
+def test_a_poll_cut_off_by_the_total_time_leaves_only_its_own_gap(monkeypatch):
+    """RM40: the race a slow runner hits, made certain: the second poll outlives the total time."""
+    import httpx
+
+    from relaymind.selection import asset_preparation as module
+    from test_asset_preparation import inputs, reply, response
+
+    _, catalog, binding, config = inputs()
+    config |= dict(total_ms=5000, request_ms=3000, poll_ms=1000, max_polls=5)
+    clock = FakeClock()
+    real_sleep = asyncio.sleep
+
+    async def fake_sleep(delay):
+        clock.advance(delay)
+        await real_sleep(0)
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+    requests = []
+
+    async def handler(request):
+        raw = json.loads(request.content)
+        requests.append(raw)
+        if len(requests) == 2:
+            # Advance the fake clock past total_ms while the second poll is in flight so
+            # exchange_check() deterministically cuts it off after the selector received it.
+            clock.advance(5.0)
+        state = "ready" if raw["operation"] == "cancel" else "indexing"
+        claim = _reported_calls_claim(len(requests))
+        return reply(200, json=response(raw, state=state, reason=None, usage_claims=claim))
+
+    record = asyncio.run(
+        module.prepare_asset_index(
+            config,
+            binding,
+            catalog,
+            clock=clock.monotonic,
+            transport_factory=lambda: httpx.MockTransport(handler),
+        )
+    )
+    module.validate_preparation_record(record, config=config, binding=binding)
+    assert record["status"] == "timeout"
+    assert [e["response"] is None for e in record["exchanges"]] == [False, True, False]
+    assert len(requests) == 3
+    recorded_claims = [
         e["response"]["usage_claims"]["value"]["calls"]
         for e in record["exchanges"]
         if e["response"] is not None
     ]
-    assert claims == list(range(1, len(claims) + 1))
+    assert recorded_claims == [1, 3]
+    assert_claims_as_reported(record, received=len(requests))
 
 
 def test_real_cli_keeps_valid_ready_setup_with_unknown_costs(prepared_bundle, tmp_path):
