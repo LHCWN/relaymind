@@ -117,10 +117,11 @@ Core stack rules:
   import no other RelayMind package.
 - `adapters/` imports no other RelayMind package and must not depend on SQLite
   or `store/`.
-- Core run-store modules (`store/run_store.py`, `store/trace_event.py`,
-  `store/model_timings.py`, `store/outcomes.py`) import only leaf modules and
-  each other, and must not depend on M10 `store/` modules, `adapters/`, or
-  higher layers.
+- Core run-store modules (`store/__init__.py`, `store/run_store.py`,
+  `store/trace_event.py`, `store/model_timings.py`, `store/outcomes.py`) import
+  only leaf modules and core store modules, and must not depend on M10 `store/`
+  modules, `adapters/`, or higher layers. `tools/`, `orchestrator/`, and `ui/`
+  import only core `store/` modules (never M10 `store/` modules).
 - `identifiers.py` holds the shared RM05 identifier provenance and schema
   helpers; it imports only `adapters/` (and `tools/registry.py` for type
   checking), so `skills/` never imports upward from `orchestrator/`.

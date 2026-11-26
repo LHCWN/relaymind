@@ -16,9 +16,11 @@ ARCH_DOC = REPO / "docs" / "ARCHITECTURE.md"
 
 LEAVES = frozenset({"canonical", "schema_util", "redaction"})
 CORE_STORE_MODULES = frozenset(
-    {"run_store.py", "trace_event.py", "model_timings.py", "outcomes.py"}
+    {"__init__.py", "run_store.py", "trace_event.py", "model_timings.py", "outcomes.py"}
 )
-CORE_STORE_NAMES = frozenset(name.removesuffix(".py") for name in CORE_STORE_MODULES)
+CORE_STORE_NAMES = frozenset(
+    name.removesuffix(".py") for name in CORE_STORE_MODULES if name != "__init__.py"
+)
 
 # Documented package-level allowed dependencies from docs/ARCHITECTURE.md.
 ALLOWED_PACKAGE_EDGES: dict[str, frozenset[str]] = {
@@ -194,7 +196,6 @@ ALLOWED_MODULE_EDGES: dict[tuple[str, str], frozenset[str]] = {
     ("assets", "recommendations"): frozenset({"relaymind.recommendations.service"}),
     ("assets", "selection"): frozenset(
         {
-            "relaymind.selection",
             "relaymind.selection.asset_contract",
             "relaymind.selection.asset_lexical",
             "relaymind.selection.http",
@@ -214,8 +215,30 @@ ALLOWED_MODULE_EDGES: dict[tuple[str, str], frozenset[str]] = {
     ),
 }
 
+# File-scoped exceptions documented in docs/ARCHITECTURE.md.
+ALLOWED_FILE_MODULE_EDGES: dict[tuple[str, str], frozenset[str]] = {
+    ("assets/embedding_bundle.py", "selection"): frozenset({"relaymind.selection"}),
+}
+
 V2_SELECTION_MODULES = frozenset({"adaptation_stage.py"})
 M10_ONLY_TARGETS = frozenset({"assets", "recommendations", "store"})
+V2_SELECTION_ALLOWED_TARGETS = M10_ONLY_TARGETS | LEAVES
+CORE_STORE_ONLY_CALLERS = frozenset({"tools", "orchestrator", "ui"})
+
+
+def _is_v2_selection_name(mod_name: str) -> bool:
+    return mod_name.startswith("asset_") or f"{mod_name}.py" in V2_SELECTION_MODULES
+
+
+def _submodule_in_package(pkg: str, mod: str) -> str | None:
+    """Return the direct submodule name if mod refers to a file/subpackage inside pkg."""
+    parts = mod.split(".")
+    if len(parts) < 3 or parts[1] != pkg:
+        return None
+    name = parts[2]
+    if (SRC / pkg / f"{name}.py").is_file() or (SRC / pkg / name).is_dir():
+        return name
+    return None
 
 
 def test_package_imports_match_documented_architecture_contract():
@@ -226,6 +249,7 @@ def test_package_imports_match_documented_architecture_contract():
         if path.name == "__init__.py" and path.parent == SRC:
             continue
         pkg = _package_of(path)
+        rel_src = path.relative_to(SRC).as_posix()
         discovered_packages.add(pkg)
         allowed = ALLOWED_PACKAGE_EDGES.get(pkg)
         if allowed is None:
@@ -242,16 +266,42 @@ def test_package_imports_match_documented_architecture_contract():
                 violations.append(f"{path.relative_to(REPO)}: {pkg} -> {target} ({mod})")
                 continue
             allowed_mods = ALLOWED_MODULE_EDGES.get((pkg, target))
-            if allowed_mods is not None and mod not in allowed_mods:
-                violations.append(
-                    f"{path.relative_to(REPO)}: {pkg} -> {mod} (allowed: {sorted(allowed_mods)})"
-                )
+            if allowed_mods is not None:
+                extra_mods = ALLOWED_FILE_MODULE_EDGES.get((rel_src, target), frozenset())
+                if mod not in (allowed_mods | extra_mods):
+                    violations.append(
+                        f"{path.relative_to(REPO)}: {pkg} -> {mod} "
+                        f"(allowed: {sorted(allowed_mods | extra_mods)})"
+                    )
+                    continue
+            # Core store callers (tools, orchestrator, ui) may only import core store modules
+            # (or symbols re-exported from store/__init__.py, which is itself core-store-only).
+            if pkg in CORE_STORE_ONLY_CALLERS and target == "store":
+                submod = _submodule_in_package("store", mod)
+                if submod is not None and submod not in CORE_STORE_NAMES:
+                    violations.append(
+                        f"{path.relative_to(REPO)}: {pkg} -> non-core store module {mod}"
+                    )
+            # Orchestrator may only import v1 selection modules (never v2 asset_*/adaptation_stage).
+            if pkg == "orchestrator" and target == "selection":
+                submod = _submodule_in_package("selection", mod)
+                if submod is not None and _is_v2_selection_name(submod):
+                    violations.append(
+                        f"{path.relative_to(REPO)}: orchestrator -> v2 selection module {mod}"
+                    )
+            # M10 store modules may only import v2 selection modules (never v1 selection).
+            if pkg == "store" and target == "selection":
+                submod = _submodule_in_package("selection", mod)
+                if submod is None or not _is_v2_selection_name(submod):
+                    violations.append(
+                        f"{path.relative_to(REPO)}: store -> non-v2 selection module {mod}"
+                    )
     assert not violations, "Forbidden cross-layer imports:\n" + "\n".join(violations)
     assert discovered_packages <= set(ALLOWED_PACKAGE_EDGES)
 
 
 def test_core_store_modules_depend_only_on_leaves():
-    """#297: core store modules never depend on M10 store modules or higher layers."""
+    """#297: core store modules (including store/__init__.py) never depend on M10 or higher."""
     violations: list[str] = []
     for name in sorted(CORE_STORE_MODULES):
         path = SRC / "store" / name
@@ -271,7 +321,7 @@ def test_core_store_modules_depend_only_on_leaves():
 
 
 def test_type_checking_only_and_v1_selection_restrictions():
-    """#297: enforce TYPE_CHECKING-only edges and v1/v2 selection isolation."""
+    """#297: enforce TYPE_CHECKING-only edges and strict v1/v2 selection isolation."""
     violations: list[str] = []
     # identifiers.py may only reference tools under TYPE_CHECKING, never at runtime.
     id_path = SRC / "identifiers.py"
@@ -285,16 +335,30 @@ def test_type_checking_only_and_v1_selection_restrictions():
             parts = mod.split(".")
             if len(parts) >= 2 and parts[1] == "recommendations":
                 violations.append(f"{path.relative_to(REPO)} imports {mod} at runtime")
-    # v1 selection modules (everything except asset_*.py and adaptation_stage.py) must not
-    # depend on M10 layers (assets, recommendations, store).
+    # Strict v1/v2 selection isolation:
+    # - v1 selection (including selection/__init__.py) must not import M10 packages or v2 modules.
+    # - v2 selection (asset_*.py, adaptation_stage.py) must only import M10/leaf packages
+    #   (beyond intra-package selection helpers).
     for path in sorted((SRC / "selection").rglob("*.py")):
-        if path.name.startswith("asset_") or path.name in V2_SELECTION_MODULES:
-            continue
+        is_v2 = path.name.startswith("asset_") or path.name in V2_SELECTION_MODULES
         for mod in sorted(_imported_modules(path)):
             parts = mod.split(".")
-            if len(parts) >= 2 and parts[1] in M10_ONLY_TARGETS:
-                violations.append(f"{path.relative_to(REPO)} (v1 selection) imports {mod}")
-    assert not violations, "Type-checking / v1-selection violations:\n" + "\n".join(violations)
+            if len(parts) < 2:
+                continue
+            target = parts[1]
+            if not is_v2:
+                if target in M10_ONLY_TARGETS:
+                    violations.append(f"{path.relative_to(REPO)} (v1 selection) imports {mod}")
+                elif target == "selection":
+                    submod = _submodule_in_package("selection", mod)
+                    if submod is not None and _is_v2_selection_name(submod):
+                        violations.append(
+                            f"{path.relative_to(REPO)} (v1 selection) imports v2 module {mod}"
+                        )
+            else:
+                if target != "selection" and target not in V2_SELECTION_ALLOWED_TARGETS:
+                    violations.append(f"{path.relative_to(REPO)} (v2 selection) imports {mod}")
+    assert not violations, "Type-checking / v1-v2 selection violations:\n" + "\n".join(violations)
 
 
 def test_adapters_never_import_sqlite_or_other_relaymind_packages():
@@ -319,19 +383,22 @@ def test_adapters_never_import_sqlite_or_other_relaymind_packages():
     assert not violations, "Adapter isolation violations:\n" + "\n".join(violations)
 
 
-def _resolve_orchestrator_module(mod_name: str) -> Path:
-    file_path = SRC / "orchestrator" / f"{mod_name}.py"
-    if file_path.is_file():
-        return file_path
-    pkg_init = SRC / "orchestrator" / mod_name / "__init__.py"
-    if pkg_init.is_file():
-        return pkg_init
+def _resolve_orchestrator_module(subparts: tuple[str, ...]) -> Path:
+    """Resolve full dotted parts under orchestrator/ (including nested subpackages)."""
+    for end in range(len(subparts), 0, -1):
+        prefix = subparts[:end]
+        file_path = SRC / "orchestrator" / Path(*prefix[:-1], f"{prefix[-1]}.py")
+        if file_path.is_file():
+            return file_path
+        pkg_init = SRC / "orchestrator" / Path(*prefix) / "__init__.py"
+        if pkg_init.is_file():
+            return pkg_init
     return SRC / "orchestrator" / "__init__.py"
 
 
 def test_selection_never_creates_an_orchestrator_module_cycle():
     """#297: orchestrator modules imported by selection never reach selection transitively."""
-    imported_by_selection: set[str] = set()
+    imported_by_selection: set[tuple[str, ...]] = set()
     bare_orchestrator_imports: list[str] = []
     for path in sorted((SRC / "selection").rglob("*.py")):
         mods = _imported_modules(path)
@@ -340,7 +407,7 @@ def test_selection_never_creates_an_orchestrator_module_cycle():
         for mod in mods:
             parts = mod.split(".")
             if len(parts) >= 3 and parts[1] == "orchestrator":
-                imported_by_selection.add(parts[2])
+                imported_by_selection.add(tuple(parts[2:]))
     assert not bare_orchestrator_imports, (
         "selection must import specific orchestrator leaf modules, not the whole package: "
         + ", ".join(bare_orchestrator_imports)
@@ -349,7 +416,7 @@ def test_selection_never_creates_an_orchestrator_module_cycle():
     back_edges: list[str] = []
     visited: set[Path] = set()
     stack: list[Path] = [
-        _resolve_orchestrator_module(name) for name in sorted(imported_by_selection)
+        _resolve_orchestrator_module(subparts) for subparts in sorted(imported_by_selection)
     ]
     while stack:
         orch_file = stack.pop()
@@ -366,7 +433,7 @@ def test_selection_never_creates_an_orchestrator_module_cycle():
                 if len(parts) == 2:
                     stack.append(SRC / "orchestrator" / "__init__.py")
                 else:
-                    stack.append(_resolve_orchestrator_module(parts[2]))
+                    stack.append(_resolve_orchestrator_module(tuple(parts[2:])))
     assert not back_edges, "Cycle between selection and orchestrator:\n" + "\n".join(back_edges)
 
 
