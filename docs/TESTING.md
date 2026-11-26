@@ -2579,7 +2579,7 @@ The internal operational driver in `relaymind.evaluation.asset_operations`
 accepts explicit catalog/configuration, production HTTP requests and lifecycle
 callbacks. It does not acquire or generate an acceptance corpus, introduce a
 public benchmark protocol, or turn unavailable memory/contention observations
-into a pass. It feeds the shared evaluation runner planned in #200.
+into a pass. It feeds the shared evaluation runner (`scripts/asset_selection_benchmark.py`, #200).
 
 Full AC29 remains open until spec section 12.6 is measured on the real locked
 300-asset catalog: ten clean process launches to a valid nonempty lexical result,

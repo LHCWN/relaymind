@@ -2,7 +2,9 @@
 
 All notable changes to this project are documented in this file.
 
-The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+Entries are grouped under `## [Unreleased]` by category (`Added`, `Changed`,
+`Deprecated`, `Removed`, `Fixed`, `Security`) while the project is in
+pre-release development.
 
 ## [Unreleased]
 
@@ -105,7 +107,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   guidance with the host's own commands. It installs the plugin, empties the listed skill catalog and, with
   `--tools-file`, writes the plugin's tool list from `openclaw mcp probe`. A partial list changes nothing, and
   descriptions an operator wrote are kept. The tutorial now says how a selector can prepare before the first prompt.
-
 
 - Specification 0.69 (#284; RM45, RM46; AC38 to AC40; section 7.7): guidance tells similar assets apart and can limit a turn. The picker sees the sentences that set assets apart and picks the set a prompt needs, one asset for each task, with `max_picks` now 8 by default; `decision: choose` and pick summaries cover a prompt that does not decide; `recent_text` serves follow-ups; without a picker only strong matches are named in a long list; `guidance.total_ms` is 12000 by default and `guidance.max_choices` is new. The plugin's optional `limit: "strict"` refuses what was offered and not selected, reading tool names and read paths as the host does. It is off by default and is not a security wall. A blank task is `invalid_request`; a third-party failure falls back to word match only; keywords written for a whole prompt of several tasks still count.
 - `scripts/guidance_compare.py` (RM16, RM40, RM45): precision, recall, F1, MRR and more for any selector against a baseline. `scripts/guidance_similar_benchmark.py` and `evaluation/assets/guidance-similar/similar.v1.json`: families of similar skills, with development and holdout splits.
@@ -303,7 +304,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `blocked`. The earlier "empty list" was the old harness projection
   (`payload.tools` instead of `groups[].tools`), not a host result; the
   settlement document records the correction.
-
 
 - Native retrieval benchmark tooling (#201; RM16/RM35/RM38/RM40/RM41/RM44;
   AC26/AC29/AC31/AC32): shared semantic factory/parser and offline preimages,
@@ -889,7 +889,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   successes and higher p95 latency), because a local stage that runs out of time
   still runs the tool work the external stage reuses. No default changes.
 
-
 - Runner provider request options (RM25; spec 0.46, sections 12.2 and 14.1):
   `--external-request-options JSON` on the corpus and latency runners writes
   `external_model.request_options`, uses the launch file's checks, enters the
@@ -1240,7 +1239,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A failed run with error code `predicate_unmet` is run state: a chat
   request names it in a 409 `run_terminal` (section 7.1). No code produces it
   yet.
-
 
 - Native Windows launcher and latency evidence (#110; RM12, RM17 to
   RM19, RM25, AC15; sections 12.1 to 12.3 and 14.1): supplied exports
@@ -2139,14 +2137,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   range, the qualified release and the build release. Developer release steps and user install steps are
   rewritten in the OpenClaw README.
 
-
 - Reorganize the project overview around model use, skill/tool discovery and
   OpenClaw setup. Consolidate the component map, link current status from
   operator guides, correct stale qualification and platform claims, and
   document maintenance conventions. Requirement semantics and historical
   evidence remain unchanged. Register the editorial specification digest for
   new evaluation inventories while retaining the original supported digests.
-
 
 - Specification 0.65 → 0.66 (#251; RM16/RM38–RM44; AC29–AC37): adds the
   owner-run acceptance profile (section 12.6.6). Names the owner's M1 8 GiB
@@ -2221,15 +2217,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   specifies exact native Skill Library selection/read separately from loaded-use.
   Runtime snapshots and native MCP activation retain their existing qualification gates.
 
-
-
 - Specification 0.55 → 0.56 (RM40/RM44; AC31/AC36; review #219):
   names `Case.conversation` and attempt/embedding `cost_observations` as
   order-preserving arrays for canonical hashing. Types `Rate.value` and Wilson
   bounds as `nonnegative_number`, consistent with their existing [0, 1] limits.
 
 - The 0.57 reconciliation carried these master 0.56 benchmark clarifications
-  and the parallel source-grounded 0.56 additions below as distinct histories.
+  and the parallel source-grounded 0.56 additions (under `### Added` above) as
+  distinct histories.
 
 - Specification 0.52 → 0.53 (RM16, RM38/AC29; #196, review #218):
   fixed 500 ms request slots admit measured dispatch delay within the original
@@ -2238,7 +2233,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   requires foreground overlap with each sequential source/rebuild job and actual
   inference contention, without requiring two jobs on one worker to run together.
   All samples, failure denominators and outstanding live qualification gates remain.
-
 
 - Specification 0.51 → 0.52 (#187; RM24, RM34, RM38): section 14.5 defines the
   offer projection cache, and section 4.6 now says a stale, availability or
@@ -2269,7 +2263,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   mapping; AC24 adds an oversized request.
   The fixed parallel demo (RM15, AC14) and existing benchmark evidence remain.
   This is a specification and backlog change; the plugin is not implemented.
-
 
 - Specification 0.38 clarifies the timing records and estimates required by
   #129 (RM17, RM25, RM27): actual call actor and kind, nullable measurements,
@@ -2466,7 +2459,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `README.md` is now a short user guide (what it is, install,
   configure, start, use); project status lives in `docs/ROADMAP.md`
   and `docs/RELEASE.md`.
-
 
 - Specification 0.21 -> 0.22: section 8 adds `answer_options` to the
   run.accepted payload (#91; RM19, RM22, RM25): the effective token
@@ -3123,7 +3115,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   record ordinary native launch and provisional 412/128 benchmark results,
   including partial indexing, lexical fallback and the observed quality regression.
 
-
 - The loaded-use observation harness records the exact person-scope
   `sessions.reset` refusal (`operator.admin` required on the pinned host) as
   `control_refused`, with no turn, instead of raising
@@ -3135,7 +3126,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   confirmed corrected MCP discovery; exact use stayed blocked. These newer CI
   captures are workflow artifacts, not committed evidence.
 
-
 - `.gitattributes` pins the OpenClaw plugin package
   (`integrations/openclaw/`) to LF, so a Windows checkout no longer packs
   CRLF text files into the release tarball (#145; RM18); a Windows runner
@@ -3144,7 +3134,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and evaluation scripts bypass environment and system proxies without
   changing process-wide settings (#167; RM01, RM18, RM19). Non-loopback endpoints
   keep normal proxy handling.
-
 
 - Selection benchmark review (RM03, RM09, RM16, RM25, RM28): clear stale
   diagnostics before early bypasses, classify HTTP timeouts, preserve failed

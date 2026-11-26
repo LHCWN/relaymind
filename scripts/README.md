@@ -605,6 +605,9 @@ Linux. Their unit tests also run on Windows in CI, but no real benchmark run was
   is kept only to reproduce the runs recorded with it. `derive_skillsbench.py`
   caches its archives in `~/.cache/relaymind/skillsbench` by default and refuses
   a cached, supplied, or downloaded archive whose SHA-256 differs from the lock.
+  `benchmarks/derive_matrix.py` and `benchmarks/derive_mcp_tools.py` reproduce
+  explicitly supplied same-source local Matrix and pinned local MCP benchmark
+  releases offline without acquiring or executing tools (RM40/AC31).
 
   HTTP reports distinguish the endpoint/transport from response-reported
   selector identities. A single observed identity is labeled as a response

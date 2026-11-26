@@ -1691,7 +1691,7 @@ The following scenarios define the implementation acceptance suite. Model double
 
 Implementation deliverables are the gateway source, pinned dependencies, setup instructions for both platforms, model artifact manifest, skill packages, the OpenClaw provider plugin (spec 0.47), registered demo tools, native demo UI, versioned schemas, API examples, deterministic acceptance suite, evaluation corpus (English, with best-effort Chinese), the selection benchmark files and runner (section 12.4, spec 0.31), and benchmark report. Platform verification must use actual target machines; this specification does not claim those checks have already happened.
 
-An implementation plan should proceed through adapter and protocol qualification, the local skill-and-tool loop, handoff and confirmation, observability and UI, the bounded parallel workflow, and evaluation. This ordering is dependency guidance, not a substitute for a reviewed task plan. Phase 2 (spec 0.31) is planned in `docs/ROADMAP.md`.
+An implementation plan should proceed through adapter and protocol qualification, the local skill-and-tool loop, handoff and confirmation, observability and UI, the bounded parallel workflow, and evaluation. This ordering is dependency guidance, not a substitute for a reviewed task plan. Phase 2 (spec 0.31) status is tracked in `docs/ROADMAP.md`.
 
 Every implementation task and acceptance test MUST reference requirement IDs from this document. Changes to tool ownership, approval rules, API behavior, supported platforms, or evaluation definitions require a specification revision before implementation changes. Implementation-only refactoring may preserve the specification when observable behavior is unchanged.
 

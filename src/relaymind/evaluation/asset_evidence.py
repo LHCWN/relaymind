@@ -193,7 +193,7 @@ _GENERATOR_ANCHORS = {
         {
             # 0.75 editorial reconciliation: shipped vs planned schema/CLI status (#298); subject to
             # the owner's review.
-            ("99100812cbb886cc881f1a74a5d38d122688eba09abc5bce9252b94fa543cdb0", 679212),
+            ("343da09627b4485da7ce5bc058345c1c3c88806cf6f1f5c448971875b04f7633", 689586),
             # 0.75 selector feedback and partial answers (RM47, RM48, AC42, AC43; #301); subject to
             # the owner's review.
             ("03bdbb772f4742303a0a5388aebc0d58073457bb78ad1e27ff500d21c5ab3f36", 689274),
