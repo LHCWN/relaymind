@@ -16,7 +16,7 @@ corpus digest alone. The first is the expected skill of every case
 
 import json
 import re
-from collections.abc import Collection, Iterable, Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -173,27 +173,6 @@ def check_lock(corpus: Corpus, lock_path: Path) -> None:
             )
 
 
-def lock_document(
-    corpus: Corpus, corpus_name: str, *, sidecars: Mapping[str, Any] | None = None
-) -> dict[str, Any]:
-    """The lock file content that freezes a corpus and, when given, its sidecars.
-
-    sidecars maps a file name to its parsed JSON document.
-    """
-    document: dict[str, Any] = {
-        "corpus": corpus_name,
-        "version": corpus.document["version"],
-        "sha256": corpus.digest,
-        "seeds": {name: canonical_digest(seed) for name, seed in sorted(corpus.seeds.items())},
-    }
-    if sidecars:
-        document["sidecars"] = {
-            name: canonical_digest(data) for name, data in sorted(sidecars.items())
-        }
-    document["frozen_on"] = corpus.document["frozen_on"]
-    return document
-
-
 def demo_skill_names(skills_root: Path) -> frozenset[str]:
     """The names of the demo skill packages under a skill root (spec 0.31 section 12.2)."""
     return frozenset(
@@ -254,18 +233,6 @@ def parse_skills_sidecar(
 
 def normalize_prompt(text: str) -> str:
     return " ".join(text.split()).casefold()
-
-
-def development_prompts(skills_root: Path, *, extra: Iterable[str] = ()) -> set[str]:
-    """The normalized prompts of the development examples (skill examples and extra prompts)."""
-    prompts = {normalize_prompt(text) for text in extra}
-    for path in sorted(Path(skills_root).glob("*/examples.json")):
-        for pair in json.loads(path.read_text("utf-8")).get("pairs", []):
-            for language in LANGUAGES:
-                request = pair.get(language, {}).get("request")
-                if request:
-                    prompts.add(normalize_prompt(request))
-    return prompts
 
 
 # -- checks -----------------------------------------------------------------------------

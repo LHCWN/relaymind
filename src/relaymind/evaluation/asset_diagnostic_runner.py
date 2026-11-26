@@ -1,24 +1,20 @@
 """Source-grounded runs through the production service and shared benchmark helpers."""
 
-import asyncio
 import copy
 import math
 import tempfile
-import time
 import unicodedata
-import uuid
 from collections import Counter
 from collections.abc import Mapping
 from pathlib import Path
 
 from relaymind.canonical import canonical_digest, canonical_json
 from relaymind.evaluation.asset_benchmark import (
-    _load_production_config,
-    _LockedProjectionProvider,
-    _not_run,
     benchmark_repository_root,
-    stable_request_digest,
-    terminal_payload,
+    execute_asset_slot,
+    load_production_config,
+    not_run_row,
+    prepare_benchmark_session,
 )
 from relaymind.evaluation.asset_benchmark_io import REPORT_BYTES, validate_benchmark_document
 from relaymind.evaluation.asset_comparison import (
@@ -41,29 +37,23 @@ from relaymind.evaluation.asset_evidence import (
     verify_compiled_asset_inventory,
 )
 from relaymind.evaluation.asset_metrics import grade_asset_result, primary_asset_result
-from relaymind.evaluation.asset_native_runtime import NativeBenchmarkRuntime
 from relaymind.evaluation.asset_schedule import plan_asset_slots, validate_asset_rows
 from relaymind.evaluation.asset_source_catalog import source_language
 from relaymind.evaluation.asset_splits import classify_latin_overlap, input_identity
-from relaymind.recommendations.errors import RecommendationError
-from relaymind.recommendations.service import CancellationSignal, RecommendationService
+from relaymind.recommendations.service import RecommendationService
 from relaymind.selection.asset_contract import (
-    SelectorContext,
     parse_asset_request,
     parse_recommendation_result,
 )
 from relaymind.selection.asset_factory import build_asset_selector
 from relaymind.selection.asset_lexical import LexicalAssetSelector
 from relaymind.selection.asset_preparation import (
-    PreparedAssetSelector,
     normalize_preparation,
     preparation_binding,
     preparation_policy_mismatches,
-    prepare_asset_index,
     request_preparation_binding,
     validate_preparation_record,
 )
-from relaymind.store.recommendations import RecommendationClaim
 from relaymind.store.run_store import RunStore, TraceClock
 
 
@@ -154,7 +144,7 @@ async def run_source_benchmark(
     if set(choices) - set(cases):
         raise AssetCorpusError("invalid_user_choice")
     slots = plan_asset_slots(cases, seed=seed, repetitions=repetitions, warmups=0)
-    production = _load_production_config(Path(production_config))
+    production = load_production_config(Path(production_config))
     setup_config = normalize_preparation(
         preparation,
         http_primary=production.recommendations.primary == "http",
@@ -176,45 +166,31 @@ async def run_source_benchmark(
     )
     if not all(e["eligible"] for e in effective["eligibility"]):
         raise AssetCorpusError("catalog_source_not_enabled")
-    provider = _LockedProjectionProvider(inputs, effective)
     environment = collect_benchmark_environment(production=production)
-    started = time.monotonic()
-    runtime = None
+
+    def _http_binding(prov):
+        offer = prov.pin(kinds)
+        catalog = list(offer.catalog)
+        return _source_binding(effective, catalog, offer.catalog_revision, kinds), catalog
+
+    session = await prepare_benchmark_session(
+        production,
+        inputs,
+        effective,
+        requested_kinds=kinds,
+        preparation_config=setup_config,
+        http_binding=_http_binding,
+        clock=clock,
+    )
+    preparation_ms = session.setup_ms
+    provider = session.provider
+    runtime = session.runtime
+    setup = session.preparation
+    status = session.status
+    prepared_primary = session.prepared_primary
+    rows = []
+    retained_bytes = 0
     try:
-        if production.asset_semantics is not None:
-            runtime = await NativeBenchmarkRuntime.create(
-                production, inputs, effective, requested_kinds=kinds, clock=clock
-            )
-            provider = runtime.provider
-            if setup_config["mode"] != "local":
-                await runtime.worker.rebuild()
-        else:
-            await provider.publish()
-        preparation_ms = (time.monotonic() - started) * 1000
-        rows = []
-        retained_bytes = 0
-        status = "completed"
-        prepared_primary = None
-        setup = await prepare_asset_index(normalize_preparation(None), None, [])
-        if setup_config["mode"] == "local":
-            setup = await runtime.prepare_local(setup_config, requested_kinds=kinds)
-            if setup["status"] not in ("ready", "not_applicable"):
-                status = "interrupted" if setup["status"] == "cancelled" else "blocked"
-            elif setup["status"] == "ready":
-                prepared_primary = PreparedAssetSelector(runtime.service.primary, setup)
-        elif setup_config["mode"] == "http":
-            offer = provider.pin(kinds)
-            setup = await prepare_asset_index(
-                setup_config,
-                _source_binding(effective, list(offer.catalog), offer.catalog_revision, kinds),
-                list(offer.catalog),
-            )
-            if setup["status"] != "ready":
-                status = "interrupted" if setup["status"] == "cancelled" else "blocked"
-            else:
-                prepared_primary = PreparedAssetSelector(
-                    build_asset_selector(production.recommendations), setup
-                )
         with tempfile.TemporaryDirectory(prefix="source-benchmark-") as directory:
             runs = (
                 runtime.runs
@@ -234,8 +210,10 @@ async def run_source_benchmark(
                         "class": case["reference_class"],
                         "acceptable_asset_ids": list(case["acceptable_asset_ids"]),
                     }
-                    row = _not_run(slot, label)
-                    row.update(
+                    hard_subset, latin_intersections = _latin_overlap(
+                        case, inputs.catalog, unicodedata.unidata_version
+                    )
+                    extra_fields = dict(
                         user_choice=None,
                         acceptable_asset_ids=list(case["acceptable_asset_ids"]),
                         reference_kind=case["reference_kind"],
@@ -244,14 +222,16 @@ async def run_source_benchmark(
                         terminal_observation=None,
                         evaluated_decision=None,
                         evaluated_candidates=[],
-                    )
-                    row["hard_subset"], row["latin_token_intersections"] = _latin_overlap(
-                        case, inputs.catalog, unicodedata.unidata_version
+                        hard_subset=hard_subset,
+                        latin_token_intersections=latin_intersections,
                     )
                     if status != "completed":
-                        row["reason"] = (
-                            "interrupted" if status == "interrupted" else "preparation_unavailable"
+                        row = not_run_row(
+                            slot,
+                            label,
+                            "interrupted" if status == "interrupted" else "preparation_unavailable",
                         )
+                        row.update(extra_fields)
                         rows.append(row)
                         continue
                     language = case["query_language"]
@@ -265,29 +245,8 @@ async def run_source_benchmark(
                         language_tags=list(QUERY_LANGUAGE_TAGS[language]),
                         code_switched=language == "mixed",
                     )
-                    budget = service.new_budget()
-                    cancel = CancellationSignal()
-                    try:
-                        offer = service.precheck(request)
-                        envelope = dict(
-                            request,
-                            schema_version=2,
-                            recommendation_id=str(uuid.uuid4()),
-                            task_id=case["id"],
-                            scope=provider.scope,
-                            permissions=list(provider.permissions),
-                            catalog_revision=offer.catalog_revision,
-                            deadline_ms=budget.remaining_ms(),
-                            candidate_limit=10,
-                        )
-                        selection = offer.request(
-                            envelope, context=SelectorContext(budget.clock.monotonic, budget.check)
-                        )
-                        row.update(
-                            request_digest=stable_request_digest(selection.to_json_object()),
-                            offered_projection_digest=canonical_digest(list(offer.catalog)),
-                            catalog_revision=offer.catalog_revision,
-                        )
+
+                    def _attach_primary(offer, current_row):
                         primary = (
                             prepared_primary
                             or native_primary
@@ -297,70 +256,29 @@ async def run_source_benchmark(
                                 else build_asset_selector(production.recommendations)
                             )
                         )
-                        service.primary = _ObservedPrimary(primary, row)
-                        claim = RecommendationClaim(
-                            provider.scope,
-                            "source-development",
-                            "POST",
-                            "/relay/v1/recommendations",
-                            None,
-                            str(slot["ordinal"]),
-                            canonical_digest(request),
-                        )
-                        response = await service.create(request, claim, budget, cancel)
-                        body = (
-                            dict(service.get(provider.scope, cancel.recommendation_id))
-                            if cancel.recommendation_id
-                            else dict(response.body)
-                        )
-                        if body.get("state") == "ready":
-                            result = dict(body["result"])
-                            row.update(
-                                status="ready",
-                                reason=None,
-                                result=result,
-                                attempts=list(result["attempts"]),
-                                embeddings=list(result["embeddings"]),
-                            )
-                        else:
-                            terminal = terminal_payload(
-                                service,
-                                provider.scope,
-                                body["recommendation_id"],
-                                ("failed", "cancelled"),
-                            )
-                            row.update(
-                                status="cancelled"
-                                if body.get("state") == "cancelled"
-                                else "failed",
-                                reason=(body.get("error") or {}).get(
-                                    "code", "recommendation_unavailable"
-                                ),
-                                terminal_observation=terminal,
-                                attempts=list(terminal["attempts"]),
-                                embeddings=list(terminal.get("embeddings", [])),
-                            )
-                    except RecommendationError as exc:
-                        row.update(status="failed", reason=exc.code)
-                    except asyncio.CancelledError:
-                        # Service.create commits its cancellation before propagating it.
-                        # Retain that terminal observation before the temporary store closes.
-                        status = "interrupted"
-                        row.update(status="cancelled", reason="cancelled")
-                        if cancel.recommendation_id is not None:
-                            terminal = terminal_payload(
-                                service, provider.scope, cancel.recommendation_id, ("cancelled",)
-                            )
-                            row.update(
-                                terminal_observation=terminal,
-                                attempts=list(terminal["attempts"]),
-                                embeddings=list(terminal.get("embeddings", [])),
-                            )
-                    finally:
-                        row["observed_ms"] = budget.elapsed_ms()
-                        # The gateway fences late results; drain its owned selector tasks
-                        # before disposable persistence can disappear.
-                        await budget.drain(0.1)
+                        service.primary = _ObservedPrimary(primary, current_row)
+
+                    row, forced, _ = await execute_asset_slot(
+                        service,
+                        provider,
+                        None,
+                        case,
+                        slot,
+                        label,
+                        request=request,
+                        task_id=case["id"],
+                        claim_client="source-development",
+                        candidate_limit=10,
+                        before_create=_attach_primary,
+                        drain_seconds=0.1,
+                        swallow_unexpected=False,
+                        record_terminal_observation=True,
+                        record_empty_catalog_cost=False,
+                    )
+                    if forced is not None:
+                        status = forced
+                    for key, value in extra_fields.items():
+                        row.setdefault(key, value)
                     evaluated = (
                         primary_asset_result(row) if track == "primary_only" else row["result"]
                     )
@@ -387,8 +305,7 @@ async def run_source_benchmark(
                     await service.stop()
                     runs.close()
     finally:
-        if runtime is not None:
-            await runtime.close()
+        await session.close()
     validate_asset_rows(slots, rows)
     pairs = _language_pairs(rows, inputs.catalog)
     assets = {a["record"]["asset_id"]: a for a in inputs.catalog["assets"]}

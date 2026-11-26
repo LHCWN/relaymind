@@ -352,7 +352,7 @@ def source_pair(development_input, tmp_path, monkeypatch):
     )
     monkeypatch.setattr(
         source,
-        "_load_production_config",
+        "load_production_config",
         lambda path: native if path.name == "native.toml" else lexical,
     )
     verified = load(development_input)

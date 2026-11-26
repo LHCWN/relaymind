@@ -1192,3 +1192,70 @@ def test_preregistration_uses_bound_dispatch_not_an_end_time(
         (tmp_path / "dispatch.json").write_text("changed")
         with pytest.raises(WholeTaskRejected, match="record_digest_mismatch"):
             load_record(save(tmp_path, record))
+
+
+def test_cli_grade_enforces_qualification_record_check_grade(tmp_path, monkeypatch):
+    """Spec 12.6.6, #296: _grade verifies the qualification output via record.check_grade."""
+    from types import SimpleNamespace
+
+    from relaymind.evaluation import asset_whole_task_cli as cli
+
+    record = load_record(save(tmp_path, dual_record(tmp_path)))
+    calls = []
+    real_check = type(record).check_grade
+
+    def spy_check(self, grade):
+        calls.append(grade)
+        return real_check(self, grade)
+
+    monkeypatch.setattr(type(record), "check_grade", spy_check)
+    monkeypatch.setattr(cli, "read_json_path", lambda *_a, **_k: ({"kind": "platform"}, b"{}"))
+    monkeypatch.setattr(cli, "validate_whole_task", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        cli,
+        "resolve_whole_task_inputs",
+        lambda *_a, **_k: SimpleNamespace(unverified=[], root=tmp_path, freeze={}, registry={}),
+    )
+    monkeypatch.setattr(cli, "load_record", lambda _p: record)
+    monkeypatch.setattr(cli, "check_claim", lambda _a: None)
+    monkeypatch.setattr(cli, "grade_platform_report", lambda *_a, **_k: "pass")
+    monkeypatch.setattr(cli, "enforce_qualification", lambda _a, gate: gate)
+
+    # Matching labelling/prompt_authorship passes check_grade.
+    good_assessment = SimpleNamespace(
+        reasons=[],
+        as_output=lambda: {
+            "claimed": "provisional",
+            "assessed": "provisional",
+            "reasons": [],
+            "labelling": record.labelling,
+            "prompt_authorship": record.prompt_authorship,
+        },
+    )
+    monkeypatch.setattr(cli, "assess_inputs", lambda *_a, **_k: good_assessment)
+    args = SimpleNamespace(
+        command="grade-platform",
+        report=tmp_path / "report.json",
+        inputs=tmp_path,
+        resolver=None,
+        qualification_record=tmp_path / "record.json",
+    )
+    gate, extra = cli._grade(args)
+    assert gate == "pass"
+    assert len(calls) == 1
+    assert calls[0] == extra
+
+    # Mismatched qualification output is rejected by record.check_grade inside _grade.
+    bad_assessment = SimpleNamespace(
+        reasons=[],
+        as_output=lambda: {
+            "claimed": "provisional",
+            "assessed": "provisional",
+            "reasons": [],
+            "labelling": None,
+            "prompt_authorship": None,
+        },
+    )
+    monkeypatch.setattr(cli, "assess_inputs", lambda *_a, **_k: bad_assessment)
+    with pytest.raises(WholeTaskRejected, match="record_grade_mismatch"):
+        cli._grade(args)

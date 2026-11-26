@@ -576,7 +576,7 @@ def test_source_native_runner_reuses_prepared_primary_for_every_row(
     fixture_root.mkdir()
     _pin_runtime_clock(monkeypatch, FakeClock())
     production, _, _ = native_fixture(fixture_root)
-    monkeypatch.setattr(asset_diagnostic_runner, "_load_production_config", lambda path: production)
+    monkeypatch.setattr(asset_diagnostic_runner, "load_production_config", lambda path: production)
     report = asyncio.run(
         asset_diagnostic_runner.run_source_benchmark(
             load(development_input),

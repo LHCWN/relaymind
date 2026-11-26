@@ -1,7 +1,6 @@
 """Reviewed exact-identity local activation authority (RM41)."""
 
 from relaymind.assets.embedding_manifest import EmbeddingManifest
-from relaymind.assets.embeddings import EmbeddingError
 
 # Rights, original bytes and actual Linux runtime/device controls were reviewed
 # for these exact two identities. This is not a quality or platform-wide claim.
@@ -38,8 +37,3 @@ def qualification_key(manifest: EmbeddingManifest, semantic_digest: str) -> tupl
         raw["runtime"]["build"],
         raw["device"],
     )
-
-
-def require_qualified(manifest: EmbeddingManifest, semantic_digest: str) -> None:
-    if qualification_key(manifest, semantic_digest) not in QUALIFIED_IDENTITIES:
-        raise EmbeddingError("unqualified_artifact")

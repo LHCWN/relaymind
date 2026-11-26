@@ -7,11 +7,16 @@ import pytest
 
 from relaymind.assets.embedding_config import validate_adaptation_config, validate_hybrid_config
 from relaymind.assets.embedding_manifest import validate_embedding_manifest
-from relaymind.assets.embedding_qualification import qualification_key, require_qualified
+from relaymind.assets.embedding_qualification import QUALIFIED_IDENTITIES, qualification_key
 from relaymind.assets.embeddings import EmbeddingError
 
 ROOT = Path(__file__).resolve().parents[1] / "models" / "embeddings"
 PREFIX = "multilingual-e5-small-linux-x86_64"
+
+
+def _require_qualified(manifest, semantic_digest: str) -> None:
+    if qualification_key(manifest, semantic_digest) not in QUALIFIED_IDENTITIES:
+        raise EmbeddingError("unqualified_artifact")
 
 
 @pytest.mark.parametrize("kind", ["hybrid", "adaptation"])
@@ -21,10 +26,10 @@ def test_reviewed_local_identity_requires_exact_artifact_config_and_runtime(kind
     config_raw = json.loads((ROOT / f"{PREFIX}.{kind}.json").read_bytes())
     validate = validate_hybrid_config if kind == "hybrid" else validate_adaptation_config
     config = validate(config_raw, manifest)
-    require_qualified(manifest, config.digest)
+    _require_qualified(manifest, config.digest)
     assert qualification_key(manifest, config.digest)[0] == config_raw["manifest_digest"]
     with pytest.raises(EmbeddingError, match="unqualified_artifact"):
-        require_qualified(manifest, "0" * 64)
+        _require_qualified(manifest, "0" * 64)
     for field, value in [("device", "cpu:unreviewed"), ("model", "unreviewed")]:
         changed = json.loads(json.dumps(manifest_raw))
         if field == "model":
@@ -32,4 +37,4 @@ def test_reviewed_local_identity_requires_exact_artifact_config_and_runtime(kind
         else:
             changed[field] = value
         with pytest.raises(EmbeddingError, match="unqualified_artifact"):
-            require_qualified(validate_embedding_manifest(changed), config.digest)
+            _require_qualified(validate_embedding_manifest(changed), config.digest)

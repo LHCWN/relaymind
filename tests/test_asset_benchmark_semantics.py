@@ -94,7 +94,7 @@ def test_benchmark_snapshot_keeps_original_relative_semantic_roots(
         ),
         raising=False,
     )
-    production = asset_benchmark._load_production_config(path)
+    production = asset_benchmark.load_production_config(path)
     assert production.asset_semantics.hybrid.digest == expected.digest
     assert production.asset_semantics.hybrid.manifest.root == path.parent / "semantics"
     assert production.assets.sources[0].path == path.parent / "catalog.json"
@@ -261,7 +261,7 @@ def test_retrieval_helper_refuses_enabled_adaptation_instead_of_dropping_it(tmp_
         ),
     )
     with pytest.raises(AssetCorpusError, match="adaptation_unavailable"):
-        asset_benchmark._load_production_config(path)
+        asset_benchmark.load_production_config(path)
 
 
 def test_unused_supplied_semantics_export_private_preimages_and_reload_without_locators(
@@ -297,7 +297,7 @@ def test_unused_supplied_semantics_export_private_preimages_and_reload_without_l
             raw, config_dir=config_dir, embedding_loader=loader
         ),
     )
-    production = asset_benchmark._load_production_config(production_path)
+    production = asset_benchmark.load_production_config(production_path)
     effective = asset_evidence.effective_asset_config(
         production,
         config.release,

@@ -90,6 +90,9 @@ def _grade(args) -> tuple[str, dict]:
     check_claim(assessment)
     unverified = [item for item in inputs.unverified if item in assessment.reasons]
     extra = dict(unverified=unverified, qualification=assessment.as_output())
+    if record is not None:
+        # Defensive post-condition guard against drift between record and assess_inputs.
+        record.check_grade(extra)
     if kind == "adaptation":
         summary = grade_adaptation_report(
             report,

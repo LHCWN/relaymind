@@ -283,18 +283,6 @@ def _rank_steps(
     return result
 
 
-def rank_hybrid(
-    request, config: SemanticConfig, index: HybridIndex, query_vector, *, publication=None
-) -> dict:
-    """Pure deterministic kernel; the production selector drives the same steps cooperatively."""
-    steps = _rank_steps(request, config, index, query_vector, publication=publication)
-    while True:
-        try:
-            next(steps)
-        except StopIteration as done:
-            return done.value
-
-
 class HybridAssetSelector:
     """Production v2 selector; only its coordinator may dispatch a lexical floor."""
 

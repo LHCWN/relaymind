@@ -20,18 +20,45 @@ from relaymind.evaluation import corpus as corpus_module
 from relaymind.evaluation.corpus import (
     CLASSES,
     ENGLISH_CLASS_SIZES,
+    LANGUAGES,
     CorpusError,
     check_lock,
     corpus_digest,
     demo_skill_names,
-    development_prompts,
     load_corpus,
     load_skills_sidecar,
-    lock_document,
+    normalize_prompt,
     parse_corpus,
     parse_skills_sidecar,
 )
 from relaymind.tools.sandbox import SandboxDataService
+
+
+def lock_document(corpus, corpus_name: str, *, sidecars=None) -> dict:
+    """Test-only helper for building expected corpus lock documents (#296)."""
+    doc = {
+        "corpus": corpus_name,
+        "version": corpus.document["version"],
+        "sha256": corpus.digest,
+        "seeds": {name: canonical_digest(seed) for name, seed in sorted(corpus.seeds.items())},
+    }
+    if sidecars:
+        doc["sidecars"] = {name: canonical_digest(data) for name, data in sorted(sidecars.items())}
+    doc["frozen_on"] = corpus.document["frozen_on"]
+    return doc
+
+
+def development_prompts(skills_root: Path, *, extra=()) -> set[str]:
+    """Test-only helper for collecting normalized skill development prompts (#296)."""
+    prompts = {normalize_prompt(text) for text in extra}
+    for path in sorted(Path(skills_root).glob("*/examples.json")):
+        for pair in json.loads(path.read_text("utf-8")).get("pairs", []):
+            for language in LANGUAGES:
+                request = pair.get(language, {}).get("request")
+                if request:
+                    prompts.add(normalize_prompt(request))
+    return prompts
+
 
 REPO = Path(__file__).resolve().parent.parent
 CORPUS = REPO / "evaluation" / "corpus.v1.json"

@@ -615,7 +615,7 @@ def test_unavailable_predispatch_has_no_invented_attempt_or_zero_cost(tmp_path, 
 
         raise RecommendationError("recommendation_unavailable")
 
-    monkeypatch.setattr(api._LockedProjectionProvider, "pin", unavailable)
+    monkeypatch.setattr(api.LockedProjectionProvider, "pin", unavailable)
     report = asyncio.run(api.run_asset_benchmark(config))
     row = report.data["results"][0]
     assert row["status"] == "failed" and row["attempts"] == [] and row["observed_costs"] == []
@@ -736,7 +736,7 @@ def test_infrastructure_failure_preserves_full_plan_as_blocked_rows(tmp_path, mo
     def unavailable(self, kinds):
         raise RuntimeError("private infrastructure detail")
 
-    monkeypatch.setattr(api._LockedProjectionProvider, "pin", unavailable)
+    monkeypatch.setattr(api.LockedProjectionProvider, "pin", unavailable)
     report = asyncio.run(api.run_asset_benchmark(config))
     assert report.data["status"] == "blocked"
     assert [r["status"] for r in report.data["results"]] == ["failed", "not_run", "not_run"]

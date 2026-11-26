@@ -25,9 +25,9 @@ from typing import Any
 
 from relaymind.canonical import canonical_digest, canonical_json
 from relaymind.evaluation.asset_benchmark import (
-    _LockedProjectionProvider,
-    _not_run,
+    LockedProjectionProvider,
     execute_asset_slot,
+    not_run_row,
 )
 from relaymind.evaluation.asset_corpus_io import matches_original
 from relaymind.evaluation.asset_episode_export import (
@@ -111,7 +111,7 @@ def locked_episode_arms(
         work_dir.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix=f"episode-{arm}-", dir=work_dir) as directory:
             runs = RunStore(Path(directory) / "episode.sqlite3", clock=clock)
-            provider = _LockedProjectionProvider(release, config)
+            provider = LockedProjectionProvider(release, config)
             service = RecommendationService.for_provider(runs, provider, settings)
             feedback = action = None
             try:
@@ -241,8 +241,8 @@ def _not_run_episode(episode: Mapping, labels: Mapping, reason: str) -> dict:
             dict(
                 case_id=case_id,
                 kind=kind,
-                off=_not_run(_slot(case_id, ordinal), label, reason),
-                on=_not_run(_slot(case_id, ordinal), label, reason),
+                off=not_run_row(_slot(case_id, ordinal), label, reason),
+                on=not_run_row(_slot(case_id, ordinal), label, reason),
             )
         )
     return dict(

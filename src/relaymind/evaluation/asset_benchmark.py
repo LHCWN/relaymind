@@ -8,9 +8,12 @@ transport, coordination, result validation, admission and recommendation state.
 import asyncio
 import copy
 import hashlib
+import json
 import sys
 import tempfile
+import time
 import tomllib
+import unicodedata
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -128,7 +131,7 @@ class AssetBenchmarkConfig:
     environment_lock: Mapping
 
 
-def _load_production_config(path: Path):
+def load_production_config(path: Path):
     """Parse one bounded snapshot without relocating its semantic/source roots."""
     path = Path(path).absolute()
     payload = read_local(path.parent, path.name, CONFIG_BYTES)
@@ -226,7 +229,7 @@ def load_benchmark_config(path: Path) -> AssetBenchmarkConfig:
     for key in ("lock", "production_config", "environment_lock"):
         relative_path(raw[key])
         read_local(path.parent, raw[key], CONFIG_BYTES)
-    production = _load_production_config(path.parent / raw["production_config"])
+    production = load_production_config(path.parent / raw["production_config"])
     normalize_preparation(
         raw.get("preparation"),
         http_primary=production.recommendations.primary == "http",
@@ -255,7 +258,7 @@ def load_benchmark_config(path: Path) -> AssetBenchmarkConfig:
     )
 
 
-class _LockedProjectionProvider:
+class LockedProjectionProvider:
     """Explicit evaluation-only metadata injection, never qualified host evidence."""
 
     def __init__(self, release, effective):
@@ -292,50 +295,82 @@ class _LockedProjectionProvider:
         )
 
 
-async def execute_asset_slot(service, provider, normal, case, slot, label, *, key=None):
+async def execute_asset_slot(
+    service,
+    provider,
+    normal: Mapping | None,
+    case,
+    slot,
+    label,
+    *,
+    key=None,
+    request: Mapping | None = None,
+    task_id: str | None = None,
+    claim_client: str = "evaluation",
+    candidate_limit: int | None = None,
+    before_create: Callable[[Any, dict], None] | None = None,
+    drain_seconds: float | None = None,
+    swallow_unexpected: bool = True,
+    record_terminal_observation: bool = False,
+    record_empty_catalog_cost: bool = True,
+):
     """Run one planned slot through the production offer and service.
 
     Returns ``(row, status, recommendation_id)``: ``status`` is ``None`` or the
     run status the slot forces (``interrupted`` or ``blocked``), and
     ``recommendation_id`` names the stored recommendation when one exists.
-    Shared by the retrieval benchmark and the section 12.6.5 episode driver.
+    Shared by the retrieval benchmark, source diagnostic runner, and episode driver.
     ``key`` is the idempotency claim key (default: the slot ordinal); callers
     that reuse ordinals in one store must give each invocation its own key.
     """
+    if normal is None and (request is None or candidate_limit is None):
+        raise ValueError("normal is required unless request and candidate_limit are provided")
     status = None
     cancel = None
     recommendation_id = None
-    request = dict(
-        schema_version=1,
-        task_text=case["task_text"],
-        conversation=list(case["conversation"]),
-        requested_kinds=normal["requested_kinds"],
-        selection_scope=normal["selection_scope"],
-        host_snapshot_revision=None,
-        language_tags=list(case["language_tags"]),
-        code_switched=case["code_switched"],
+    payload_request = (
+        dict(request)
+        if request is not None
+        else dict(
+            schema_version=1,
+            task_text=case["task_text"],
+            conversation=list(case["conversation"]),
+            requested_kinds=normal["requested_kinds"],
+            selection_scope=normal["selection_scope"],
+            host_snapshot_revision=None,
+            language_tags=list(case["language_tags"]),
+            code_switched=case["code_switched"],
+        )
     )
     budget = service.new_budget()
-    row = _not_run(slot, label)
+    row = not_run_row(slot, label)
     try:
-        offer = service.precheck(request)
+        offer = service.precheck(payload_request)
+        resolved_limit = (
+            normal["budgets"]["candidate_limit"] if candidate_limit is None else candidate_limit
+        )
+        resolved_task_id = (
+            task_id
+            if task_id is not None
+            else canonical_digest(
+                dict(
+                    task_text=payload_request["task_text"],
+                    conversation=payload_request["conversation"],
+                )
+            )
+        )
         # Same production offer.request envelope as service.create;
         # volatile ID/deadline fields alone are removed from digest.
         envelope = dict(
-            request,
+            payload_request,
             schema_version=2,
             recommendation_id=str(uuid.uuid4()),
-            task_id=canonical_digest(
-                dict(
-                    task_text=request["task_text"],
-                    conversation=request["conversation"],
-                )
-            ),
+            task_id=resolved_task_id,
             scope=provider.scope,
             permissions=list(provider.permissions),
             catalog_revision=offer.catalog_revision,
             deadline_ms=budget.remaining_ms(),
-            candidate_limit=normal["budgets"]["candidate_limit"],
+            candidate_limit=resolved_limit,
         )
         selection = offer.request(
             envelope,
@@ -346,17 +381,19 @@ async def execute_asset_slot(service, provider, normal, case, slot, label, *, ke
             offered_projection_digest=canonical_digest(list(offer.catalog)),
             catalog_revision=offer.catalog_revision,
         )
+        if before_create is not None:
+            before_create(offer, row)
         claim = RecommendationClaim(
             provider.scope,
-            "evaluation",
+            claim_client,
             "POST",
             "/relay/v1/recommendations",
             None,
             str(slot["ordinal"]) if key is None else key,
-            canonical_digest(request),
+            canonical_digest(payload_request),
         )
         cancel = CancellationSignal()
-        response = await service.create(request, claim, budget, cancel)
+        response = await service.create(payload_request, claim, budget, cancel)
         body = (
             dict(service.get(provider.scope, cancel.recommendation_id))
             if cancel.recommendation_id is not None
@@ -379,25 +416,19 @@ async def execute_asset_slot(service, provider, normal, case, slot, label, *, ke
                 body["recommendation_id"],
                 ("failed", "cancelled"),
             )
-            row.update(
+            update = dict(
                 status="cancelled" if body.get("state") == "cancelled" else "failed",
                 reason=(body.get("error") or {}).get("code", "recommendation_unavailable"),
                 attempts=list(terminal["attempts"]),
                 embeddings=list(terminal.get("embeddings", [])),
             )
-        row["observed_ms"] = budget.elapsed_ms()
+            if record_terminal_observation:
+                update["terminal_observation"] = terminal
+            row.update(update)
     except RecommendationError as failure:
-        row.update(
-            status="failed",
-            reason=failure.code,
-            observed_ms=budget.elapsed_ms(),
-        )
+        row.update(status="failed", reason=failure.code)
     except asyncio.CancelledError:
-        row.update(
-            status="cancelled",
-            reason="cancelled",
-            observed_ms=budget.elapsed_ms(),
-        )
+        row.update(status="cancelled", reason="cancelled")
         if cancel is not None and cancel.recommendation_id is not None:
             terminal = terminal_payload(
                 service,
@@ -405,28 +436,35 @@ async def execute_asset_slot(service, provider, normal, case, slot, label, *, ke
                 cancel.recommendation_id,
                 ("cancelled",),
             )
-            row.update(
+            update = dict(
                 attempts=list(terminal["attempts"]),
                 embeddings=list(terminal.get("embeddings", [])),
             )
+            if record_terminal_observation:
+                update["terminal_observation"] = terminal
+            row.update(update)
         status = "interrupted"
     except Exception:
-        row.update(
-            status="failed",
-            reason="internal_error",
-            observed_ms=budget.elapsed_ms(),
-        )
+        if not swallow_unexpected:
+            raise
+        row.update(status="failed", reason="internal_error")
         status = "blocked"
     except KeyboardInterrupt:
-        row.update(
-            status="cancelled",
-            reason="cancelled",
-            observed_ms=budget.elapsed_ms(),
-        )
+        if not swallow_unexpected:
+            raise
+        row.update(status="cancelled", reason="cancelled")
         status = "interrupted"
+    finally:
+        row["observed_ms"] = budget.elapsed_ms()
+        if drain_seconds is not None:
+            await budget.drain(drain_seconds)
     # Actual observed no-dispatch is zero inference only for the
     # admitted initial empty catalog, never an unavailable catalog.
-    if row["result"] is not None and row["result"]["decision"] == "empty_catalog":
+    if (
+        record_empty_catalog_cost
+        and row["result"] is not None
+        and row["result"]["decision"] == "empty_catalog"
+    ):
         row["observed_costs"] = [
             dict(
                 provenance="observed",
@@ -459,7 +497,7 @@ def terminal_payload(service, scope, recommendation_id, event_types) -> dict:
     )
 
 
-def _not_run(slot, label, reason="interrupted") -> dict:
+def not_run_row(slot, label, reason="interrupted") -> dict:
     return dict(
         slot=dict(slot),
         status="not_run",
@@ -501,7 +539,7 @@ def _normal(config: AssetBenchmarkConfig) -> dict:
     )
 
 
-def _offer_binding(provider: _LockedProjectionProvider, normal: Mapping) -> tuple[dict, list]:
+def _offer_binding(provider: LockedProjectionProvider, normal: Mapping) -> tuple[dict, list]:
     """The preparation binding of the pinned production offer, and its catalog."""
     offer = provider.pin(normal["requested_kinds"])
     catalog = list(offer.catalog)
@@ -528,6 +566,118 @@ def stable_request_digest(request: Mapping) -> str:
     )
 
 
+@dataclass
+class BenchmarkSession:
+    """Prepared provider, optional native runtime, preparation record and primary selector."""
+
+    provider: LockedProjectionProvider
+    runtime: NativeBenchmarkRuntime | None
+    preparation: dict
+    status: str
+    prepared_primary: PreparedAssetSelector | None
+    setup_ms: float = 0.0
+
+    async def close(self) -> None:
+        if self.runtime is not None:
+            await self.runtime.close()
+        else:
+            self.provider.stop()
+
+
+async def prepare_benchmark_session(
+    production,
+    release,
+    effective: Mapping,
+    *,
+    requested_kinds: list[str],
+    preparation_config: Mapping,
+    http_binding: Callable[[LockedProjectionProvider], tuple[dict, list]],
+    clock: TraceClock | None = None,
+    interrupted: Callable[[], bool] | None = None,
+    catch_errors: bool = False,
+    use_native_runtime: bool = True,
+) -> BenchmarkSession:
+    """Set up a benchmark provider, optional native runtime, and index preparation."""
+    if preparation_config["mode"] == "local" and (
+        not use_native_runtime or production.asset_semantics is None
+    ):
+        raise ValueError("invalid_local_preparation_owner")
+    setup_started = time.monotonic()
+    provider: LockedProjectionProvider | None = None
+    preparation = await prepare_asset_index(normalize_preparation(None), None, [])
+    status = "completed"
+    prepared_primary = None
+    runtime = None
+    setup_ms = 0.0
+    cancel_kwargs = {"cancelled": interrupted} if interrupted is not None else {}
+    try:
+        if use_native_runtime and production.asset_semantics is not None:
+            runtime = await NativeBenchmarkRuntime.create(
+                production,
+                release,
+                effective,
+                requested_kinds=requested_kinds,
+                clock=clock,
+            )
+            provider = runtime.provider
+            if preparation_config["mode"] == "local":
+                setup_ms = (time.monotonic() - setup_started) * 1000
+                preparation = await runtime.prepare_local(
+                    preparation_config,
+                    requested_kinds=requested_kinds,
+                    **cancel_kwargs,
+                )
+                if preparation["status"] not in ("ready", "not_applicable"):
+                    status = "interrupted" if preparation["status"] == "cancelled" else "blocked"
+                elif preparation["status"] == "ready":
+                    prepared_primary = PreparedAssetSelector(runtime.service.primary, preparation)
+            else:
+                # Native inference/index construction requires explicit local
+                # preparation. The ordinary lexical floor still has its cache.
+                await runtime.worker.rebuild()
+                setup_ms = (time.monotonic() - setup_started) * 1000
+        else:
+            provider = LockedProjectionProvider(release, effective)
+            await provider.publish()
+            setup_ms = (time.monotonic() - setup_started) * 1000
+        if preparation_config["mode"] == "http":
+            binding, catalog = http_binding(provider)
+            preparation = await prepare_asset_index(
+                preparation_config, binding, catalog, **cancel_kwargs
+            )
+            if preparation["status"] != "ready":
+                status = "interrupted" if preparation["status"] == "cancelled" else "blocked"
+            else:
+                prepared_primary = PreparedAssetSelector(
+                    build_asset_selector(production.recommendations), preparation
+                )
+    except Exception:
+        if not catch_errors:
+            if runtime is not None:
+                await runtime.close()
+            elif provider is not None:
+                provider.stop()
+            raise
+        status = "blocked"
+        if provider is None:
+            provider = LockedProjectionProvider(release, effective)
+    except BaseException:
+        if runtime is not None:
+            await runtime.close()
+        elif provider is not None:
+            provider.stop()
+        raise
+    assert provider is not None
+    return BenchmarkSession(
+        provider=provider,
+        runtime=runtime,
+        preparation=preparation,
+        status=status,
+        prepared_primary=prepared_primary,
+        setup_ms=setup_ms,
+    )
+
+
 async def prepare_benchmark_index(
     config: AssetBenchmarkConfig, *, interrupted=lambda: False
 ) -> dict:
@@ -535,30 +685,20 @@ async def prepare_benchmark_index(
     normal = _normal(config)
     if normal["preparation"]["mode"] == "none":
         return await prepare_asset_index(normal["preparation"], None, [])
-    if normal["preparation"]["mode"] == "local":
-        runtime = await NativeBenchmarkRuntime.create(
-            config.production,
-            config.release,
-            config.effective,
-            requested_kinds=normal["requested_kinds"],
-        )
-        try:
-            return await runtime.prepare_local(
-                normal["preparation"],
-                requested_kinds=normal["requested_kinds"],
-                cancelled=interrupted,
-            )
-        finally:
-            await runtime.close()
-    provider = _LockedProjectionProvider(config.release, config.effective)
+    session = await prepare_benchmark_session(
+        config.production,
+        config.release,
+        config.effective,
+        requested_kinds=normal["requested_kinds"],
+        preparation_config=normal["preparation"],
+        http_binding=lambda provider: _offer_binding(provider, normal),
+        interrupted=interrupted,
+        use_native_runtime=normal["preparation"]["mode"] == "local",
+    )
     try:
-        await provider.publish()
-        binding, catalog = _offer_binding(provider, normal)
-        return await prepare_asset_index(
-            normal["preparation"], binding, catalog, cancelled=interrupted
-        )
+        return session.preparation
     finally:
-        provider.stop()
+        await session.close()
 
 
 async def run_asset_benchmark(
@@ -576,63 +716,23 @@ async def run_asset_benchmark(
         raise AssetCorpusError("environment_lock_mismatch")
     if benchmark_inventories() != config.inventories:
         raise AssetCorpusError("runner_changed")
-    provider = _LockedProjectionProvider(config.release, config.effective)
     rows = []
-    status = "completed"
-    preparation = await prepare_asset_index(normalize_preparation(None), None, [])
-    primary = None
-    runtime = None
+    session = await prepare_benchmark_session(
+        config.production,
+        config.release,
+        config.effective,
+        requested_kinds=normal["requested_kinds"],
+        preparation_config=normal["preparation"],
+        http_binding=lambda provider: _offer_binding(provider, normal),
+        interrupted=interrupted,
+        catch_errors=True,
+    )
+    status = session.status
+    preparation = session.preparation
+    provider = session.provider
+    runtime = session.runtime
+    primary = session.prepared_primary
     try:
-        try:
-            if config.production.asset_semantics is not None:
-                runtime = await NativeBenchmarkRuntime.create(
-                    config.production,
-                    config.release,
-                    config.effective,
-                    requested_kinds=normal["requested_kinds"],
-                )
-                provider = runtime.provider
-                if normal["preparation"]["mode"] == "local":
-                    preparation = await runtime.prepare_local(
-                        normal["preparation"],
-                        requested_kinds=normal["requested_kinds"],
-                        cancelled=interrupted,
-                    )
-                    if preparation["status"] not in ("ready", "not_applicable"):
-                        status = (
-                            "interrupted" if preparation["status"] == "cancelled" else "blocked"
-                        )
-                    elif preparation["status"] == "ready":
-                        primary = PreparedAssetSelector(runtime.service.primary, preparation)
-                else:
-                    # Native inference/index construction requires explicit local
-                    # preparation. The ordinary lexical floor still has its cache.
-                    await runtime.worker.rebuild()
-            else:
-                await provider.publish()
-            if normal["preparation"]["mode"] == "http":
-                offer = provider.pin(normal["requested_kinds"])
-                catalog = list(offer.catalog)
-                binding = preparation_binding(
-                    selector={k: normal["selector"][k] for k in ("name", "version")},
-                    catalog_revision=offer.catalog_revision,
-                    catalog=catalog,
-                    scope=normal["scope"],
-                    permissions=normal["permissions"],
-                    selection_scope=normal["selection_scope"],
-                    requested_kinds=normal["requested_kinds"],
-                )
-                preparation = await prepare_asset_index(
-                    normal["preparation"], binding, catalog, cancelled=interrupted
-                )
-                if preparation["status"] != "ready":
-                    status = "interrupted" if preparation["status"] == "cancelled" else "blocked"
-                else:
-                    primary = PreparedAssetSelector(
-                        build_asset_selector(config.production.recommendations), preparation
-                    )
-        except Exception:
-            status = "blocked"
         try:
             with tempfile.TemporaryDirectory(prefix="asset-benchmark-") as directory:
                 runs = (
@@ -658,7 +758,7 @@ async def run_asset_benchmark(
                             if status == "completed":
                                 status = "interrupted"
                             rows.append(
-                                _not_run(
+                                not_run_row(
                                     slot, label, "blocked" if status == "blocked" else "interrupted"
                                 )
                             )
@@ -677,10 +777,9 @@ async def run_asset_benchmark(
         except Exception:
             status = "blocked"
             for slot in slots[len(rows) :]:
-                rows.append(_not_run(slot, labels[slot["case_id"]], "blocked"))
+                rows.append(not_run_row(slot, labels[slot["case_id"]], "blocked"))
     finally:
-        if runtime is not None:
-            await runtime.close()
+        await session.close()
     validate_asset_rows(slots, rows)
     root = benchmark_repository_root()
     revision = application_revision(root)
@@ -1001,8 +1100,6 @@ def refresh_fixture_benchmark_config(path: Path, *, reauthor_fixture_unicode: bo
     This authoring helper is never called by run or compare. It refuses genuine
     corpus purposes and never changes source data, labels, rights or policy.
     """
-    import json
-
     path = Path(path).absolute()
     raw = tomllib.loads(read_local(path.parent, path.name, CONFIG_BYTES).decode("utf-8"))
     validate_benchmark_document("config", raw)
@@ -1010,8 +1107,6 @@ def refresh_fixture_benchmark_config(path: Path, *, reauthor_fixture_unicode: bo
     if type(reauthor_fixture_unicode) is not bool:
         raise AssetCorpusError("invalid_fixture_authoring")
     if reauthor_fixture_unicode:
-        import unicodedata
-
         lock = document(lock_path.parent, lock_path.name, "lock")
         committed = {key: value for key, value in lock.items() if key != "digest"}
         if canonical_digest(committed) != lock["digest"]:
@@ -1026,7 +1121,7 @@ def refresh_fixture_benchmark_config(path: Path, *, reauthor_fixture_unicode: bo
     if release.lock["purpose"] != "fixture":
         raise AssetCorpusError("fixture_authoring_only")
     read_local(path.parent, raw["production_config"], CONFIG_BYTES)
-    production = _load_production_config(path.parent / raw["production_config"])
+    production = load_production_config(path.parent / raw["production_config"])
     inventories = benchmark_inventories()
     effective = _effective_config(production, release, inventories, raw["split"])
     environment = collect_benchmark_environment()

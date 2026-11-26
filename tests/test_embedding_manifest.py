@@ -217,9 +217,25 @@ def test_symlinks_and_physical_aliases_are_refused(tmp_path):
 
 
 def test_unqualified_artifact_never_reaches_backend_loading(tmp_path):
+    from relaymind.assets.embedding_activation import BackendRegistration, EmbeddingLoader
+    from relaymind.assets.embedding_config import load_hybrid_config
+    from test_embedding_config import hybrid
+
     path, _ = fixture(tmp_path)
     manifest = api().load_embedding_manifest(path)
-    from relaymind.assets import embedding_qualification
+    config_path = tmp_path / "hybrid.json"
+    config_path.write_text(json.dumps(hybrid(manifest)))
+    config = load_hybrid_config(config_path, manifest)
 
+    called = False
+
+    def fail_load(_artifact):
+        nonlocal called
+        called = True
+        raise AssertionError("unqualified artifact must not reach backend loading")
+
+    entry = BackendRegistration(lambda: dict(manifest.data["runtime"]), lambda: "cpu", fail_load)
+    loader = EmbeddingLoader(backends={manifest.data["runtime"]["backend"]: entry})
     with pytest.raises(api().EmbeddingError, match="unqualified_artifact"):
-        embedding_qualification.require_qualified(manifest, "0" * 64)
+        loader.load(config)
+    assert not called

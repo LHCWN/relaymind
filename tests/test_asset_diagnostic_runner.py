@@ -348,7 +348,7 @@ def test_rm40_cancellation_conserves_planned_slots_and_consumed_attempts(
     # Windows the operating system queries alone can take seconds, and the
     # 2 s guards below bound only dispatch and cancellation.
     environment = api().collect_benchmark_environment(
-        production=api()._load_production_config(production(development_input))
+        production=api().load_production_config(production(development_input))
     )
     monkeypatch.setattr(
         api(), "collect_benchmark_environment", lambda *, production: copy.deepcopy(environment)
@@ -438,3 +438,115 @@ def test_rm40_compare_rejects_malformed_effective_sources_with_matching_digest(
     changed["config_digest"] = canonical_digest(changed["effective_config"])
     with pytest.raises(ValueError, match="invalid_development_report"):
         api().compare_source_benchmarks(report, changed)
+
+
+def test_source_benchmark_index_preparation_ms_excludes_index_preparation(
+    development_input, monkeypatch
+):
+    """#296: index_preparation_ms measures provider/runtime setup, excluding prepare_asset_index."""
+    from relaymind.evaluation import asset_benchmark
+
+    now = [100.0]
+    monkeypatch.setattr(asset_benchmark.time, "monotonic", lambda: now[0])
+    real_publish = asset_benchmark.LockedProjectionProvider.publish
+
+    async def timed_publish(self):
+        now[0] += 0.04
+        return await real_publish(self)
+
+    monkeypatch.setattr(asset_benchmark.LockedProjectionProvider, "publish", timed_publish)
+    real_prepare = asset_benchmark.prepare_asset_index
+
+    async def slow_prepare(*args, **kwargs):
+        # Return stubbed HTTP preparation directly without attempting any live socket call.
+        if args and args[0].get("mode") == "http":
+            now[0] += 5.0
+            return dict(
+                schema_version=1,
+                mode="http",
+                status="ready",
+                profile="cold",
+                duration_ms=5000,
+                binding=args[1],
+            )
+        return await real_prepare(*args, **kwargs)
+
+    class OfflineSelector:
+        name = "example_lexical"
+        version = "1"
+        builtin = True
+        mechanism = "offline_test"
+
+        async def select(self, request, context):
+            req = request.data
+            return dict(
+                schema_version=2,
+                recommendation_id=req["recommendation_id"],
+                catalog_revision=req["catalog_revision"],
+                host_snapshot_revision=req["host_snapshot_revision"],
+                selector={"name": self.name, "version": self.version},
+                mechanism=self.mechanism,
+                candidates=[],
+                index_revision=None,
+                elapsed_ms=0,
+                usage_claims=None,
+                outcome="completed",
+                decision="no_match",
+            )
+
+    monkeypatch.setattr(asset_benchmark, "prepare_asset_index", slow_prepare)
+    monkeypatch.setattr(asset_benchmark, "build_asset_selector", lambda _s: OfflineSelector())
+    monkeypatch.setattr(api(), "build_asset_selector", lambda _s: OfflineSelector())
+    report = run(
+        development_input,
+        config=production(development_input, http=True),
+        preparation=dict(mode="http", url="http://127.0.0.1:8913/index", profile="cold"),
+    )
+    assert report["index_preparation_ms"] == pytest.approx(40.0)
+
+
+def test_prepare_benchmark_session_local_mode_setup_ms_excludes_prepare_local(monkeypatch):
+    """#296: local-mode setup_ms records NativeBenchmarkRuntime.create time, not prepare_local."""
+    from types import SimpleNamespace
+
+    from relaymind.evaluation import asset_benchmark
+
+    now = [200.0]
+    monkeypatch.setattr(asset_benchmark.time, "monotonic", lambda: now[0])
+
+    class FakeRuntime:
+        def __init__(self):
+            self.provider = SimpleNamespace(stop=lambda: None)
+            self.service = SimpleNamespace(primary=SimpleNamespace(name="fake_native", version="1"))
+
+        @classmethod
+        async def create(cls, *args, **kwargs):
+            now[0] += 0.025
+            return cls()
+
+        async def prepare_local(self, config, *, requested_kinds=None, **kwargs):
+            now[0] += 5.0
+            return dict(schema_version=1, mode="local", status="ready", duration_ms=5000)
+
+        async def close(self):
+            pass
+
+    monkeypatch.setattr(asset_benchmark, "NativeBenchmarkRuntime", FakeRuntime)
+    fake_production = SimpleNamespace(asset_semantics=object(), recommendations=None)
+    session = asyncio.run(
+        asset_benchmark.prepare_benchmark_session(
+            fake_production,
+            None,
+            {},
+            requested_kinds=["skill"],
+            preparation_config=dict(mode="local", profile="cold"),
+            http_binding=lambda _provider: ({}, []),
+            use_native_runtime=True,
+        )
+    )
+    try:
+        assert session.setup_ms == pytest.approx(25.0)
+        assert session.status == "completed"
+        assert session.preparation["status"] == "ready"
+    finally:
+        asyncio.run(session.close())

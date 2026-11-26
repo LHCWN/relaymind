@@ -354,17 +354,6 @@ def _order_digest(tasks: TaskSet) -> str:
     return canonical_digest([[s.repeat, s.task_id, s.arm] for s in sampling_order(tasks)])
 
 
-def lock_document(tasks: TaskSet, name: str) -> dict[str, Any]:
-    """The lock content: the file, its digest, and the digest of its sampling order."""
-    return {
-        "tasks": name,
-        "version": tasks.document["version"],
-        "sha256": tasks.digest,
-        "order_sha256": _order_digest(tasks),
-        "frozen_on": tasks.document["frozen_on"],
-    }
-
-
 def check_lock(tasks: TaskSet, lock_path: Path) -> None:
     """Refuse a task file whose digest or order differs from the frozen one."""
     lock = json.loads(Path(lock_path).read_text("utf-8"))
