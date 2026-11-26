@@ -19,6 +19,8 @@ from collections.abc import AsyncIterator, Collection, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from starlette.concurrency import run_in_threadpool
+
 from relaymind.adapters import AdapterHealth, Message, ModelAdapter
 from relaymind.api.chat_request import parse_managed_messages
 from relaymind.api.errors import ApiError
@@ -184,31 +186,36 @@ def sweep_expired_waits(orchestrator: LocalOrchestrator) -> None:
 
 
 def _last(orchestrator: LocalOrchestrator, run_id: str, event_type: EventType) -> TraceEvent | None:
-    """The latest event of one type; the store filters, so other payloads stay undecoded."""
-    events = orchestrator.store.events(run_id, event_type=event_type)
-    return events[-1] if events else None
+    """The latest event of one type via an indexed LIMIT 1 query."""
+    return orchestrator.store.latest_event(run_id, event_type)
 
 
-def run_view(
-    orchestrator: LocalOrchestrator, run_id: str, *, reveal_token: bool = False
-) -> dict[str, Any]:
+def run_view(orchestrator: LocalOrchestrator, run_id: str) -> dict[str, Any]:
     """The GET representation of a run (RM21, spec 0.17 section 7.4).
 
-    reveal_token asks for the plaintext confirmation token; the
-    orchestrator hands it out once, to the first reader that asks.
+    All store reads run under one store lock critical section so
+    background-thread callers never observe a torn state/events view.
+    Callers that need a single-use plaintext confirmation token invoke
+    ``orchestrator.reveal_confirmation`` on the event loop thread.
     """
     store = orchestrator.store
-    record = store.get_run(run_id)
-    state = RunState(record.state)
-    accepted = _last(orchestrator, run_id, EventType.RUN_ACCEPTED)
-    payload = {} if accepted is None else accepted.payload
-    # Only run.failed carries codes; a cancelled run's reason is not an error.
-    failed = _last(orchestrator, run_id, EventType.RUN_FAILED) if state is RunState.FAILED else None
-    codes = {} if failed is None else failed.payload
-    output = None
-    if state is RunState.COMPLETED:
-        deltas = store.events(run_id, event_type=EventType.ANSWER_DELTA)
-        output = "".join(e.payload["text"] for e in deltas) if deltas else None
+    with store.sql_read():
+        record = store.get_run(run_id)
+        state = RunState(record.state)
+        accepted = _last(orchestrator, run_id, EventType.RUN_ACCEPTED)
+        payload = {} if accepted is None else accepted.payload
+        # Only run.failed carries codes; a cancelled run's reason is not an error.
+        failed = (
+            _last(orchestrator, run_id, EventType.RUN_FAILED) if state is RunState.FAILED else None
+        )
+        codes = {} if failed is None else failed.payload
+        output = None
+        if state is RunState.COMPLETED:
+            deltas = store.events(run_id, event_type=EventType.ANSWER_DELTA)
+            output = "".join(e.payload["text"] for e in deltas) if deltas else None
+        pending_question = _pending_question(orchestrator, run_id, state)
+        pending_approval = _pending_approval(orchestrator, run_id, state)
+        metrics = _metrics(orchestrator, run_id, state)
     return {
         "run_id": run_id,
         "state": state.value,
@@ -218,9 +225,9 @@ def run_view(
         "output": output,
         "error_code": codes.get("error_code"),
         "reason_code": codes.get("reason_code"),
-        "pending_question": _pending_question(orchestrator, run_id, state),
-        "pending_approval": _pending_approval(orchestrator, run_id, state, reveal_token),
-        "metrics": _metrics(orchestrator, run_id, state),
+        "pending_question": pending_question,
+        "pending_approval": pending_approval,
+        "metrics": metrics,
         "events_url": events_url(run_id),
     }
 
@@ -242,7 +249,7 @@ def _pending_question(
 
 
 def _pending_approval(
-    orchestrator: LocalOrchestrator, run_id: str, state: RunState, reveal: bool
+    orchestrator: LocalOrchestrator, run_id: str, state: RunState
 ) -> dict[str, Any] | None:
     if state is not RunState.WAITING_CONFIRMATION:
         return None
@@ -255,8 +262,7 @@ def _pending_approval(
     keys = ("approval_id", "tool_name", "proposal_id", "arguments", "target", "state_version")
     view = {key: issued.payload.get(key) for key in keys}
     view["expires_at"] = issued.payload.get("expires_at")
-    revealed = orchestrator.reveal_confirmation(issued.run_id) if reveal else None
-    view["token"] = None if revealed is None else revealed.token
+    view["token"] = None
     return view
 
 
@@ -301,16 +307,22 @@ async def event_stream(
     last_sent = loop.time()
     next_sweep = loop.time()
     cursor = after_seq
+
+    def _poll_store(after: int) -> tuple[RunState, list[TraceEvent]]:
+        with store.sql_read():
+            state = RunState(store.get_run(run_id).state)
+            return state, store.events(run_id, after_seq=after)
+
     while True:
         try:
-            state = RunState(store.get_run(run_id).state)
+            state, events = await run_in_threadpool(_poll_store, cursor)
             if state in WAITING_STATES and loop.time() >= next_sweep:
                 # Only a waiting run can expire, and not faster than the
                 # sweep interval: an open stream does not keep the store busy.
+                # Keep wait expiry on the event loop that owns orchestrator._waiting.
                 next_sweep = loop.time() + settings.sweep_seconds
                 sweep_expired_waits(orchestrator)
-                state = RunState(store.get_run(run_id).state)
-            events = store.events(run_id, after_seq=cursor)
+                state, events = await run_in_threadpool(_poll_store, cursor)
         except RunNotFoundError:
             return
         for event in events:

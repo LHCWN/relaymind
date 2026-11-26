@@ -310,7 +310,7 @@ def install_recommendation_routes(
             else:
                 task.cancel()
             await asyncio.gather(task, return_exceptions=True)
-            recorded = service.recorded_response(claim)
+            recorded = await run_in_threadpool(service.recorded_response, claim)
             if recorded is None:
                 # Nothing was accepted: the cancellation is the outcome, never an empty 200.
                 raise
@@ -321,9 +321,8 @@ def install_recommendation_routes(
 
     async def readiness(request):
         _query(request)
-        return JSONResponse(
-            validate_readiness(service.readiness() if service else readiness_body())
-        )
+        body = service.readiness() if service else readiness_body()
+        return JSONResponse(validate_readiness(body))
 
     def object_id(request):
         return parse_object_id(request.path_params["recommendation_id"])
@@ -332,14 +331,18 @@ def install_recommendation_routes(
         _query(request)
         if service is None:
             raise RecommendationError("recommendation_not_found")
-        return JSONResponse(service.get(configured_scope, object_id(request)))
+        return JSONResponse(
+            await run_in_threadpool(service.get, configured_scope, object_id(request))
+        )
 
     async def events(request):
         after, limit = _query(request, events=True)
         if service is None:
             raise RecommendationError("recommendation_not_found")
         return JSONResponse(
-            service.events(configured_scope, object_id(request), after_seq=after, limit=limit)
+            await run_in_threadpool(
+                service.events, configured_scope, object_id(request), after_seq=after, limit=limit
+            )
         )
 
     app.add_api_route(ENDPOINT, guarded(create), methods=["POST"])

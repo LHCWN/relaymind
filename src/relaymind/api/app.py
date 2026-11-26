@@ -38,6 +38,7 @@ from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
+from starlette.concurrency import run_in_threadpool
 from starlette.types import Receive, Scope, Send
 
 from relaymind.api.auth import require_bearer_token
@@ -220,7 +221,7 @@ def create_app(
         mode_header = request.headers.get(MODE_HEADER)
         mode = _execution_mode(mode_header, MODE_HEADER, chat.alias, settings, orchestrator)
         claim = claim_for(key, "chat", body, mode_header)
-        stored = check_stored_key(orchestrator.store, claim)
+        stored = await run_in_threadpool(check_stored_key, orchestrator.store, claim)
         backend = backends[chat.alias]
         # Early headers (RM32): every check above and the slot still come first, because
         # the run is accepted here, before a header is sent.
@@ -250,7 +251,9 @@ def create_app(
                     native.cancel_wait_seconds,
                 )
             except IdempotencyKeyTakenError as taken:
-                stored = stored_after_race(orchestrator.store, claim, taken)
+                stored = await run_in_threadpool(
+                    stored_after_race, orchestrator.store, claim, taken
+                )
         if stored is None:
             created = int(time.time())
             headers = {RUN_ID_HEADER: result.run_id}
@@ -258,8 +261,8 @@ def create_app(
             # A duplicate: answered from the stored run, so no model or tool runs.
             # An expired wait ends first, so it is never answered as unfinished.
             sweep_expired_waits(orchestrator)
-            result, ended = stored_chat_result(
-                orchestrator.store, stored.run_id, stream=chat.stream
+            result, ended = await run_in_threadpool(
+                stored_chat_result, orchestrator.store, stored.run_id, stream=chat.stream
             )
             created = int(ended.timestamp())
             headers = {RUN_ID_HEADER: result.run_id, REPLAYED_HEADER: "true"}
@@ -284,7 +287,7 @@ def create_app(
         key = idempotency_key(request.headers)
         mode = _execution_mode(run.execution_mode, "execution_mode", None, settings, orchestrator)
         claim = claim_for(key, "native", body)
-        stored = check_stored_key(orchestrator.store, claim)
+        stored = await run_in_threadpool(check_stored_key, orchestrator.store, claim)
         if stored is None:
             try:
                 started = orchestrator.start(
@@ -293,13 +296,16 @@ def create_app(
                     idempotency=claim,
                 )
             except IdempotencyKeyTakenError as taken:
-                stored = stored_after_race(orchestrator.store, claim, taken)
+                stored = await run_in_threadpool(
+                    stored_after_race, orchestrator.store, claim, taken
+                )
             else:
                 return _accepted(started)
+
         # A duplicate: the existing run's reference, with its current state.
         # An expired wait ends first, so a run is never shown waiting past its limit.
         sweep_expired_waits(orchestrator)
-        record = orchestrator.store.get_run(stored.run_id)
+        record = await run_in_threadpool(orchestrator.store.get_run, stored.run_id)
         existing = StartedRun(record.run_id, record.state, record.version)
         return _accepted(existing, {REPLAYED_HEADER: "true"})
 
@@ -307,8 +313,16 @@ def create_app(
     @_guarded
     async def get_run(request: Request) -> Response:
         require_bearer_token(request.headers.get("authorization"), token)
+        run_id = request.path_params["run_id"]
         sweep_expired_waits(orchestrator)
-        view = run_view(orchestrator, request.path_params["run_id"], reveal_token=True)
+        view = await run_in_threadpool(run_view, orchestrator, run_id)
+        approval = view.get("pending_approval")
+        if approval is not None:
+            revealed = orchestrator.reveal_confirmation(
+                run_id, approval_id=approval["approval_id"], verify_store=False
+            )
+            if revealed is not None:
+                approval["token"] = revealed.token
         return JSONResponse(view, headers={"Cache-Control": "no-store"})
 
     @app.get("/relay/v1/runs/{run_id}/events")
@@ -317,7 +331,7 @@ def create_app(
         require_bearer_token(request.headers.get("authorization"), token)
         run_id = request.path_params["run_id"]
         cursor = parse_last_event_id(request.headers.get("last-event-id"))
-        orchestrator.store.get_run(run_id)  # 404 before the stream starts
+        await run_in_threadpool(orchestrator.store.get_run, run_id)  # 404 before the stream starts
         return _ClosingStream(
             event_stream(orchestrator, run_id, cursor, native),
             media_type="text/event-stream",
@@ -330,7 +344,7 @@ def create_app(
         require_bearer_token(request.headers.get("authorization"), token)
         run_id = request.path_params["run_id"]
         raw = await request.body()
-        record = orchestrator.store.get_run(run_id)  # 404 first
+        record = await run_in_threadpool(orchestrator.store.get_run, run_id)  # 404 first
         resume = parse_resume_request(_decode(raw))
         # An input mixed with approval fields matches no waiting state: it
         # is passed on as unusable so the terminal and version checks of
@@ -357,10 +371,11 @@ def create_app(
         require_bearer_token(request.headers.get("authorization"), token)
         run_id = request.path_params["run_id"]
         raw = await request.body()
-        orchestrator.store.get_run(run_id)  # 404 first
+        await run_in_threadpool(orchestrator.store.get_run, run_id)  # 404 first
         expected = parse_cancel_request(_decode(raw))
         await orchestrator.cancel(run_id, expected, wait_seconds=native.cancel_wait_seconds)
-        return JSONResponse(run_view(orchestrator, run_id), headers={"Cache-Control": "no-store"})
+        view = await run_in_threadpool(run_view, orchestrator, run_id)
+        return JSONResponse(view, headers={"Cache-Control": "no-store"})
 
     @app.get("/healthz")
     @_guarded

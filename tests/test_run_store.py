@@ -1117,3 +1117,228 @@ def test_run_clocks_change_only_under_the_store_lock(store, monkeypatch):
     store.clock.advance(store.retention.total_seconds() + 1)
     assert store.purge_expired() == [other]
     assert seen == [True, True]
+
+
+# --- #294: O(n) event appends, indexed latest queries, single validation ----------
+
+
+def test_latest_event_returns_highest_seq_using_type_index(store):
+    """RM22, #294: latest_event uses the (run_id, event_type, seq) index with LIMIT 1."""
+    run_id = store.create_run("accepted").run_id
+    accept(store, run_id)
+    assert store.latest_event(run_id, EventType.ANSWER_DELTA) is None
+
+    first = store.append_event(run_id, EventType.ANSWER_DELTA, "local", {"text": "a"})
+    second = store.append_event(run_id, EventType.ANSWER_DELTA, "local", {"text": "b"})
+    assert store.latest_event(run_id, EventType.ANSWER_DELTA) == second
+    assert store.latest_event(run_id, EventType.RUN_ACCEPTED).seq == 1
+    assert first.seq < second.seq
+
+    plan = [
+        row["detail"]
+        for row in store._conn.execute(
+            "EXPLAIN QUERY PLAN SELECT * FROM events WHERE run_id = ? AND event_type = ?"
+            " ORDER BY seq DESC LIMIT 1",
+            (run_id, EventType.ANSWER_DELTA.value),
+        ).fetchall()
+    ]
+    assert any("events_run_type_seq" in step for step in plan), plan
+
+
+def test_appending_many_deltas_uses_bounded_queries_and_near_linear_time(store, clock):
+    """RM22, RM25, #294: appending N deltas avoids per-append full-trace scans."""
+    import time
+
+    run_id = store.create_run("accepted").run_id
+    accept(store, run_id)
+
+    def measure_appends(count: int, prefix: str) -> tuple[list[str], float]:
+        traced: list[str] = []
+        store._conn.set_trace_callback(traced.append)
+        started = time.perf_counter()
+        try:
+            for i in range(count):
+                clock.mono += 0.001
+                store.append_event(
+                    run_id, EventType.ANSWER_DELTA, "local", {"text": f"{prefix}{i}"}
+                )
+        finally:
+            store._conn.set_trace_callback(None)
+        return traced, time.perf_counter() - started
+
+    queries_n, elapsed_n = measure_appends(400, "a")
+    queries_2n, elapsed_2n = measure_appends(800, "b")
+
+    # No UNION ALL / full-table elapsed_ms scan per append; query count scales linearly (2x).
+    assert not any("UNION ALL" in q for q in queries_n + queries_2n)
+    assert len(queries_n) <= 2000, f"expected <=5 queries per append, got {len(queries_n)}"
+    assert len(queries_2n) == 2 * len(queries_n)
+    assert elapsed_n + elapsed_2n < 5.0, (
+        f"expected bounded append time, got {elapsed_n + elapsed_2n:.3f}s"
+    )
+    assert elapsed_2n <= elapsed_n * 3.5, (
+        f"expected near-linear scaling for 2N appends: N={elapsed_n:.4f}s, 2N={elapsed_2n:.4f}s"
+    )
+
+    # Batch append uses a constant number of non-INSERT SQLite statements regardless of batch size.
+    batch_queries: list[str] = []
+    store._conn.set_trace_callback(batch_queries.append)
+    try:
+        drafts = [(EventType.ANSWER_DELTA, "local", {"text": f"b{i}"}) for i in range(200)]
+        batch = store.append_events(run_id, drafts)
+    finally:
+        store._conn.set_trace_callback(None)
+
+    assert len(batch) == 200
+    non_insert = [q for q in batch_queries if not q.lstrip().startswith("INSERT")]
+    assert len(non_insert) <= 5, f"expected <=5 non-INSERT statements, got {non_insert}"
+
+    # Verify the elapsed_ms index exists and is chosen by SQLite.
+    plan = [
+        row["detail"]
+        for row in store._conn.execute(
+            "EXPLAIN QUERY PLAN SELECT MAX(elapsed_ms) FROM events WHERE run_id = ?",
+            (run_id,),
+        ).fetchall()
+    ]
+    assert any("events_run_elapsed" in step for step in plan), plan
+
+    # Exercise in-memory fast path (self._in_memory is True) and verify zero MAX queries.
+    mem_clock = FakeClock()
+    mem_store = RunStore(":memory:", clock=mem_clock)
+    try:
+        mem_run = mem_store.create_run("accepted").run_id
+        accept(mem_store, mem_run)
+        mem_queries: list[str] = []
+        mem_store._conn.set_trace_callback(mem_queries.append)
+        try:
+            for i in range(50):
+                mem_clock.mono += 0.002
+                mem_store.append_event(mem_run, EventType.ANSWER_DELTA, "local", {"text": f"m{i}"})
+        finally:
+            mem_store._conn.set_trace_callback(None)
+        assert not any("MAX(elapsed_ms)" in q for q in mem_queries)
+        assert mem_store.elapsed_ms(mem_run) == 100
+    finally:
+        mem_store.close()
+
+    # Cross-store monotonicity on a shared file-backed database (RM25).
+    peer_clock = FakeClock()
+    peer_store = RunStore(store._path, clock=peer_clock)
+    try:
+        before = store.elapsed_ms(run_id)
+        peer_store.start_run_clock(run_id)
+        peer_clock.mono += 0.05
+        peer_event = peer_store.append_event(run_id, EventType.ANSWER_DELTA, "local", {"text": "p"})
+        assert peer_event.elapsed_ms >= before
+        # Original store's subsequent append also never moves backwards past peer_event.
+        store_event = store.append_event(run_id, EventType.ANSWER_DELTA, "local", {"text": "q"})
+        assert store_event.elapsed_ms >= peer_event.elapsed_ms
+    finally:
+        peer_store.close()
+
+
+def test_delete_run_rollback_preserves_cached_elapsed_baseline(tmp_path):
+    """RM17, #294: rolling back delete_run inside an outer transaction keeps cached elapsed_ms."""
+    clock = FakeClock()
+    store = RunStore(tmp_path / "rollback.sqlite3", clock=clock)
+    try:
+        run_id = store.create_run("accepted").run_id
+        accept(store, run_id)
+        clock.mono += 0.25
+        store.append_event(run_id, EventType.ANSWER_DELTA, "local", {"text": "a"})
+        assert store._run_last_elapsed[run_id] == 250
+        with pytest.raises(RuntimeError, match="abort"), store.transaction():
+            store.delete_run(run_id)
+            raise RuntimeError("abort")
+        assert run_id in store._run_started
+        assert store._run_last_elapsed[run_id] == 250
+    finally:
+        store.close()
+
+
+def test_run_view_and_idempotency_use_latest_event_helper(tmp_path, monkeypatch):
+    """RM21, #294: run_view and idempotent replay use indexed latest_event lookups."""
+    import asyncio
+
+    from gateway_helpers import STAGING_OK, build_gateway, health_tail, route_turn
+    from relaymind.api.idempotency import stored_chat_result
+    from relaymind.api.native import run_view
+
+    gateway = build_gateway(tmp_path, [route_turn("check-service-health"), *health_tail()])
+    outcome = asyncio.run(gateway.orchestrator.run_text("Check staging-api health."))
+
+    latest_types: list[EventType] = []
+    real_latest = gateway.store.latest_event
+
+    def tracked_latest(run_id: str, event_type: EventType):
+        latest_types.append(event_type)
+        return real_latest(run_id, event_type)
+
+    monkeypatch.setattr(gateway.store, "latest_event", tracked_latest)
+    view = run_view(gateway.orchestrator, outcome.run_id)
+    assert view["state"] == "completed"
+    assert EventType.RUN_ACCEPTED in latest_types
+    assert EventType.RUN_COMPLETED in latest_types
+
+    latest_types.clear()
+    result, _ = stored_chat_result(gateway.store, outcome.run_id, stream=False)
+    assert result.content == STAGING_OK
+    assert EventType.RUN_COMPLETED in latest_types
+
+
+def test_native_get_run_offloads_store_reads_off_event_loop_thread(tmp_path, monkeypatch):
+    """RM21, #294: async handlers offload blocking SQLite reads via run_in_threadpool."""
+    import asyncio
+    import threading
+
+    import httpx
+
+    from gateway_helpers import build_gateway, health_tail, route_turn
+    from relaymind.api.app import create_app
+
+    gateway = build_gateway(tmp_path, [route_turn("check-service-health"), *health_tail()])
+    outcome = asyncio.run(gateway.orchestrator.run_text("Check staging-api health."))
+    app = create_app(orchestrator=gateway.orchestrator)
+
+    threads: list[int] = []
+    real_get_run = gateway.store.get_run
+
+    def tracked_get_run(run_id: str):
+        threads.append(threading.get_ident())
+        return real_get_run(run_id)
+
+    monkeypatch.setattr(gateway.store, "get_run", tracked_get_run)
+
+    async def exercise():
+        loop_thread = threading.get_ident()
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get(
+                f"/relay/v1/runs/{outcome.run_id}",
+                headers={"Authorization": f"Bearer {app.state.application_token}"},
+            )
+        assert response.status_code == 200
+        assert threads and all(tid != loop_thread for tid in threads)
+
+    asyncio.run(exercise())
+
+
+def test_append_event_validates_normal_events_once(store, monkeypatch):
+    """RM22, #294: normal events are validated once, not twice."""
+    from relaymind.store import run_store as mod
+
+    run_id = store.create_run("accepted").run_id
+    accept(store, run_id)
+
+    calls = 0
+    real_validate = mod.validate_trace_event
+
+    def counted(raw):
+        nonlocal calls
+        calls += 1
+        return real_validate(raw)
+
+    monkeypatch.setattr(mod, "validate_trace_event", counted)
+    store.append_event(run_id, EventType.ANSWER_DELTA, "local", {"text": "hi"})
+    assert calls == 1
