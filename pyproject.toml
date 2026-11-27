@@ -42,6 +42,8 @@ dev = [
     # The browser test of the demo UI page script (#89); CI installs Chromium.
     "playwright>=1.49",
     "pytest>=8.0",
+    # Per-test time limit; a hung test fails instead of holding a worker.
+    "pytest-timeout>=2.3",
     # Parallel test workers; CI runs the suite with -n auto (docs/TESTING.md).
     "pytest-xdist>=3.6",
     "ruff>=0.6",
@@ -54,9 +56,14 @@ packages = ["src/relaymind"]
 testpaths = ["tests"]
 # Live tests need a local llama-server and model artifact; run them
 # explicitly with: pytest -m live
-addopts = "-q -m \"not live\""
+addopts = "-q -ra --strict-markers -m \"not live\""
+# Per test, not per session or job; live acceptance overrides it with a marker.
+# The thread method leaves SIGALRM free for tests that set their own deadlines.
+timeout = 900
+timeout_method = "thread"
 markers = [
     "live: needs a local llama-server process and the pinned model artifact",
+    "slow: takes long enough to leave out of the fast local run",
 ]
 
 [tool.ruff]

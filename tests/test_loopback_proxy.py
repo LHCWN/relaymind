@@ -132,6 +132,9 @@ def test_startup_health_polls_bypass_discovered_proxy(caller, proxy_routes, monk
     model_path = tmp_path / "model.gguf"
     model_path.touch()
     if caller == "live_smoke":
+        # The live fixture checks for the runtime before the mocked start;
+        # this test mocks the process, so it needs no llama-server install.
+        monkeypatch.setattr(module.shutil, "which", lambda name: "/usr/bin/llama-server")
         monkeypatch.setenv(module.MODEL_ENV, str(model_path))
         monkeypatch.setattr(module, "verify_artifact", lambda *args: None)
         monkeypatch.setattr(module, "launch_settings_argv", lambda *args: [])

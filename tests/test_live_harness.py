@@ -129,6 +129,42 @@ def test_live_fixture_checks_artifact_before_runtime(tmp_path, module, case, sta
     assert message in output, output
 
 
+def test_the_proxy_bypass_live_smoke_case_runs_without_a_runtime():
+    """The live-smoke proxy check mocks the process and needs no llama-server.
+
+    The test used to reach the live fixture's runtime check and skip on a
+    machine without llama-server, although it never starts one.
+    """
+    environ = dict(os.environ)
+    for name in (LIVE_MANIFEST_ENV, "RELAYMIND_SMOKE_MODEL", "PYTEST_ADDOPTS", "PYTEST_PLUGINS"):
+        environ.pop(name, None)
+    environ["PATH"] = ""
+    node = (
+        "tests/test_loopback_proxy.py::"
+        "test_startup_health_polls_bypass_discovered_proxy[live_smoke]"
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-q",
+            "-rs",
+            "-p",
+            "no:cacheprovider",
+            node,
+        ],
+        cwd=REPO_ROOT,
+        env=environ,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    output = result.stdout + result.stderr
+    assert result.returncode == 0, output
+    assert "skipped" not in output.lower(), output
+
+
 @pytest.mark.parametrize("username", ["operator", "用户"])
 def test_export_redacts_native_windows_skill_paths(tmp_path, monkeypatch, username):
     """RM22: trace exports omit the checkout even with a Unicode Windows username."""

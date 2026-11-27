@@ -28,6 +28,7 @@ need the pinned Node environment and package setup in the
 | Action | Command |
 |--------|---------|
 | Run full test suite | `pytest -n auto --dist loadfile` |
+| Run fast local subset | `pytest -m "not live and not slow"` |
 | Run a single test file | `pytest tests/test_<name>.py` |
 | Run a specific test | `pytest tests/test_<name>.py::test_case` |
 | Run live model tests | `pytest -m live` (needs `llama-server` and the model; see `models/README.md`) |

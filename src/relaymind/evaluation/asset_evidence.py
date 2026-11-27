@@ -184,6 +184,8 @@ _GENERATOR_ANCHORS = {
             ("950dff8707e05c8b16e3ea6c55e32c2a78597b3318f236c16023eab8da5b4cc2", 2397),
             # Reviewed CI change: adds only the pytest-xdist dev dependency (#244).
             ("bce29a33637ef40030f8c4157559c75d55f0c67a242e0b23bbce6f087de4eb13", 2501),
+            # Reviewed test guardrails: pytest-timeout, strict markers, and the slow tier.
+            ("1a64fd3ba860eef0af8641c167a06109b4220a29be0297330c6e85e981cedcd8", 2889),
         }
     ),
     "scripts/asset_selection_benchmark.py": frozenset(
