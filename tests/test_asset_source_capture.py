@@ -161,14 +161,15 @@ def test_rm40_exchange_deadline_includes_all_trickle_body_chunks(
         assert not list((tmp_path / "cache").glob("*.original"))
 
 
-def test_rm40_exchange_deadline_interrupts_a_blocking_next_read(tmp_path):
+def test_rm40_exchange_deadline_interrupts_a_blocking_next_read(tmp_path, monkeypatch):
     """RM34/RM40: no next body read can outlive the absolute exchange deadline."""
+    monkeypatch.setattr(api(), "EXCHANGE_SECONDS", 0.05)
     cancelled = []
 
     class Blocked(httpx.AsyncByteStream):
         async def __aiter__(self):
             try:
-                await asyncio.sleep(10.3)
+                await asyncio.sleep(0.3)
             except asyncio.CancelledError:
                 cancelled.append(True)
                 raise

@@ -9,6 +9,7 @@ set must be what a fresh capture produces.
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -329,6 +330,10 @@ def test_the_recorded_revision_holds_the_committed_harness_and_fixtures():
     assert diff.stdout == "", f"capture inputs changed since {head}; capture again"
 
 
+@pytest.mark.skipif(
+    os.environ.get("RELAYMIND_OPENCLAW_NODE") != "1",
+    reason="set RELAYMIND_OPENCLAW_NODE=1 to recapture the transport fixtures",
+)
 def test_the_committed_transport_fixtures_are_reproducible(tmp_path):
     """#135 done-when: the sanitized wire fixtures are reproducible on the same pins."""
     missing = qualification_missing()

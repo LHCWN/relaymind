@@ -21,6 +21,7 @@ from relaymind.orchestrator.run_state import (
     InvalidTransitionError,
     RunState,
     SlotUnavailableError,
+    TerminalStateError,
 )
 from relaymind.store import RunNotFoundError, StaleVersionError
 from relaymind.tools import CallerContext
@@ -143,7 +144,7 @@ def test_a_resume_of_a_finished_run_is_409(tmp_path):
     done = start(gateway, "Is staging-api healthy right now?")
     assert done.state is RunState.COMPLETED
     version = gateway.store.get_run(done.run_id).version
-    with pytest.raises(Exception) as caught:
+    with pytest.raises(TerminalStateError) as caught:
         asyncio.run(gateway.orchestrator.resume(done.run_id, version, "payments-api"))
     error = error_from_exception(caught.value, run_id=done.run_id)
     assert (error.status, error.code) == (409, "run_terminal")
@@ -152,7 +153,7 @@ def test_a_resume_of_a_finished_run_is_409(tmp_path):
 def test_a_resume_in_a_state_that_cannot_take_it_is_409(tmp_path):
     gateway = build_gateway(tmp_path, [])
     record = gateway.orchestrator.machine.create()
-    with pytest.raises(Exception) as caught:
+    with pytest.raises(InvalidTransitionError) as caught:
         asyncio.run(gateway.orchestrator.resume(record.run_id, record.version, "staging-api"))
     error = error_from_exception(caught.value, run_id=record.run_id)
     assert (error.status, error.code) == (409, "invalid_state")

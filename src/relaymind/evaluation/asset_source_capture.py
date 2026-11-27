@@ -15,6 +15,8 @@ import httpx
 
 from relaymind.evaluation.asset_corpus_io import MIB, AssetCorpusError, matches_original, read_local
 
+EXCHANGE_SECONDS = 10
+
 
 def _public_url(value: str) -> str:
     try:
@@ -147,7 +149,7 @@ async def _acquire_recipe(recipe: Mapping, cache_root: Path, *, client=None) -> 
                     if remaining <= 0 or requests >= 1000:
                         raise AssetCorpusError("capture_job_limit")
                     requests += 1
-                    exchange_deadline = time.monotonic() + min(10, remaining)
+                    exchange_deadline = time.monotonic() + min(EXCHANGE_SECONDS, remaining)
 
                     def check_exchange(deadline=exchange_deadline):
                         now = time.monotonic()
@@ -159,12 +161,12 @@ async def _acquire_recipe(recipe: Mapping, cache_root: Path, *, client=None) -> 
                     try:
                         # Async cancellation bounds connect/headers AND a pending body read;
                         # an inactivity timeout alone cannot stop an endlessly trickling peer.
-                        async with asyncio.timeout(min(10, remaining)):
+                        async with asyncio.timeout(min(EXCHANGE_SECONDS, remaining)):
                             async with client.stream(
                                 "GET",
                                 url,
                                 headers={"Accept-Encoding": "identity"},
-                                timeout=min(10, remaining),
+                                timeout=min(EXCHANGE_SECONDS, remaining),
                             ) as response:
                                 check_exchange()
                                 if response.status_code in (301, 302, 303, 307, 308):
@@ -207,7 +209,9 @@ async def _acquire_recipe(recipe: Mapping, cache_root: Path, *, client=None) -> 
                             check_exchange()
                     except TimeoutError:
                         raise AssetCorpusError(
-                            "capture_job_limit" if remaining <= 10 else "capture_exchange_limit"
+                            "capture_job_limit"
+                            if remaining <= EXCHANGE_SECONDS
+                            else "capture_exchange_limit"
                         ) from None
                     break
                 if payload is None:

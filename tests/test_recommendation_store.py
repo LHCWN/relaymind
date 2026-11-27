@@ -8,6 +8,7 @@ import pytest
 
 from recommendation_helpers import NOW, SCOPE, accepted, claim, empty_result
 from relaymind.store import RunStore
+from relaymind.store.recommendations import RecommendationError
 
 
 def test_atomic_lifecycle_replay_expiry_and_retention():
@@ -46,7 +47,7 @@ def test_atomic_lifecycle_replay_expiry_and_retention():
             store.events(SCOPE, rid, after_seq=10**100, limit=1, now=NOW)["next_after_seq"]
             == 10**100
         )
-        with pytest.raises(Exception, match="invalid_state"):
+        with pytest.raises(RecommendationError, match="invalid_state"):
             store.finish(SCOPE, rid, 2, "ready", result=empty_result(), now=NOW)
         assert store.sweep(now=NOW + timedelta(days=30))["purged"] == 1
         assert store.lookup_claim(claim(), now=NOW + timedelta(days=30)) is None
@@ -68,11 +69,11 @@ def test_slot_scope_cas_and_rollback_across_connections(tmp_path):
             ("key", "d" * 64, "idempotency_conflict"),
             ("second", "c" * 64, "overloaded"),
         ]:
-            with pytest.raises(Exception, match=code):
+            with pytest.raises(RecommendationError, match=code):
                 two.begin(accepted(), claim(key, digest))
-        with pytest.raises(Exception, match="recommendation_not_found"):
+        with pytest.raises(RecommendationError, match="recommendation_not_found"):
             two.get({"user_id": "other", "workspace_id": "w"}, rid, now=NOW)
-        with pytest.raises(Exception, match="stale_version"):
+        with pytest.raises(RecommendationError, match="stale_version"):
             two.finish(SCOPE, rid, 5, "cancelled", now=NOW)
         with a.sql_transaction() as db:
             db.execute(
@@ -232,7 +233,7 @@ def test_attempt_events_version_fence_and_atomic_begin_rollback():
         store.append_attempt_event(SCOPE, rid, 0, started, now=NOW, active_ms=2)
         assert store.get(SCOPE, rid, now=NOW).view["state_version"] == 0
         store.finish(SCOPE, rid, 0, "cancelled", now=NOW, reason="shutdown", active_ms=3)
-        with pytest.raises(Exception, match="stale_version"):
+        with pytest.raises(RecommendationError, match="stale_version"):
             store.append_attempt_event(SCOPE, rid, 0, started, now=NOW)
         events = store.events(SCOPE, rid, after_seq=0, limit=100, now=NOW)["events"]
         assert [e["seq"] for e in events] == [1, 2, 3]

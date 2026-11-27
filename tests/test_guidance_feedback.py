@@ -499,18 +499,20 @@ def test_a_feedback_for_a_select_no_longer_remembered_is_counted_as_skipped():
 def test_above_the_offer_limit_every_select_is_remembered_up_to_max_ids(monkeypatch):
     """Review of PR 306: above 1,000 host assets each select is its own offer, and still the
     gateway remembers MAX_IDS selects, not fewer, sharing the pairs between them."""
-    monkeypatch.setattr(feedback_module, "MAX_IDS", 40)
+    # Three selects prove the cap and the distinct-offer behavior. Asking for forty would
+    # validate forty 1,001-asset requests, which is JSON Schema work, not coverage.
+    monkeypatch.setattr(feedback_module, "MAX_IDS", 3)
     router = Router()
     http = client(router)
     many = [dict(name=f"tool-{i}", kind="mcp_tool", description=f"Tool {i}") for i in range(1001)]
     ids = []
-    for i in range(40):
+    for i in range(3):
         body = dict(BODY, task_text=f"tool {i} please", assets=[SKILL, *many])
         ids.append(
             http.post("/relay/v1/guidance", json=body, headers=AUTH).json()["recommendation_id"]
         )
     revisions = {s["catalog_revision"] for s in router.selects}
-    assert len(revisions) > 16
+    assert len(revisions) == len(ids)
     assert all(tell(http, i, [USED_SKILL]).json()["queued"] for i in ids)
 
 
