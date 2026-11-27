@@ -496,6 +496,7 @@ def test_a_feedback_for_a_select_no_longer_remembered_is_counted_as_skipped():
     assert feedback_counts(http)["feedback_skipped"] == 2
 
 
+@pytest.mark.slow
 def test_above_the_offer_limit_every_select_is_remembered_up_to_max_ids(monkeypatch):
     """Review of PR 306: above 1,000 host assets each select is its own offer, and still the
     gateway remembers MAX_IDS selects, not fewer, sharing the pairs between them."""

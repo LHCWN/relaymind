@@ -329,6 +329,7 @@ def test_the_recorded_revision_holds_the_committed_harness_and_fixtures():
     assert diff.stdout == "", f"capture inputs changed since {head}; capture again"
 
 
+@pytest.mark.slow
 def test_the_committed_transport_fixtures_are_reproducible(tmp_path):
     """#135 done-when: the sanitized wire fixtures are reproducible on the same pins."""
     missing = qualification_missing()

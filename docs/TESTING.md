@@ -27,11 +27,18 @@ issue-specific notes below retain their original scope.
 ## Automated suites
 
 ```bash
-pytest                  # deterministic suite (model doubles, runs in CI)
-pytest -m live          # live tests against a local llama-server
+pytest                                  # deterministic suite (model doubles, runs in CI)
+pytest -m "not live and not slow"       # fast local subset (slow-marked tests left out)
+pytest -m live                          # live tests against a local llama-server
 ruff check .
 ruff format --check .
 ```
+
+`pytest` prints skipped tests and their reasons by default. Each test has a
+900-second limit; a hung test fails instead of holding a worker. The timeout
+uses the thread method, so qualification tests that set their own SIGALRM
+deadlines keep that signal. The live acceptance harness sets its own longer
+limit, because one test runs every scenario.
 
 ### Parallel tests in CI
 

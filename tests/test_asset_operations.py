@@ -128,6 +128,7 @@ def test_synthetic_timing_preserves_failed_samples(validated_request_cohort, sha
     assert _synthetic_timing(record, 10.0) == record
 
 
+@pytest.mark.slow
 def test_schedule_requires_fixed_origin_cadence_and_single_request_slot(
     validated_request_cohort,
     production_batch_samples,

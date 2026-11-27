@@ -22,7 +22,7 @@ import pytest
 
 from helpers import live_manifest_path, load_script_module
 
-pytestmark = pytest.mark.live
+pytestmark = [pytest.mark.live, pytest.mark.timeout(3600)]
 
 
 def test_gateway_checks_hold_on_the_live_model(tmp_path):
