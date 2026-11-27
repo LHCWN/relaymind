@@ -136,7 +136,13 @@ def test_the_proxy_bypass_live_smoke_case_runs_without_a_runtime():
     machine without llama-server, although it never starts one.
     """
     environ = dict(os.environ)
-    for name in (LIVE_MANIFEST_ENV, "RELAYMIND_SMOKE_MODEL", "PYTEST_ADDOPTS", "PYTEST_PLUGINS"):
+    for name in (
+        LIVE_MANIFEST_ENV,
+        "RELAYMIND_SMOKE_MODEL",
+        "PYTEST_ADDOPTS",
+        "PYTEST_PLUGINS",
+        "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
+    ):
         environ.pop(name, None)
     environ["PATH"] = ""
     node = (
@@ -161,8 +167,9 @@ def test_the_proxy_bypass_live_smoke_case_runs_without_a_runtime():
         timeout=60,
     )
     output = result.stdout + result.stderr
+    skipped = [line for line in result.stdout.splitlines() if line.lstrip().startswith("SKIPPED")]
     assert result.returncode == 0, output
-    assert "skipped" not in output.lower(), output
+    assert skipped == [], output
 
 
 @pytest.mark.parametrize("username", ["operator", "用户"])

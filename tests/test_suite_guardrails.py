@@ -19,6 +19,12 @@ def test_the_suite_uses_strict_markers(pytestconfig):
     assert pytestconfig.getoption("strict_markers") is True
 
 
+def test_the_suite_shows_skipped_tests(pytestconfig):
+    """A smaller run names its skipped tests instead of looking complete."""
+    report_chars = pytestconfig.getoption("reportchars")
+    assert any(char in report_chars for char in "asA")
+
+
 def test_the_slow_marker_is_registered(pytestconfig):
-    """Fast local runs can leave the three longest tests out explicitly."""
+    """Fast local runs can leave the slow-marked tests out explicitly."""
     assert any(line.startswith("slow:") for line in pytestconfig.getini("markers"))

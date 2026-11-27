@@ -28,7 +28,7 @@ issue-specific notes below retain their original scope.
 
 ```bash
 pytest                                  # deterministic suite (model doubles, runs in CI)
-pytest -m "not live and not slow"       # fast local subset (the slowest tests left out)
+pytest -m "not live and not slow"       # fast local subset (slow-marked tests left out)
 pytest -m live                          # live tests against a local llama-server
 ruff check .
 ruff format --check .

@@ -2128,10 +2128,10 @@ pre-release development.
 
 - Test guardrails: the default per-test limit is 900 seconds (live acceptance
   uses 3600), unknown pytest markers fail collection, the default output lists
-  skipped tests and their reasons, and the three longest tests carry a `slow`
-  marker for the fast local subset. The live-smoke proxy test no longer skips
-  when `llama-server` is absent, because it mocks the process and never starts
-  a runtime.
+  skipped tests and their reasons, and the slow-marked tests are left out of
+  the fast local subset. The live-smoke proxy test no longer skips when
+  `llama-server` is absent, because it mocks the process and never starts a
+  runtime.
 - Correct the guidance documents: the plugin API gives an ordinary plugin no tool list, which is not a rule about
   official plugins. Lead the README and the repository description with OpenClaw.
 
